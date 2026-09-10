@@ -14,6 +14,10 @@ import org.springframework.jdbc.BadSqlGrammarException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 
+import com.querysense.backend.schema.ActiveSchemaProvider;
+
+import java.util.function.Function;
+
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
@@ -55,11 +59,31 @@ class MySqlExplainAnalyzerTest {
     private JdbcTemplate jdbcTemplate;
     private MySqlExplainAnalyzer analyzer;
 
+    /**
+     * An ExplainExecutor that hands the work straight to this test's mock
+     * JdbcTemplate instead of borrowing a real connection.
+     *
+     * WHY: every assertion in this class verifies the SQL string passed to
+     * jdbcTemplate. Routing through the real executor would need a mock
+     * Connection as well, and would re-test catalog switching that
+     * ExplainExecutorTest already covers directly — including the guarantee
+     * that the built-in schema never switches catalog at all. This keeps
+     * the analyzer's own tests about the analyzer.
+     */
+    private static ExplainExecutor passThrough(JdbcTemplate jdbcTemplate) {
+        return new ExplainExecutor(jdbcTemplate, new ActiveSchemaProvider()) {
+            @Override
+            public <T> T withActiveCatalog(Function<JdbcTemplate, T> work) {
+                return work.apply(jdbcTemplate);
+            }
+        };
+    }
+
     @BeforeEach
     void setUp() {
         jdbcTemplate = mock(JdbcTemplate.class);
         analyzer = new MySqlExplainAnalyzer(
-                jdbcTemplate, new MySqlJsonExplainParser(new ObjectMapper()), "TABULAR");
+                passThrough(jdbcTemplate), new MySqlJsonExplainParser(new ObjectMapper()), "TABULAR");
     }
 
     // -----------------------------------------------------------------
@@ -477,7 +501,7 @@ class MySqlExplainAnalyzerTest {
                 "key_len", null, "ref", null, "rows", 3L, "Extra", null));
 
         QueryAnalysisResult result = new MySqlExplainAnalyzer(
-                jdbcTemplate, new MySqlJsonExplainParser(new ObjectMapper()), "nonsense")
+                passThrough(jdbcTemplate), new MySqlJsonExplainParser(new ObjectMapper()), "nonsense")
                 .analyze("SELECT ...", "customers");
 
         assertThat(result.getTables()).hasSize(1);
@@ -485,7 +509,7 @@ class MySqlExplainAnalyzerTest {
 
     private MySqlExplainAnalyzer jsonModeAnalyzer() {
         return new MySqlExplainAnalyzer(
-                jdbcTemplate, new MySqlJsonExplainParser(new ObjectMapper()), "JSON");
+                passThrough(jdbcTemplate), new MySqlJsonExplainParser(new ObjectMapper()), "JSON");
     }
 
     // -----------------------------------------------------------------

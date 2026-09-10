@@ -42,13 +42,13 @@ public class SchemaMetadataService {
 
     private static final Logger log = LoggerFactory.getLogger(SchemaMetadataService.class);
 
-    private final JdbcTemplate jdbcTemplate;
+    private final ExplainExecutor explainExecutor;
     private final ActiveSchemaProvider activeSchema;
     private final Map<String, List<String>> columnCache = new ConcurrentHashMap<>();
     private final Map<String, List<String>> distinctValueCache = new ConcurrentHashMap<>();
 
-    public SchemaMetadataService(JdbcTemplate jdbcTemplate, ActiveSchemaProvider activeSchema) {
-        this.jdbcTemplate = jdbcTemplate;
+    public SchemaMetadataService(ExplainExecutor explainExecutor, ActiveSchemaProvider activeSchema) {
+        this.explainExecutor = explainExecutor;
         this.activeSchema = activeSchema;
     }
 
@@ -89,12 +89,22 @@ public class SchemaMetadataService {
         return columnCache.computeIfAbsent(tableName.toLowerCase(), this::loadColumnNames);
     }
 
+    /**
+     * WHY THIS GOES THROUGH ExplainExecutor:
+     * The filter is `table_schema = DATABASE()`, which resolves to whatever
+     * catalog the CONNECTION is on. Left on the pool's default connection
+     * it would report the demo database's columns even while an uploaded
+     * schema is active — and SqlPreflightValidator would then reject the
+     * user's own columns as hallucinated. The executor puts the lookup on a
+     * connection pointing at the active schema's catalog, and is a no-op
+     * when the built-in schema is active.
+     */
     private List<String> loadColumnNames(String tableName) {
         try {
-            return jdbcTemplate.queryForList(
+            return explainExecutor.withActiveCatalog(jdbc -> jdbc.queryForList(
                     "SELECT column_name FROM information_schema.columns " +
                             "WHERE table_schema = DATABASE() AND LOWER(table_name) = ?",
-                    String.class, tableName);
+                    String.class, tableName));
         } catch (Exception e) {
             log.warn("Could not load column metadata for table '{}': {}", tableName, e.getMessage(), e);
             return List.of();
@@ -134,7 +144,11 @@ public class SchemaMetadataService {
         try {
             String sql = "SELECT DISTINCT " + columnName + " FROM " + tableName
                     + " WHERE " + columnName + " IS NOT NULL LIMIT 500";
-            return jdbcTemplate.queryForList(sql, String.class);
+            // Unqualified table name, so this reads whichever catalog the
+            // connection is on — the same reason loadColumnNames needs the
+            // executor. Without it the rule engine's known-value safety net
+            // would check the demo data against an uploaded schema.
+            return explainExecutor.withActiveCatalog(jdbc -> jdbc.queryForList(sql, String.class));
         } catch (Exception e) {
             log.warn("Could not load distinct values for {}.{}: {}", tableName, columnName, e.getMessage(), e);
             return List.of();

@@ -130,14 +130,26 @@ public class MySqlExplainAnalyzer {
     /** Which EXPLAIN dialect to ask MySQL for. See MySqlJsonExplainParser for why JSON is opt-in. */
     public enum ExplainFormat { TABULAR, JSON }
 
-    private final JdbcTemplate jdbcTemplate;
+    /**
+     * WHY AN ExplainExecutor RATHER THAN A JdbcTemplate DIRECTLY:
+     * EXPLAIN must run against whichever database the ACTIVE schema
+     * describes, and once the user uploads a schema that is a different
+     * catalog from the one spring.datasource.url points at. The executor
+     * switches and restores the catalog on a single pooled connection.
+     *
+     * On the built-in schema the active catalog is null and the executor
+     * is a no-op, so this class issues exactly the statements it always
+     * did — see ExplainExecutorTest, which asserts that rather than
+     * trusting it.
+     */
+    private final ExplainExecutor explainExecutor;
     private final MySqlJsonExplainParser jsonExplainParser;
     private final ExplainFormat explainFormat;
 
-    public MySqlExplainAnalyzer(JdbcTemplate jdbcTemplate,
+    public MySqlExplainAnalyzer(ExplainExecutor explainExecutor,
                                 MySqlJsonExplainParser jsonExplainParser,
                                 @Value("${querysense.explain.format:TABULAR}") String explainFormat) {
-        this.jdbcTemplate = jdbcTemplate;
+        this.explainExecutor = explainExecutor;
         this.jsonExplainParser = jsonExplainParser;
         this.explainFormat = parseFormat(explainFormat);
     }
@@ -230,9 +242,17 @@ public class MySqlExplainAnalyzer {
      * query is wrong and the tabular attempt would fail identically.
      */
     private List<TableAnalysis> readPlan(String query) {
+        return explainExecutor.withActiveCatalog(jdbc -> readPlanWith(jdbc, query));
+    }
+
+    /**
+     * @param jdbc a JdbcTemplate bound to one connection already pointing at
+     *             the active schema's catalog. Valid only for this call.
+     */
+    private List<TableAnalysis> readPlanWith(JdbcTemplate jdbc, String query) {
         if (explainFormat == ExplainFormat.JSON) {
             try {
-                String json = jdbcTemplate.queryForObject("EXPLAIN FORMAT=JSON " + query, String.class);
+                String json = jdbc.queryForObject("EXPLAIN FORMAT=JSON " + query, String.class);
                 List<TableAnalysis> tables = jsonExplainParser.parse(json);
                 if (!tables.isEmpty()) {
                     return tables;
@@ -253,7 +273,7 @@ public class MySqlExplainAnalyzer {
         // blames the user's SQL. Naming the format makes this independent of
         // both the server version and any session-level explain_format a DBA
         // has set. The clause is accepted by 8.0 and 9.x alike.
-        return jdbcTemplate.query("EXPLAIN FORMAT=TRADITIONAL " + query, EXPLAIN_ROW_MAPPER);
+        return jdbc.query("EXPLAIN FORMAT=TRADITIONAL " + query, EXPLAIN_ROW_MAPPER);
     }
 
     // -----------------------------------------------------------------
