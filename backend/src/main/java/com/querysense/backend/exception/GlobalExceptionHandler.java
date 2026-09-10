@@ -116,6 +116,27 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * Handles a refused schema upload.
+     *
+     * WHY 400, AND WHY THE MESSAGE GOES THROUGH UNCHANGED:
+     * Every SchemaUploadException is raised with a sentence written for the
+     * person who uploaded the file — a missing CREATE grant naming the exact
+     * GRANT statement, the h2 profile naming the flag to drop, an
+     * unsupported identifier naming the offending table. The frontend renders
+     * `message` directly, so anything vaguer here would cost the user the one
+     * thing that tells them what to do next. Same contract as
+     * LlmUnavailableException's 503, which names the `ollama pull` command.
+     *
+     * Triggered by: the schema upload pipeline (parse, validate, provision).
+     */
+    @ExceptionHandler(SchemaUploadException.class)
+    public ResponseEntity<Map<String, Object>> handleSchemaUpload(SchemaUploadException ex) {
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(buildError(HttpStatus.BAD_REQUEST, ex.getMessage()));
+    }
+
+    /**
      * Handles 4xx responses from the Ollama HTTP API.
      *
      * The previous version of this handler decoded Gemini's 401 (bad API key)
