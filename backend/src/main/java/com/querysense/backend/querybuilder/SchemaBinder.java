@@ -5,6 +5,7 @@ import com.querysense.backend.schema.KnownSchema;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -78,6 +79,12 @@ public class SchemaBinder {
         for (KnownSchema.Table table : activeSchema.tables()) {
             longestSpanFor(normalizedText, table).ifPresent(spans::add);
         }
+
+        // Sentence order, not schema declaration order: callers use the
+        // first-mentioned table as the subject of the question, and
+        // declaration order would make that depend on how KnownSchema
+        // happens to list its constants.
+        spans.sort(Comparator.comparingInt(Span::start));
 
         List<KnownSchema.Table> kept = new ArrayList<>();
         for (Span span : spans) {
