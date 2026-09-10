@@ -10,6 +10,12 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-10-schema-upload-design.md`
 
+**Status: all 14 tasks complete, 2026-09-10.** Backend 130 tests / 0 failures;
+frontend build clean; verified end to end against live MySQL and in a browser.
+Two things this plan got wrong were corrected by measurement during execution:
+the 500-row seed default (now 12000) and the seeding cost that made it possible
+(`rewriteBatchedStatements`). See PROJECT.md §5 and §7 for both.
+
 **Risk register:** `PROJECT.md` §5, "Planned feature: schema upload — risks accepted going in" (R1–R10). Tasks reference risks by number.
 
 ## Global Constraints

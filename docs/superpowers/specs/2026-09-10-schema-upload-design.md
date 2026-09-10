@@ -1,7 +1,8 @@
 # Schema upload — design
 
 **Date:** 2026-09-10
-**Status:** approved, not yet implemented
+**Status:** implemented and verified live 2026-09-10. Two decisions below
+were corrected by measurement after the fact — see the seeding section.
 **Spans:** `backend/` and `frontend/` in the querysensellama monorepo
 **Risk register:** `PROJECT.md` §5, "Planned feature: schema upload — risks
 accepted going in" (R1–R10). That table is the live tracker; this document
@@ -151,7 +152,16 @@ self-referencing column (`employees.manager_id` → `employees.id`) is seeded
 earlier row — this is the only cycle shape that needs handling, and breaking
 it this way keeps referential integrity without deferring constraints.
 
-**Default 500 rows per table**, via `querysense.schema.upload.seed-rows`.
+**Default 12000 rows per table**, via `querysense.schema.upload.seed-rows`.
+
+> **Corrected after measurement.** This spec originally said 500, which was
+> wrong. The analysis modules each carry their own threshold —
+> `TRANSACTIONAL` 100, `ECOMMERCE` 1000, resource 5000, `ANALYTICAL` 10000 —
+> and 500 clears only the first. Verified live: the same query returned
+> `CRITICAL` under `TRANSACTIONAL` and "impact is likely minor" under
+> `ECOMMERCE`. 12000 clears all four. It became affordable only after adding
+> `rewriteBatchedStatements=true` to the datasource URL, which took a
+> 24,000-row upload from 24.6s to 1.17s.
 
 Why not match the demo's 5–49: `PROJECT.md` §2 records that at that scale
 every domain suggestion appends *"the estimated row count is low, so the

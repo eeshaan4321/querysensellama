@@ -166,6 +166,15 @@ is low, so the performance impact is likely minor," because that branch reads
 `estimatedRows`. At this scale the optimisation modules can identify a problem
 but never show one costing anything.
 
+**This is the one place the built-in schema demos worse than an uploaded
+one.** The thresholds behind that sentence are `TRANSACTIONAL` 100,
+`ECOMMERCE` 1000, `ResourceConsciousService` 5000 and `ANALYTICAL` 10000, so
+nothing here clears more than the first. A schema uploaded through
+`/api/schema/upload` is seeded to 12000 rows per table precisely to get past
+all four — every profile then returns a `CRITICAL` finding with a real row
+count attached. If you need the optimisation modules to say something
+substantial in a demo, upload a schema rather than using the built-in one.
+
 It declines — and hands to the LLM — anything containing a join, an aggregate
 (`average`, `sum`, `maximum`, `group by`), a date range (`last month`, `today`,
 `recent`), a comparison (`more than`, `above`, `between`), a question word
@@ -306,6 +315,65 @@ Returns the JPA entity unwrapped:
 local server time. Rows come back in insertion order; the frontend sorts newest
 first by `id`.
 
+### `POST /api/schema/upload`
+
+Replaces the schema QuerySense works against. Accepts **either** a multipart
+file or a JSON body — both funnel into the same pipeline.
+
+```bash
+# multipart
+curl -X POST http://localhost:8080/api/schema/upload -F 'file=@northwind.sql'
+
+# JSON, for DDL pasted into the UI
+curl -X POST http://localhost:8080/api/schema/upload -H 'Content-Type: application/json' \
+  -d '{"ddl":"CREATE TABLE clients (id INT PRIMARY KEY, city VARCHAR(60));","label":"demo.sql"}'
+```
+
+Response — captured from a live call, not documented from the DTO:
+
+```jsonc
+{ "schemaId": "upload-6e1af6fe",
+  "label": "demo.sql",
+  "catalog": "querysense_uploads",
+  "builtIn": false,
+  "tables": [ { "name": "clients",
+                "columns": ["id","name","city","email"],
+                "rowCount": 12000 } ],
+  "foreignKeys": [ { "fromTable": "invoices", "fromColumn": "client_id",
+                     "toTable": "clients", "toColumn": "id" } ],
+  "warnings": [],
+  "loadedAt": "2026-09-10T08:45:58.155691100Z" }
+```
+
+What it does, in order: parse the DDL with JSqlParser, validate it, create
+`querysense_uploads` if absent, drop whatever that database already held,
+re-emit each `CREATE TABLE` **from the parsed model** (the uploaded text is
+never executed), add foreign keys, seed every table, then `ANALYZE TABLE`.
+
+- `warnings` lists statements the parser skipped. A dump full of `LOCK
+  TABLES` and `/*!40101 ... */` parses fine; only an unreadable `CREATE
+  TABLE` produces a warning.
+- **Errors are 400 with an actionable sentence**, not a generic 500 — a
+  missing `CREATE` privilege returns the exact `GRANT` statement to run, and
+  the `h2` profile is refused before anything is provisioned.
+- Uploading again **drops the previous upload's tables**. Only
+  `querysense_uploads` is ever dropped; the connected database is never a
+  target.
+
+### `GET /api/schema/active` · `POST /api/schema/reset`
+
+Both return the same `SchemaUploadResponse` shape. `/active` describes the
+current schema; `/reset` returns to the built-in one and is instant — the
+uploaded tables are left where they are and simply stop being what anything
+reads.
+
+**`catalog` is `null` for the built-in schema, deliberately.** The demo
+schema lives in whatever database `spring.datasource.url` resolves to, which
+varies per machine, so the backend refuses to guess a name for it. The
+frontend renders `null` as "the connected database", and `ExplainExecutor`
+treats it as "do not switch catalog at all" — which is what makes the demo
+path provably untouched.
+
 ### `GET /test`
 
 Returns the plain string `QuerySense Running`. Used as the reachability probe.
@@ -352,11 +420,13 @@ place that knows this — components call it instead of comparing against a
 literal, so the amber LLM treatment applies to old and new rows alike and a
 future provider change is one edit.
 
-### The pipeline is three requests, not six
+### The pipeline is four requests, not seven
 
-The UI shows six modules. It makes three HTTP calls:
+The UI shows seven screens. It makes four HTTP calls, and one of them runs
+once at startup rather than per query:
 
 ```
+0. GET  /api/schema/active           → which schema is live (once, at app start)
 1. POST /api/query/generate          → Build query
 2. POST /api/query/analyze           → Analyse
                                        ├── Domain rules      (no request)
@@ -381,9 +451,11 @@ frontend/src/
 │   ├── contracts.js     ← all field translation, enums, isLlmSource, ENDPOINT_STATUS
 │   ├── client.js        ← axios instance, USE_MOCK flag
 │   ├── index.js         ← re-exports; one module per endpoint alongside it
-│   └── queryBuilder.js · analysis.js · schemaAdvisor.js · history.js · comparison.js
-├── context/             ← EngineStatusContext (last engine used), WorkbenchContext
-├── pages/               ← Workbench, Analysis, Optimization, SchemaAdvisor, History, About
+│   └── queryBuilder.js · analysis.js · schemaAdvisor.js · history.js · comparison.js · schemaUpload.js
+├── context/             ← EngineStatusContext (last engine used), ActiveSchemaContext
+│                          (which schema is live), WorkbenchContext
+├── pages/               ← Workbench, SchemaSource, Analysis, Optimization, SchemaAdvisor,
+│                          History, About
 ├── components/          ← shell/, common/, then one folder per feature area
 ├── mock/fixtures.js     ← every generator behind VITE_USE_MOCK
 ├── lib/                 ← query highlighter, line diff, resource levels
@@ -394,6 +466,25 @@ frontend/src/
 `contracts.js`, add a module next to the others in `api/` that branches on
 `USE_MOCK`, and export it from `index.js`. Nothing in `components/` or `pages/`
 should need to move — they only read shapes defined in `contracts.js`.
+`schemaUpload.js` was added exactly this way and touched no existing component
+except to add the provenance notes described below.
+
+### Two things the shell shows permanently
+
+The header carries two independent facts, and they are the same *kind* of
+fact: provenance you need in order to trust what is on screen.
+
+- **Which engine answered** — `EngineStatusContext`, teal for the rule engine,
+  amber for the LLM. Unchanged.
+- **Which schema is live** — `ActiveSchemaContext`, purple (`--data`, the
+  project's data-access colour). Reads "Built-in demo schema", or the
+  upload's name followed by **"generated data"**.
+
+That last phrase is load-bearing. An uploaded schema's tables hold rows this
+app generated, so its `estimatedRows` is real `EXPLAIN` output over synthetic
+data. `ExplainPlanView` and the schema advisor repeat it in place. Without
+that, the comparison screen would stop being the only place in the UI showing
+numbers nobody measured.
 
 ---
 
@@ -437,7 +528,10 @@ numbers.
    and computes no cost. The UI therefore says "Estimated rows" — labelling a
    row count as a cost would invent a unit.
 
-5. **MongoDB is barely supported.**
+5. **MongoDB is barely supported**, and schema upload does nothing for it.
+   The upload pipeline is MySQL-only end to end: it emits MySQL DDL, seeds
+   through JDBC and reads MySQL `EXPLAIN`. Uploading a schema does not give
+   the Mongo path a collection, an index, or a grounded prompt.
    - `spring.data.mongodb.uri` is commented out; there is no Mongo connection.
    - `MongoSimpleAnalyzer` is a static text check over the query string — two
      regexes, for unindexed filter fields and unanchored `$regex`. It never runs
@@ -605,49 +699,85 @@ Every layer of protection is MySQL-only:
 Mongo generation is therefore ungrounded *and* unguarded end to end. Report
 Mongo accuracy as its own figure; folding it into a blended number hides this.
 
-#### Fix direction (not yet implemented)
+#### Fix direction — one of three now done
 
-1. When `detectTablesMentioned` finds nothing, pass **all** of
-   `KnownSchema.TABLES` rather than nothing — an over-broad prompt is strictly
-   better than an empty one.
-2. Add a schema-conformance check over generated identifiers before the result
-   is returned *or* cached, so a query naming an unknown table/column is never
-   written to history.
-3. Decide explicitly what MongoDB grounding should look like, rather than
-   leaving it as an inherited no-op.
+1. ~~When `detectTablesMentioned` finds nothing, pass **all** of
+   `KnownSchema.TABLES` rather than nothing.~~ **Implemented 2026-09-10**
+   alongside the schema-upload work. `OllamaService.buildSchemaContext` now
+   falls back to every table in the active schema when the question names
+   none, instead of sending an empty prompt. An over-broad prompt is strictly
+   better than an empty one, and this was the case most likely to
+   hallucinate — a question phrased in business words rather than schema
+   words. It was included there rather than deferred because the feature's
+   main use case is asking about *your own* schema in *your own* vocabulary,
+   which is exactly the path that was ungrounded.
+2. **Still open.** Add a schema-conformance check over generated identifiers
+   before the result is returned *or* cached, so a query naming an unknown
+   table/column is never written to history. Until this exists, a
+   hallucinated query is still cached and still served back at confidence
+   1.0 — and note that an uploaded schema widens the surface, since
+   `SqlPreflightValidator` now validates against whatever schema is live.
+3. **Still open.** Decide explicitly what MongoDB grounding should look like,
+   rather than leaving it as an inherited no-op. Schema upload does not help
+   here; see §5.5.
 
-### Planned feature: schema upload — risks accepted going in
+### Schema upload — how each risk actually landed
 
-**Status: design approved 2026-09-10, not yet implemented.** Recorded here
-before the code exists so that each item is either closed by the
-implementation or still visibly open afterwards, rather than being
-rediscovered.
+**Status: implemented and verified live 2026-09-10** against MySQL 9.7 on
+3306, with the frontend exercised in a real browser. The risks below were
+recorded *before* the code existed so each would be visibly closed or left
+open afterwards rather than quietly forgotten. This is that reckoning.
 
 The feature lets a user upload their own DDL, creates those tables in a
 **separate MySQL database `querysense_uploads`**, and seeds them with
 generated rows so `EXPLAIN` has real statistics to plan against. The
-built-in nine-table `querysense` schema stays untouched and remains the
-default. Every risk below follows from one of those three choices.
+built-in nine-table schema stays untouched and remains the default.
 
-| # | Risk | Why it bites | Mitigation in the design |
-|---|---|---|---|
-| R1 | Needs `CREATE DATABASE` privilege | The app connects as `${DB_USER:root}`, so it works here, but the grant is a real deployment constraint. Without it the whole feature 500s. | Detect the failure and return a message naming the missing grant, the way the 503 names Ollama. Never a generic 500. |
-| R2 | Cannot work under the `h2` profile | H2 has no `CREATE DATABASE`/catalog semantics matching MySQL's, and §6 already records that the H2 profile is the most confusing failure mode in the project. A half-succeeding upload would be worse than the `explainFailed: true` confusion it resembles. | Upload **refuses** under `h2` with an explicit message. It does not partially provision. |
-| R3 | Upload is destructive to the previous upload | `querysense_uploads` is dropped and recreated per upload. Fine for a single-user MVP, silently lossy for anyone who assumed it accumulated. | UI states it before the upload is committed. Only `querysense_uploads` is ever dropped — the demo database is never a target. |
-| R4 | `SchemaMetadataService` caches never evict | `columnCache` and `distinctValueCache` are `ConcurrentHashMap`s keyed by table name with no eviction, written before this feature existed. Without a flush, the first upload keeps serving the **demo** schema's columns to `SqlPreflightValidator` and the demo's city values to the rule engine — silently, and looking correct. | Publishing a new snapshot flushes both caches. This is a defect the feature *introduces*, so it is on the critical path, not a nice-to-have. |
-| R5 | Catalog switching can poison the connection pool | `EXPLAIN` runs on a pooled `JdbcTemplate`. Switching catalog without restoring it hands the next borrower a connection pointing at the wrong database — and the symptom would be a wrong-but-plausible plan, not an error. | `ExplainExecutor` sets and restores the catalog inside one `ConnectionCallback`, in a `finally`. When the built-in schema is active, `target` equals the pool's own catalog and the branch is a **no-op** — the demo path issues exactly the statements it does today. |
-| R6 | Seeded statistics are generated, not real | §7 already records the underlying fact: on an empty table MySQL reports `rows=1, filtered=100.00` where the populated one reports `rows=15, filtered=10.00` — same access path, useless magnitude. Seeding fixes the magnitude but the *distribution* is invented, so selectivity findings describe generated data. | Seed with deliberately skewed cardinality (a `status`-like column ~5 distinct values, an `email`-like one ~500) and ~10% NULLs, so `filtered` varies. The UI must label an uploaded schema's plan as describing generated data — this is the one place the feature could otherwise present invented numbers as measurements, which §4 already calls out as the comparison screen's sin. |
-| R7 | `KnownSchemaTest` pins the built-in schema to the live DB | That test is the guard that caught the `orders` drift documented in §2. Making the schema swappable must not weaken it. | `KnownSchema`'s constants stay exactly as they are and become the *built-in snapshot*; the test is unchanged and still pins them. Swappability is added around it, not to it. |
-| R8 | Uploaded DDL is user-supplied SQL | Executing an uploaded file verbatim would run whatever it contains. | Only `CREATE TABLE` is honoured, and statements are **re-emitted from the parsed JSqlParser model rather than the user's raw text**, so no uploaded string reaches the database as written. Identifiers are constrained to `[A-Za-z0-9_]{1,64}`. |
-| R9 | Hibernate `ddl-auto=update` vs. the second database | `spring.jpa.hibernate.ddl-auto=update` manages `query_history`. The uploaded catalog sits outside JPA's control, but that is an assumption until observed. | Verify explicitly after implementation that Hibernate does not touch `querysense_uploads`. Record the result here rather than assuming it. |
-| R10 | Two schemas, one UI | The uploaded schema drives generation while a plan may describe a different database. A user who cannot tell which is active cannot trust either. | Active schema is shown persistently in `EngineStatusBar`, alongside the engine indicator — same class of provenance fact, same treatment. |
+| # | Risk | Outcome |
+|---|---|---|
+| R1 | Needs `CREATE DATABASE` privilege | **Handled.** `SchemaProvisioner.createDatabase` catches the failure and returns the exact statement to run (`GRANT ALL PRIVILEGES ON \`querysense_uploads\`.* TO <user>@<host>;`) as a 400, not a generic 500. Not exercised live — the dev account is `root`, which already has it. |
+| R2 | Cannot work under the `h2` profile | **Closed.** `SchemaUploadService.requireMySqlProfile` refuses *before* parsing, so nothing is provisioned and the active schema is untouched. `SchemaUploadServiceTest.refusesUnderH2` asserts both. |
+| R3 | Upload is destructive to the previous upload | **Accepted, and stated in the UI before the fact.** The schema-source screen reads "Uploading replaces "<name>" — that upload's tables are dropped. The built-in demo schema is never touched." `SchemaProvisionerTest.touchesOnlyTheUploadCatalog` asserts no emitted statement names the connected database. |
+| R4 | `SchemaMetadataService` caches never evict | **Closed.** `ActiveSchemaProvider.publish` fires listeners; `SchemaMetadataService` registers `clearCaches` in `@PostConstruct`. Listener-based rather than a direct call because that class already depends on the provider — the reverse edge would be a cycle. |
+| R5 | Catalog switching can poison the connection pool | **Closed, and asserted rather than argued.** `ExplainExecutor` sets and restores the catalog inside one `ConnectionCallback`, in a `finally`. `ExplainExecutorTest.builtInSchemaNeverSwitchesCatalog` proves `setCatalog` is never called on the demo path, and `restoresCatalogOnException` proves the restore survives a throw. All 22 pre-existing `MySqlExplainAnalyzerTest` assertions still pass unmodified. |
+| R6 | Seeded statistics are generated, not real | **Open by nature, and labelled everywhere it shows.** Seeding fixes the magnitude; the distribution is still invented. The status bar reads "generated data" on every screen, and the analysis view carries "the access paths and index choices are real, the row counts describe synthetic data". Cardinality is deliberately skewed (a `status`-like column ~5 distinct values, an `email`-like one one per row) with ~10% NULLs, so `filtered` varies instead of being uniformly 100.00. |
+| R7 | `KnownSchemaTest` pins the built-in schema | **Held.** `KnownSchema`'s nine table constants and `FOREIGN_KEYS` are byte-identical — confirmed by diff. Only additive changes: `builtIn()`, and two methods delegating to `SchemaLookup`. `KnownSchemaTest` is unedited and still passes. |
+| R8 | Uploaded DDL is user-supplied SQL | **Closed.** Only `CREATE TABLE` is honoured, and every statement is re-emitted from the parsed JSqlParser model — no uploaded string reaches MySQL as written. Identifiers are constrained to `[A-Za-z0-9_]{1,64}`, stricter than MySQL's own rule, because identifiers cannot be JDBC parameters. |
+| R9 | Hibernate `ddl-auto=update` vs. the second database | **Answered, not assumed.** After a live upload, `information_schema` showed `querysense` holding all nine demo tables **plus `query_history`**, and `querysense_uploads` holding only `clients` and `invoices`. Hibernate does not touch the upload catalog. |
+| R10 | Two schemas, one UI | **Closed.** The active schema is shown permanently in `EngineStatusBar` beside the engine indicator, in the project's existing `--data` purple. Verified in a browser: it persists across navigation and updates the moment an upload lands. |
+
+#### Two things measurement changed, that the design got wrong
+
+Both were caught by running the thing, not by reading it.
+
+1. **The seed row count was wrong at 500.** The analysis modules each carry
+   their own row-count threshold — `TRANSACTIONAL` 100, `ECOMMERCE` 1000,
+   `ResourceConsciousService` 5000, `ANALYTICAL` 10000, all exclusive — and
+   below one, a full scan is reported as *"the estimated row count is low, so
+   the performance impact is likely minor"*: the finding without the
+   consequence. At 500 rows the same query returned `CRITICAL` under
+   `TRANSACTIONAL` and "impact is likely minor" under `ECOMMERCE`. The
+   default is now **12000**, which clears all four; every profile returns a
+   `CRITICAL` domain finding plus a `RESOURCE` warning.
+
+2. **12000 rows was unaffordable until a driver setting changed.** Seeding
+   24,000 rows across two tables took **24.6s**, because the MySQL driver
+   sends one `INSERT` per row even inside a JDBC batch. A ten-table schema at
+   that rate would have exceeded the frontend's 65s axios timeout and failed
+   in the browser while the backend carried on working. Adding
+   `rewriteBatchedStatements=true` to the datasource URL took the same upload
+   to **1.17s** — a 21x difference, and 12000 rows now costs less than 500
+   did before.
 
 **What this feature does *not* change:** `MySqlExplainAnalyzer` never read
-`KnownSchema` and still does not. The routing layers, confidence tiers and
-history writing are untouched. The two open correctness defects above
-(`order_items` mis-resolution, LLM inventing tables) are **not** fixed by
-this work — a dynamic schema runs through the same matcher, so both defects
-follow the uploaded schema rather than being cured by it.
+`KnownSchema` and still does not. Routing layers, confidence tiers and
+history writing are untouched. The `order_items` mis-resolution defect above
+is **not** fixed — a dynamic schema runs through the same matcher, so it
+follows the uploaded schema rather than being cured by it. Of the LLM
+hallucination defect's three fix directions, **#1 is now done** (an unmatched
+question is grounded on every table rather than none); #2 (a
+schema-conformance check before a result is returned or cached) and #3
+(MongoDB grounding) remain open.
 
 ### Frontend housekeeping
 
@@ -685,6 +815,22 @@ follow the uploaded schema rather than being cured by it.
 - **The app showing data with the backend stopped** means `VITE_USE_MOCK` isn't
   the literal string `false`. Unset counts as mock. Check `.env` before
   debugging anything else that looks impossible.
+- **Row counts on an uploaded schema are generated, not measured.** The plan
+  around them is real MySQL output — the access path, the index choice, the
+  join order — but the rows those numbers count were produced by
+  `SchemaSeeder`. The status bar says "generated data" whenever an upload is
+  active and the analysis screen repeats it; if you are quoting a figure from
+  a demo, check which schema was live first.
+- **Uploading a schema drops the previous upload**, and only ever touches
+  `querysense_uploads`. The connected `querysense` database — the nine demo
+  tables and `query_history` — is never a target of any DDL this feature
+  emits. "Reset to built-in" needs no cleanup: the uploaded tables stay where
+  they are and simply stop being what anything reads.
+- **Schema upload refuses under the `h2` profile**, before provisioning
+  anything. That is deliberate: H2 has no equivalent catalog semantics, so a
+  half-succeeding upload would leave the app pointing at tables that do not
+  exist — the same shape of confusion as the `explainFailed: true` trap two
+  bullets up.
 - **Numbers on the comparison screen are invented.** That screen has no
   endpoint and never did; it is simulated even in real mode.
 - **Generated SQL naming a table you do not have** (`transactions`, `buyer_id`)
@@ -752,14 +898,120 @@ Run against the live backend on MySQL 3306 with Ollama up.
   any future "upload a schema" feature: structure alone gets EXPLAIN to run,
   but not to mean anything.
 
+### Session of 2026-09-10 — schema upload, and the move to one repository
+
+Run against the live backend on MySQL 9.7 (port 3306) with Ollama up, and —
+for the first time in this project — **with the frontend exercised in a real
+browser against that backend**. See the "Not verified" note below, which this
+session partially retires.
+
+#### Repository consolidation
+
+The two separate repositories were folded into the `querysensellama`
+monorepo, which already held a snapshot of both. `CAPSTONE CODE/` →
+`backend/`, `CAPSTONE FRONTEND/` → `frontend/`; the old per-repo `.git`
+directories are preserved locally as `.git.disabled` and ignored. Working
+tree matched the snapshot commit exactly at the point of the move — 0 files
+differing under `backend/` or `frontend/`, 144 tracked files — so nothing was
+lost or reconciled. Backend suite verified green immediately after the
+rename: **44 tests, 0 failures**.
+
+#### Backend
+
+- `./mvnw test` — **130 tests, 0 failures**, BUILD SUCCESS. 44 pre-existing,
+  86 new. Every new test is a plain JUnit + Mockito unit test with a mocked
+  `JdbcTemplate`; none needs a running MySQL.
+- `KnownSchemaTest` unedited and still green; `KnownSchema`'s nine table
+  constants confirmed byte-identical by diff.
+- All 22 pre-existing `MySqlExplainAnalyzerTest` assertions still pass with
+  no edits to them, which is the concrete evidence the EXPLAIN path is
+  unchanged.
+
+#### The upload path, end to end
+
+| Step | Result |
+|---|---|
+| `GET /api/schema/active` before upload | `builtIn: true`, `catalog: null`, 9 tables |
+| Baseline `/analyze` on `customers` | `explainFailed: false`, `ALL`, **15 rows** — matches this file's own figures |
+| `POST /api/schema/upload` (2 tables, JSON form) | 2 tables provisioned, **12000 rows each**, FK detected, no warnings |
+| `/generate` "Show all clients" | `SELECT * FROM clients;` — `RULE_ENGINE`, 0.95 |
+| **`/analyze` on an uploaded table** | **`explainFailed: false`, `ALL`, 11953 rows** |
+| `/schema-advisor` on the same query | `CREATE INDEX idx_clients_city ON clients(city);` |
+| JOIN across two uploaded tables | both tables in the plan — `c`: `ALL`, 11791 rows; `i`: `ref` on `fk_invoices_0`, 1 row |
+| `POST /api/schema/reset` | `builtIn: true`, `catalog: null`, 9 tables |
+| `/analyze` on `customers` after reset | `explainFailed: false`, `ALL`, **15 rows** — identical to the baseline |
+
+**The contrast that matters** is the one this file already recorded for the
+empty-vs-populated case: an uploaded table reports **11953 rows** where the
+built-in `customers` reports **15**, and where an *unseeded* table of the
+same shape would report `rows=1, filtered=100.00`. Structure alone gets
+EXPLAIN to run; seeding is what gets it to mean something.
+
+Suggestions at 12000 rows, all three domain profiles on the same query:
+every one returns a `CRITICAL` domain finding **plus** a `RESOURCE` warning.
+None says "the estimated row count is low". At 500 rows — the original
+default — only `TRANSACTIONAL` did. See §5 for the thresholds that forced
+the change and the driver setting that made it affordable.
+
+#### Frontend, in a browser
+
+`npm run build` clean. `npm run lint` — 0 errors, **4 warnings**: the 3
+pre-existing ones plus one `react-refresh` on the new `ActiveSchemaContext`,
+matching the two context files that already carry it.
+
+Exercised at `localhost:5173` against the live backend, `VITE_USE_MOCK=false`:
+
+- `/schema-source` renders all nine built-in tables with columns and FK
+  arrows, and shows "connected database" for the null catalog.
+- Pasting DDL and pressing "Use this schema" provisioned both tables and the
+  preview showed **12,000 rows** each.
+- The status bar switched to **"Pasted schema · 2 tables · generated data"**
+  and persisted across every navigation.
+- The replace warning appeared once an upload was active, naming it.
+- Workbench placeholder followed the schema: `show customers from Mumbai` →
+  **`show all clients`**.
+- "show clients in Mumbai" → `SELECT * FROM clients WHERE city = 'mumbai';`
+  at `RULE_ENGINE` 0.95. **This exercises the live known-value safety net
+  against uploaded data** — `city` resolved and `Mumbai` matched real seeded
+  values, which is only possible because the seeder generates
+  name-appropriate data rather than random strings.
+- Analysis showed **11933 rows**, `ALL`, a `CRITICAL` domain suggestion
+  quoting that count, and the provenance note: *"the access paths and index
+  choices are real, the row counts describe synthetic data."*
+- "Back to the built-in schema" returned the bar to "Built-in demo schema"
+  and the preview to the nine tables.
+- No console errors or CORS failures.
+
+#### R9, answered rather than assumed
+
+After a live upload, `information_schema` reported `querysense` holding all
+nine demo tables **plus `query_history`**, and `querysense_uploads` holding
+only `clients` and `invoices`. Hibernate's `ddl-auto=update` does not touch
+the upload catalog.
+
+#### Still not verified
+
+- **The multipart file-upload form.** Only the JSON/paste path was exercised
+  end to end; the file picker was not driven with a real `.sql` file.
+  `SchemaControllerTest` covers its size and empty-file rejections as unit
+  tests, but no live multipart request was made.
+- **R1's missing-`CREATE`-privilege path.** The dev account is `root`, so the
+  error branch and its `GRANT` message have never actually fired.
+- **A large or messy real-world dump.** The tables used were hand-written.
+  The parser's mysqldump handling is covered by unit tests against realistic
+  fragments, not by a genuine multi-hundred-table export.
+- **MongoDB is unaffected and untested here**, as ever.
+
 ### Not verified
 
-- **No screen of the current frontend has been exercised against the live
-  backend in a browser.** No page render, no request, no console check. The
-  contract alignment above is a code-level review, not an observation. This
-  still holds after the 2026-09-10 changes: the per-table plan blocks added to
-  `ExplainPlanView` have been verified as data and as a clean build, **never as
-  pixels** — the browser extension was unavailable throughout.
+- ~~**No screen of the current frontend has been exercised against the live
+  backend in a browser.**~~ **Partially retired 2026-09-10** — see the schema
+  upload session above. Workbench, Analysis and the new Schema source screen
+  were driven in a real browser against the live backend, with a console
+  check. **Optimization, Schema advisor, History and Architecture still have
+  not been**, and the per-table plan blocks in `ExplainPlanView` have only
+  been seen in their single-table state on screen; the multi-table rendering
+  remains verified as data and as a clean build, never as pixels.
 - The populated states of the analysis, optimisation and schema-advisor screens
   (a real plan tree, non-empty suggestions, real index proposals) still require
   a backend on real MySQL, since H2 cannot produce `EXPLAIN` output.
