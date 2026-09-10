@@ -30,12 +30,24 @@ class RuleBasedQueryBuilderSchemaTest {
     private ActiveSchemaProvider activeSchema;
     private RuleBasedQueryBuilder builder;
 
+    // WIRING ONLY. Every assertion below is byte-identical to the version
+    // that guarded the pre-binder engine — this block changed because
+    // RuleBasedQueryBuilder now takes its collaborators rather than
+    // constructing them, and for no other reason. If an assertion ever needs
+    // to change to keep this file green, that is a regression, not a
+    // refactor.
     @BeforeEach
     void setUp() {
         SchemaMetadataService metadata = mock(SchemaMetadataService.class);
         when(metadata.getDistinctValues(anyString(), anyString())).thenReturn(List.of());
+        when(metadata.getColumnNames(anyString())).thenReturn(List.of());
         activeSchema = new ActiveSchemaProvider();
-        builder = new RuleBasedQueryBuilder(metadata, activeSchema);
+        builder = new RuleBasedQueryBuilder(
+                new QueryIntentParser(
+                        new SchemaBinder(activeSchema),
+                        new JoinPathResolver(activeSchema),
+                        metadata,
+                        new SqlEmitter()));
     }
 
     @Test
