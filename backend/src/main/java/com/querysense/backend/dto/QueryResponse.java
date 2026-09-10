@@ -29,4 +29,20 @@ public class QueryResponse {
     private String targetDb;
     private String handledBy;   // "RULE_ENGINE" | "CACHE" | "OLLAMA"
     private Double confidence;
+
+    /**
+     * How the rule engine built this query — or why it declined and let
+     * another layer answer.
+     *
+     * WHY IT IS PRESENT EVEN WHEN handledBy IS NOT RULE_ENGINE:
+     * handledBy has always said WHICH layer answered and never why the
+     * previous one passed. The rule engine runs first on every request, so
+     * it has a reason either way, and discarding it left the project's
+     * "routing is auditable" claim demonstrable only for the half of the
+     * decision that succeeded.
+     *
+     * Null only for a response that never went through the rule engine at
+     * all. Not persisted — QueryHistory keeps the shape it had.
+     */
+    private RuleTrace ruleTrace;
 }

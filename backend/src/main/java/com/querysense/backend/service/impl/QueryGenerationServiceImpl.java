@@ -1,9 +1,11 @@
 package com.querysense.backend.service.impl;
 
 import com.querysense.backend.dto.QueryResponse;
+import com.querysense.backend.dto.RuleTrace;
 import com.querysense.backend.model.QueryHistory;
 import com.querysense.backend.querybuilder.GeneratedQueryValidator;
 import com.querysense.backend.querybuilder.RuleBasedQueryBuilder;
+import com.querysense.backend.querybuilder.RuleBuildResult;
 import com.querysense.backend.repository.QueryHistoryRepository;
 import com.querysense.backend.service.LlmFallbackService;
 import com.querysense.backend.service.QueryGenerationService;
@@ -100,10 +102,14 @@ public class QueryGenerationServiceImpl implements QueryGenerationService {
         // LAYER 1: Rule-Based Engine
         // Fast, free, no I/O. Handles the majority of simple queries.
         // ---------------------------------------------------------------
-        Optional<String> ruleResult = ruleBasedQueryBuilder.tryBuild(input, databaseType);
+        RuleBuildResult ruleResult = ruleBasedQueryBuilder.build(input, databaseType);
 
-        if (ruleResult.isPresent()) {
-            generatedSql = ruleResult.get();
+        // The rule engine has a reason either way, and it travels with the
+        // response whichever layer ends up answering. See QueryResponse.
+        RuleTrace trace = ruleResult.trace();
+
+        if (ruleResult.built()) {
+            generatedSql = ruleResult.sql();
             source = SOURCE_RULE_ENGINE;
             confidence = CONFIDENCE_RULE_ENGINE;
 
@@ -161,7 +167,7 @@ public class QueryGenerationServiceImpl implements QueryGenerationService {
         // ---------------------------------------------------------------
         saveToHistory(input, generatedSql, databaseType, source);
 
-        return new QueryResponse(generatedSql, databaseType, source, confidence);
+        return new QueryResponse(generatedSql, databaseType, source, confidence, trace);
     }
 
     private void saveToHistory(String input, String generatedSql,
