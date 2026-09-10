@@ -1724,6 +1724,33 @@ its reason onto the response, so an LLM-answered query shows *why* the rules
 declined. That is the half of this project's central claim that was previously
 not demonstrable.
 
+#### A regression this session introduced and then fixed
+
+The first version of the parser dropped the previous engine's **weak
+projection signal** — the `<table noun> <column>` compound with no
+`only`/`just`/`of` to announce it ("customer city", "order amounts"). The old
+`detectColumns` had it, documented as opportunistic; the rewrite kept only the
+strong signals, so `customer name` silently returned `SELECT * FROM customers;`
+at `RULE_ENGINE` 0.95. Found by the user against a live upload, not by any
+test.
+
+Restored with two changes rather than one, because the original behaviour was
+not quite right either:
+
+- It now binds a **multi-word** tail, so `customer first name` resolves through
+  underscore normalisation to `first_name`.
+- An unresolvable tail **declines** instead of degrading to `SELECT *`. The
+  live schema that exposed this (`movie_rentals.sql`) has `first_name` and
+  `last_name` and no `name`, so `customer name` matches two columns. Picking
+  one is a confident wrong answer; `SELECT *` is a silently incomplete one.
+  Neither belongs at 0.95.
+
+Three gates keep it from firing on ordinary phrasing — the tail must run to the
+end of the question, be at most three words, and contain no preposition, copula,
+clause word or table name. That is what keeps `customers in pune` a filter
+rather than a decline, which was the previous engine's own stated worry about
+this branch.
+
 #### Four defects closed
 
 - The `order_items` mis-resolution (§5) — `SchemaBinderTest.orderItemsBeatsOrders`.
@@ -1734,7 +1761,7 @@ not demonstrable.
 
 #### Verified
 
-- `./mvnw test` — **229 tests, 0 failures** (174 before, all green at the
+- `./mvnw test` — **233 tests, 0 failures** (174 before, all green at the
   start of the session).
 - `npm test` — **16 tests, 0 failures**; `RuleTracePanel` is the frontend's
   second tested file after `applyScript`.

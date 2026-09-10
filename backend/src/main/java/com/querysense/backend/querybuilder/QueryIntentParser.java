@@ -138,6 +138,28 @@ public class QueryIntentParser {
     private static final Set<String> COUNT_WORDS = Set.of(
             "count", "how many", "total number", "number of");
 
+    /**
+     * Words that disqualify a trailing phrase from being read as a column
+     * reference. See {@link #extractTrailingColumnPhrase} — the weak
+     * projection signal has to tell "customer city" (a column) apart from
+     * "customers in pune" (a filter), and the discriminator is that a
+     * projection phrase contains no preposition, copula or clause word.
+     */
+    private static final Set<String> NON_COLUMN_WORDS = Set.of(
+            "in", "at", "from", "with", "to", "for", "on", "of", "by", "as",
+            "is", "are", "was", "were", "be", "been", "has", "have", "had",
+            "and", "or", "not", "no", "than", "more", "less", "fewer",
+            "above", "below", "over", "under", "between", "per", "each",
+            "the", "a", "an", "all", "any", "every", "this", "that",
+            "their", "there", "them", "it", "its", "who", "which", "what",
+            "sorted", "ordered", "grouped", "group", "order", "sort",
+            "ascending", "descending", "asc", "desc", "limit", "top",
+            "show", "get", "list", "give", "me", "display", "find");
+    // NOTE: "first" is deliberately absent. It is a LIMIT keyword only when
+    // followed by a digit, and it is a legitimate column word in
+    // "customer first name" — which is exactly the phrasing that exposed
+    // this whole gap.
+
     private final SchemaBinder binder;
     private final JoinPathResolver joins;
     private final SchemaMetadataService metadata;
@@ -231,6 +253,8 @@ public class QueryIntentParser {
         // than silently fall back to SELECT * and drop what was asked for
         // (the Bug 7 rule, kept).
         // -----------------------------------------------------------------
+        boolean countRequested = COUNT_WORDS.stream().anyMatch(text::contains);
+
         Optional<String> strongPhrase = extractStrongProjectionPhrase(text);
         List<String> projected = List.of();
         boolean projectionRequested = strongPhrase.isPresent();
@@ -247,13 +271,43 @@ public class QueryIntentParser {
                     new RuleTrace.Binding(c, "COLUMN", subject.name() + "." + c)));
         }
 
+        // The WEAK projection signal: a bare "<table noun> <column phrase>"
+        // compound with no "only"/"of" to announce it — "customer city",
+        // "customer first name". The previous engine had this and the first
+        // version of this parser dropped it, so "customer name" silently
+        // returned SELECT * instead of the column that was asked for.
+        //
+        // It differs from the strong signal in what it will claim, not in
+        // what it declines: it only fires when the tail reads as a column
+        // reference at all (see extractTrailingColumnPhrase), but once it
+        // does, an unresolvable phrase declines rather than degrading to
+        // SELECT *. On a schema where "name" is both first_name and
+        // last_name, picking one is a confident wrong answer and SELECT * is
+        // a silently incomplete one — neither is worth returning at 0.95.
+        if (!projectionRequested && !countRequested) {
+            Optional<String> tail = extractTrailingColumnPhrase(text, subject);
+            if (tail.isPresent()) {
+                List<String> resolved = resolveChunks(tail.get(), subject);
+                if (resolved == null) {
+                    return RuleBuildResult.declined(
+                            "The question looks like it asks for \"" + tail.get() + "\" from "
+                                    + subject.name() + ", but that does not match exactly one of "
+                                    + "its columns.",
+                            bindings);
+                }
+                projected = resolved;
+                projectionRequested = true;
+                projected.forEach(c -> bindings.add(
+                        new RuleTrace.Binding(tail.get(), "COLUMN", subject.name() + "." + c)));
+            }
+        }
+
         // -----------------------------------------------------------------
         // AGGREGATE. Skipped entirely when an explicit projection was asked
         // for — "only the total and status" is a projection, not a SUM.
         // -----------------------------------------------------------------
         String aggregateFunction = null;
         String aggregateColumn = null;
-        boolean countRequested = COUNT_WORDS.stream().anyMatch(text::contains);
 
         if (!projectionRequested) {
             Matcher agg = AGGREGATE_PHRASE.matcher(text);
@@ -582,6 +636,53 @@ public class QueryIntentParser {
         } catch (NumberFormatException e) {
             return Optional.empty();
         }
+    }
+
+    /**
+     * The weak projection signal: a column phrase sitting directly after the
+     * table noun and running to the end of the question — "customer city",
+     * "customer first name".
+     *
+     * WHY IT IS GATED SO TIGHTLY:
+     * the previous engine's own note on this branch was that "most sentences
+     * legitimately have some other (non-column) word after the table noun",
+     * and "customers living in mumbai" must not be read as a failed
+     * projection. Three gates keep those apart:
+     *
+     *   1. the phrase must run to the END of the question — a tail, not a
+     *      fragment with a clause after it;
+     *   2. at most three words, so a verb phrase like "placed more than
+     *      three orders" cannot qualify;
+     *   3. no prepositions, copulas, clause words or table names in it.
+     *
+     * Anything that fails a gate returns empty and is simply ignored, which
+     * is what keeps "customers in pune" a filter rather than a decline.
+     */
+    private Optional<String> extractTrailingColumnPhrase(String text, KnownSchema.Table table) {
+        Pattern pattern = Pattern.compile(
+                "\\b(?:" + Pattern.quote(SchemaBinder.normalize(table.name()))
+                        + "|" + Pattern.quote(SchemaBinder.normalize(table.singularName()))
+                        + ")\\s+([a-z ]+)$");
+        Matcher matcher = pattern.matcher(text);
+        if (!matcher.find()) {
+            return Optional.empty();
+        }
+
+        String phrase = matcher.group(1).trim();
+        if (phrase.isEmpty()) {
+            return Optional.empty();
+        }
+
+        String[] words = phrase.split("\\s+");
+        if (words.length > 3) {
+            return Optional.empty();
+        }
+        for (String word : words) {
+            if (NON_COLUMN_WORDS.contains(word) || binder.tableNamed(word).isPresent()) {
+                return Optional.empty();
+            }
+        }
+        return Optional.of(phrase);
     }
 
     private Optional<String> extractStrongProjectionPhrase(String text) {
