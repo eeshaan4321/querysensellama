@@ -1,6 +1,7 @@
 package com.querysense.backend.analysis;
 
-import com.querysense.backend.schema.KnownSchema;
+import com.querysense.backend.schema.ActiveSchemaProvider;
+import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -15,15 +16,16 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * WHY THIS CLASS EXISTS:
  * Table/column STRUCTURE (which tables exist, which columns they have) is
- * now owned centrally by {@link KnownSchema} — a static source of truth,
- * per the architecture fix in this round (previously this class and
- * RuleBasedQueryBuilder each hardcoded their own incomplete copy). This
- * class's remaining job is the thing a static list genuinely can't
+ * owned centrally by the ACTIVE schema, read through
+ * {@link com.querysense.backend.schema.ActiveSchemaProvider} — either the
+ * built-in KnownSchema or one the user uploaded. Previously this class and
+ * RuleBasedQueryBuilder each hardcoded their own incomplete copy. This
+ * class's remaining job is the thing a declared schema genuinely can't
  * express: live facts from the actual running database.
  *
  * - {@link #getColumnNames(String)} is a live safety net for
  *   SqlPreflightValidator — it catches schema DRIFT (a column added/removed
- *   after KnownSchema was last updated) that a static list can't see, by
+ *   after the schema was last declared) that a declared list can't see, by
  *   double-checking a generated query against what MySQL actually has.
  * - {@link #getDistinctValues(String, String)} looks up real DATA values
  *   (e.g. the actual city names in `customers.city`) — RuleBasedQueryBuilder
@@ -41,11 +43,36 @@ public class SchemaMetadataService {
     private static final Logger log = LoggerFactory.getLogger(SchemaMetadataService.class);
 
     private final JdbcTemplate jdbcTemplate;
+    private final ActiveSchemaProvider activeSchema;
     private final Map<String, List<String>> columnCache = new ConcurrentHashMap<>();
     private final Map<String, List<String>> distinctValueCache = new ConcurrentHashMap<>();
 
-    public SchemaMetadataService(JdbcTemplate jdbcTemplate) {
+    public SchemaMetadataService(JdbcTemplate jdbcTemplate, ActiveSchemaProvider activeSchema) {
         this.jdbcTemplate = jdbcTemplate;
+        this.activeSchema = activeSchema;
+    }
+
+    /**
+     * WHY THE CACHES MUST BE FLUSHED WHEN THE SCHEMA CHANGES:
+     * Both caches are keyed by bare table name and never evict - fine while
+     * the schema was static and compiled in. Once it can be replaced at
+     * runtime, a stale entry means this service keeps answering with the
+     * PREVIOUS schema's columns and values, and every caller downstream
+     * (SqlPreflightValidator, the rule engine's known-city safety net)
+     * looks correct while being wrong.
+     *
+     * Registered as a listener rather than called from ActiveSchemaProvider
+     * because this class already depends on that one; the reverse edge
+     * would be a cycle.
+     */
+    
+    void registerSchemaChangeListener() {
+        activeSchema.onSchemaChanged(this::clearCaches);
+    }
+
+    public void clearCaches() {
+        columnCache.clear();
+        distinctValueCache.clear();
     }
 
     /**
@@ -80,7 +107,7 @@ public class SchemaMetadataService {
      * data-driven safety net — see class doc — never as a substitute for
      * real query filtering.
      *
-     * WHY tableName/columnName are validated against KnownSchema before
+     * WHY tableName/columnName are validated against the active schema before
      * being concatenated into SQL: JDBC placeholders parameterize VALUES,
      * not identifiers, so a table/column name can't go through a
      * PreparedStatement parameter. Every caller in this codebase only ever
@@ -97,7 +124,7 @@ public class SchemaMetadataService {
     }
 
     private List<String> loadDistinctValues(String tableName, String columnName) {
-        boolean recognized = KnownSchema.findTable(tableName)
+        boolean recognized = activeSchema.findTable(tableName)
                 .map(table -> table.columns().stream().anyMatch(col -> col.equalsIgnoreCase(columnName)))
                 .orElse(false);
         if (!recognized) {

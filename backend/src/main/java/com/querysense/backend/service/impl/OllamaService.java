@@ -1,6 +1,7 @@
 package com.querysense.backend.service.impl;
 
 import com.querysense.backend.exception.LlmUnavailableException;
+import com.querysense.backend.schema.ActiveSchemaProvider;
 import com.querysense.backend.schema.KnownSchema;
 import com.querysense.backend.service.LlmFallbackService;
 import org.springframework.beans.factory.annotation.Value;
@@ -94,9 +95,11 @@ public class OllamaService implements LlmFallbackService {
     private int numPredict;
 
     private final RestTemplate restTemplate;
+    private final ActiveSchemaProvider activeSchema;
 
-    public OllamaService(RestTemplate restTemplate) {
+    public OllamaService(RestTemplate restTemplate, ActiveSchemaProvider activeSchema) {
         this.restTemplate = restTemplate;
+        this.activeSchema = activeSchema;
     }
 
     // -----------------------------------------------------------------------
@@ -262,7 +265,20 @@ public class OllamaService implements LlmFallbackService {
             return "";
         }
 
-        List<KnownSchema.Table> tables = KnownSchema.detectTablesMentioned(userInput);
+        // WHY AN UNMATCHED QUESTION NOW GETS THE WHOLE SCHEMA RATHER THAN NONE:
+        // This used to return "" when the question named no known table, so
+        // the model got NO schema at all for exactly the questions most
+        // likely to hallucinate - ones phrased in business words ("buyers",
+        // "spend") rather than schema words. PROJECT.md records the result:
+        // a confident SELECT against a `transactions` table that does not
+        // exist, which the cache then served back at confidence 1.0. An
+        // over-broad prompt is strictly better than an empty one.
+        //
+        // This closes fix direction 1 of that defect. Directions 2 (a
+        // schema-conformance check before a result is returned or cached)
+        // and 3 (MongoDB grounding) remain open.
+        List<KnownSchema.Table> mentioned = activeSchema.detectTablesMentioned(userInput);
+        List<KnownSchema.Table> tables = mentioned.isEmpty() ? activeSchema.tables() : mentioned;
         if (tables.isEmpty()) {
             return "";
         }
@@ -274,7 +290,7 @@ public class OllamaService implements LlmFallbackService {
                     .append("(").append(String.join(", ", table.columns())).append(")\n");
         }
 
-        for (KnownSchema.ForeignKey fk : KnownSchema.FOREIGN_KEYS) {
+        for (KnownSchema.ForeignKey fk : activeSchema.foreignKeys()) {
             boolean fromMentioned = tables.stream().anyMatch(t -> t.name().equals(fk.fromTable()));
             boolean toMentioned = tables.stream().anyMatch(t -> t.name().equals(fk.toTable()));
             if (fromMentioned && toMentioned) {

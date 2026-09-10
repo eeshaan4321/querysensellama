@@ -1,7 +1,9 @@
 package com.querysense.backend.querybuilder;
 
 import com.querysense.backend.analysis.SchemaMetadataService;
+import com.querysense.backend.schema.ActiveSchemaProvider;
 import com.querysense.backend.schema.KnownSchema;
+import com.querysense.backend.schema.SchemaLookup;
 import org.springframework.stereotype.Component;
 
 import java.util.*;
@@ -47,8 +49,19 @@ public class RuleBasedQueryBuilder {
     // that the clause matcher failed to capture — see that method's doc.
     private final SchemaMetadataService schemaMetadataService;
 
-    public RuleBasedQueryBuilder(SchemaMetadataService schemaMetadataService) {
+    // WHY THIS IS INJECTED RATHER THAN READ STATICALLY:
+    // Table/column structure used to come from KnownSchema.TABLES directly,
+    // which pinned this class to the built-in demo schema at compile time.
+    // The schema-upload feature replaces that schema at runtime, so the
+    // engine reads whichever snapshot is active instead. With no upload
+    // performed this resolves to KnownSchema.builtIn() and every answer is
+    // what it was before.
+    private final ActiveSchemaProvider activeSchema;
+
+    public RuleBasedQueryBuilder(SchemaMetadataService schemaMetadataService,
+                                 ActiveSchemaProvider activeSchema) {
         this.schemaMetadataService = schemaMetadataService;
+        this.activeSchema = activeSchema;
     }
 
     // -----------------------------------------------------------------------
@@ -204,9 +217,8 @@ public class RuleBasedQueryBuilder {
         // through as if only one table were involved, and get confidently
         // mishandled by the rule engine instead of routed to the LLM fallback for the
         // join/aggregate it actually needs (Bug 9).
-        long tableCount = KnownSchema.TABLES.stream()
-                .filter(t -> input.matches(".*\\b" + t.name() + "\\b.*")
-                        || input.matches(".*\\b" + t.singularName() + "\\b.*"))
+        long tableCount = activeSchema.tables().stream()
+                .filter(t -> SchemaLookup.mentions(input, t))
                 .count();
         if (tableCount > 1) return true;
 
@@ -219,9 +231,8 @@ public class RuleBasedQueryBuilder {
     // -----------------------------------------------------------------------
 
     private Optional<String> detectTable(String input) {
-        for (KnownSchema.Table table : KnownSchema.TABLES) {
-            if (input.matches(".*\\b" + table.name() + "\\b.*")
-                    || input.matches(".*\\b" + table.singularName() + "\\b.*")) {
+        for (KnownSchema.Table table : activeSchema.tables()) {
+            if (SchemaLookup.mentions(input, table)) {
                 return Optional.of(table.name());
             }
         }
@@ -338,7 +349,7 @@ public class RuleBasedQueryBuilder {
         Matcher location = LOCATION_PATTERN.matcher(input);
         if (location.find()) {
             List<String> values = splitConjunction(location.group(1)).stream()
-                    .filter(v -> !KnownSchema.tableNames().contains(v))
+                    .filter(v -> !activeSchema.tableNames().contains(v))
                     .toList();
             if (values.size() == 1) {
                 return Optional.of("city = '" + values.get(0) + "'");
@@ -430,7 +441,7 @@ public class RuleBasedQueryBuilder {
     private static final Pattern OF_PATTERN = Pattern.compile("^(.*?)\\s+of\\s+");
 
     private ProjectionResult detectColumns(String input, String tableName) {
-        Optional<KnownSchema.Table> tableOpt = KnownSchema.findTable(tableName);
+        Optional<KnownSchema.Table> tableOpt = activeSchema.findTable(tableName);
         if (tableOpt.isEmpty()) {
             return ProjectionResult.none();
         }

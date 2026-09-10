@@ -1,5 +1,6 @@
 package com.querysense.backend.querybuilder;
 
+import com.querysense.backend.schema.ActiveSchemaProvider;
 import com.querysense.backend.schema.KnownSchema;
 import org.springframework.stereotype.Component;
 
@@ -64,6 +65,16 @@ import java.util.regex.Pattern;
 @Component
 public class GeneratedQueryValidator {
 
+    // Injected rather than read statically so this validator checks the
+    // question against whichever schema is actually live. On the built-in
+    // schema it resolves to exactly what KnownSchema.detectTablesMentioned
+    // returned before.
+    private final ActiveSchemaProvider activeSchema;
+
+    public GeneratedQueryValidator(ActiveSchemaProvider activeSchema) {
+        this.activeSchema = activeSchema;
+    }
+
     private static final Pattern MULTI_CONDITION_LANGUAGE = Pattern.compile(
             ".*\\b(with|who\\s+have|who\\s+placed|who\\s+has|and)\\b.*"
     );
@@ -83,7 +94,7 @@ public class GeneratedQueryValidator {
 
         String sql = generatedQuery.toLowerCase();
 
-        List<KnownSchema.Table> mentionedTables = KnownSchema.detectTablesMentioned(userInput);
+        List<KnownSchema.Table> mentionedTables = activeSchema.detectTablesMentioned(userInput);
         if (mentionedTables.size() > 1) {
             boolean sqlReferencesEveryMentionedTable = mentionedTables.stream()
                     .allMatch(t -> sql.contains(t.name()) || sql.contains(t.singularName()));

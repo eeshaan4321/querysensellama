@@ -1,5 +1,6 @@
 package com.querysense.backend.service.impl;
 
+import com.querysense.backend.schema.ActiveSchemaProvider;
 import com.querysense.backend.exception.LlmUnavailableException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -47,7 +48,9 @@ class OllamaServiceTest {
     @BeforeEach
     void setUp() {
         restTemplate = mock(RestTemplate.class);
-        service = new OllamaService(restTemplate);
+        // A real provider, not a mock: these tests assume the built-in
+        // schema, which is what ActiveSchemaProvider starts on.
+        service = new OllamaService(restTemplate, new ActiveSchemaProvider());
 
         // @Value fields aren't populated outside a Spring context.
         ReflectionTestUtils.setField(service, "apiUrl", "http://localhost:11434/api/generate");
