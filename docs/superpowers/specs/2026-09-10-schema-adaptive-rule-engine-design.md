@@ -316,9 +316,17 @@ each layer produced but not why the boundary between them fell where it did.
 This is the first time that claim is demonstrable in full.
 
 It is cheap, because the decline reasons must exist as logic anyway (§4.3) —
-this stops discarding them. `tryBuild` returns a small result type instead of
-`Optional<String>`, a signature change confined to one caller
-(`QueryGenerationServiceImpl`).
+this stops discarding them.
+
+**A new method rather than a changed signature.** An earlier draft had
+`tryBuild` return a result type instead of `Optional<String>`. That contradicts
+§6.1: `RuleBasedQueryBuilderSchemaTest` calls `tryBuild` and asserts on an
+`Optional`, so changing the signature forces the one test file that is supposed
+to stay untouched to be edited. Instead `build(input, databaseType)` is **added**
+returning `RuleBuildResult`, and `tryBuild` is retained as a one-line delegate
+returning `Optional<String>`. `QueryGenerationServiceImpl` calls `build`; the
+schema test keeps calling `tryBuild` unedited, which is what makes it a
+regression guard rather than a file that moves with the change.
 
 Accepted costs, stated plainly:
 
@@ -350,9 +358,11 @@ this field. It does **not** mean "the rules declined" — that case is
 `DECLINED`, and it renders. The empty-render discipline is `VerdictBanner`'s;
 the two-outcome split is this component's own.
 
-Contract work is the usual three touches described in PROJECT.md §4: a shape in
-`contracts.js`, an `ENDPOINT_STATUS` entry, and a fixture in `mock/fixtures.js`
-so mock mode does not diverge from real mode.
+Contract work is two touches, not the three PROJECT.md §4 describes for a new
+endpoint: the `QueryBuildResponse` typedef in `contracts.js` gains `ruleTrace`,
+and `mock/fixtures.js` returns one so mock mode does not diverge from real mode.
+**No `ENDPOINT_STATUS` entry** — that map is keyed by endpoint, and
+`queryBuilder` is already `REAL`. An earlier draft said otherwise.
 
 **Placement: below `VerdictBanner`, above `PlanMetrics`.** The verdict answers
 *is this query any good*; the trace answers *why is it shaped this way*; the
