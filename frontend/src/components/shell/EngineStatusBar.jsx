@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { useEngineStatus } from '../../context/EngineStatusContext';
+import { useActiveSchema } from '../../context/ActiveSchemaContext';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
 import { isLlmSource } from '../../api/contracts';
 import './EngineStatusBar.css';
@@ -19,8 +20,10 @@ const COPY = {
  */
 export function EngineStatusBar() {
   const { status } = useEngineStatus();
+  const { schema } = useActiveSchema();
   const reduced = useReducedMotion();
   const tone = isLlmSource(status?.handledBy) ? 'llm' : 'rule';
+  const uploaded = Boolean(schema) && !schema.builtIn;
 
   return (
     <header className="engine-status-bar">
@@ -42,6 +45,31 @@ export function EngineStatusBar() {
           </span>
         </motion.div>
       </AnimatePresence>
+
+      {/*
+        Which schema is live is the same class of fact as which engine
+        answered: provenance the user needs in order to trust anything on
+        screen. An uploaded schema says "generated data" here because its
+        row estimates are real EXPLAIN output over synthetic rows, and no
+        screen should let that pass for a measurement.
+      */}
+      <div
+        className={`engine-status-bar__schema engine-status-bar__schema--${uploaded ? 'uploaded' : 'builtin'}`}
+        title={
+          uploaded
+            ? `Uploaded schema, provisioned into ${schema.catalog}. Its tables hold generated rows.`
+            : 'The built-in demo schema, in the connected database.'
+        }
+      >
+        <span className="engine-status-bar__dot" aria-hidden="true" />
+        <span>
+          {!schema
+            ? 'Schema unknown'
+            : schema.builtIn
+              ? 'Built-in demo schema'
+              : `${schema.label} · ${schema.tables.length} tables · generated data`}
+        </span>
+      </div>
     </header>
   );
 }

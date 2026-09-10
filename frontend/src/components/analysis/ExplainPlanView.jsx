@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
 import { StatTile } from '../common/StatTile';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
+import { useActiveSchema } from '../../context/ActiveSchemaContext';
 import './ExplainPlanView.css';
 
 /**
@@ -97,12 +98,28 @@ function MetricRows({ rows, source, unavailable, reduced }) {
  */
 export function ExplainPlanView({ plan }) {
   const reduced = useReducedMotion();
+  const { schema } = useActiveSchema();
+  const generated = Boolean(schema) && !schema.builtIn;
   const unavailable = Boolean(plan.explainFailed);
   const tables = Array.isArray(plan.tables) ? plan.tables : [];
   const perTable = !unavailable && tables.length > 1;
 
   return (
     <div className="explain-plan">
+      {/*
+        R6: an uploaded schema's tables hold generated rows. The access
+        paths below are real MySQL output; the row counts describe data
+        this app invented. Saying so here is what keeps the comparison
+        screen the only place in the UI showing unmeasured numbers.
+      */}
+      {generated && !unavailable && (
+        <p className="explain-plan__provenance">
+          This plan is MySQL&apos;s, run against <code>{schema.catalog}</code>. Those tables were
+          created from your uploaded schema and filled with generated rows — the access paths and
+          index choices are real, the row counts describe synthetic data.
+        </p>
+      )}
+
       <StatTile
         label={perTable ? 'Most rows examined at one table' : 'Estimated rows examined'}
         value={unavailable ? 'Unavailable' : (plan.estimatedRows ?? '—')}

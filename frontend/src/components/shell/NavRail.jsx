@@ -6,6 +6,9 @@ const ICONS = {
   workbench: (
     <path d="M3 12h4l2-6 4 12 2-6h4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" fill="none" />
   ),
+  schemaSource: (
+    <path d="M12 3c4.4 0 8 1.3 8 3s-3.6 3-8 3-8-1.3-8-3 3.6-3 8-3zM4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+  ),
   analysis: (
     <path d="M4 20V10M10 20V4M16 20v-7M20 20H2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" fill="none" />
   ),
@@ -25,6 +28,7 @@ const ICONS = {
 
 const ITEMS = [
   { to: '/', label: 'Workbench', icon: 'workbench', end: true },
+  { to: '/schema-source', label: 'Schema source', icon: 'schemaSource' },
   { to: '/analysis', label: 'Analysis', icon: 'analysis' },
   { to: '/optimization', label: 'Optimization', icon: 'optimization' },
   { to: '/schema', label: 'Schema advisor', icon: 'schema' },

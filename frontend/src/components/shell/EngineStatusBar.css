@@ -40,3 +40,27 @@
 .engine-status-bar__pill--llm {
   color: var(--llm-tint);
 }
+
+/*
+  The active-schema indicator, pushed to the right of the engine pill.
+  Purple follows this project's own diagram convention — --data is the
+  data-access colour in tokens.css — rather than inventing a sixth hue for
+  a fact that is precisely about which data source is in play.
+*/
+.engine-status-bar__schema {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+  font-size: var(--text-sm);
+  color: var(--ink-muted);
+}
+
+.engine-status-bar__schema--uploaded {
+  color: var(--data-tint);
+}
+
+.engine-status-bar__schema--uploaded .engine-status-bar__dot {
+  background: var(--data);
+  box-shadow: 0 0 0 4px var(--data-wash);
+}

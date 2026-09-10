@@ -389,3 +389,98 @@ export function mockPostHistory(entry) {
   historyStore = [record, ...historyStore];
   return record;
 }
+
+// ---------------------------------------------------------------------------
+// Schema source (GET /api/schema/active, POST /upload, POST /reset)
+// ---------------------------------------------------------------------------
+
+// The built-in schema, matching the backend's KnownSchema table for table.
+// rowCount is 0 because the real GET /active reports 0 for the demo tables —
+// nothing measures them at startup. Inventing a number here would make mock
+// mode disagree with the backend on a field the UI renders.
+const BUILT_IN_TABLES = [
+  { name: 'categories', columns: ['id', 'name'], rowCount: 0 },
+  { name: 'customers', columns: ['id', 'name', 'email', 'city', 'phone'], rowCount: 0 },
+  { name: 'departments', columns: ['id', 'name'], rowCount: 0 },
+  { name: 'employees', columns: ['id', 'name', 'email', 'department_id', 'manager_id', 'hire_date'], rowCount: 0 },
+  { name: 'order_items', columns: ['id', 'order_id', 'product_id', 'quantity', 'unit_price'], rowCount: 0 },
+  { name: 'orders', columns: ['id', 'customer_id', 'employee_id', 'order_date', 'status'], rowCount: 0 },
+  { name: 'payments', columns: ['id', 'order_id', 'amount', 'payment_date', 'method'], rowCount: 0 },
+  { name: 'products', columns: ['id', 'name', 'price', 'category_id', 'supplier_id'], rowCount: 0 },
+  { name: 'suppliers', columns: ['id', 'name', 'contact_email'], rowCount: 0 },
+];
+
+const BUILT_IN_FOREIGN_KEYS = [
+  { fromTable: 'employees', fromColumn: 'department_id', toTable: 'departments', toColumn: 'id' },
+  { fromTable: 'employees', fromColumn: 'manager_id', toTable: 'employees', toColumn: 'id' },
+  { fromTable: 'order_items', fromColumn: 'order_id', toTable: 'orders', toColumn: 'id' },
+  { fromTable: 'order_items', fromColumn: 'product_id', toTable: 'products', toColumn: 'id' },
+  { fromTable: 'orders', fromColumn: 'customer_id', toTable: 'customers', toColumn: 'id' },
+  { fromTable: 'orders', fromColumn: 'employee_id', toTable: 'employees', toColumn: 'id' },
+  { fromTable: 'payments', fromColumn: 'order_id', toTable: 'orders', toColumn: 'id' },
+  { fromTable: 'products', fromColumn: 'category_id', toTable: 'categories', toColumn: 'id' },
+  { fromTable: 'products', fromColumn: 'supplier_id', toTable: 'suppliers', toColumn: 'id' },
+];
+
+function builtInSnapshot() {
+  return {
+    schemaId: 'builtin',
+    label: 'QuerySense demo schema (built-in)',
+    catalog: null,
+    builtIn: true,
+    tables: BUILT_IN_TABLES,
+    foreignKeys: BUILT_IN_FOREIGN_KEYS,
+    warnings: [],
+    loadedAt: new Date(0).toISOString(),
+  };
+}
+
+// Mock mode keeps its own idea of which schema is active, so uploading and
+// resetting behave like the real thing across navigations instead of
+// snapping back to built-in on every read.
+let mockActive = builtInSnapshot();
+
+export function mockActiveSchema() {
+  return mockActive;
+}
+
+export function mockResetSchema() {
+  mockActive = builtInSnapshot();
+  return mockActive;
+}
+
+/**
+ * A deliberately shallow CREATE TABLE reader — enough that the preview
+ * reflects what the user actually pasted rather than a canned example. The
+ * real parsing is JSqlParser's, on the backend; this exists so mock mode
+ * isn't a lie about the one screen whose whole job is showing your schema.
+ */
+export function mockSchemaUpload({ ddl, label }) {
+  const tables = [];
+  const pattern = /create\s+table\s+`?(\w+)`?\s*\(([\s\S]*?)\)\s*(?:engine|;|$)/gi;
+  let match = pattern.exec(ddl || '');
+  while (match) {
+    const columns = match[2]
+      .split(',')
+      .map((line) => line.trim())
+      .filter((line) => line && !/^(primary|foreign|unique|key|constraint|index)\b/i.test(line))
+      .map((line) => line.replace(/^`?(\w+)`?[\s\S]*$/, '$1'))
+      .filter(Boolean);
+    if (columns.length) {
+      tables.push({ name: match[1], columns, rowCount: 12000 });
+    }
+    match = pattern.exec(ddl || '');
+  }
+
+  mockActive = {
+    schemaId: `upload-${Math.random().toString(16).slice(2, 10)}`,
+    label: label || 'Uploaded schema',
+    catalog: 'querysense_uploads',
+    builtIn: false,
+    tables,
+    foreignKeys: [],
+    warnings: tables.length ? [] : ['No CREATE TABLE statements were found.'],
+    loadedAt: new Date().toISOString(),
+  };
+  return mockActive;
+}

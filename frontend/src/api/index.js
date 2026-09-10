@@ -3,5 +3,6 @@ export { analyzeQuery } from './analysis';
 export { adviseSchema } from './schemaAdvisor';
 export { compareQueries } from './comparison';
 export { getHistory, postHistory } from './history';
+export { uploadSchemaFile, uploadSchemaText, getActiveSchema, resetSchema } from './schemaUpload';
 export * from './contracts';
 export { USE_MOCK } from './client';

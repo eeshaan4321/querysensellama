@@ -3,6 +3,7 @@ import { Button } from '../common/Button';
 import { Domain, ResourceLevel, TargetDb } from '../../api/contracts';
 import { RESOURCE_LEVEL_INFO } from '../../lib/resourceLevels';
 import './QueryForm.css';
+import { useActiveSchema } from '../../context/ActiveSchemaContext';
 
 const DOMAIN_OPTIONS = [
   { value: Domain.ECOMMERCE, label: 'E-commerce' },
@@ -24,13 +25,24 @@ const DB_OPTIONS = [
 
 // A simple case the rule engine (not the LLM) handles directly, so the demo
 // shows the fast path by default.
-const PLACEHOLDER = 'show customers from Mumbai';
+const BUILT_IN_PLACEHOLDER = 'show customers from Mumbai';
+
+// Once a schema is uploaded, `customers` may not exist any more. A
+// placeholder naming a table the engine would decline is a small thing
+// that makes the whole feature look unfinished, so it follows the active
+// schema's first table instead.
+function placeholderFor(schema) {
+  if (!schema || schema.builtIn || !schema.tables.length) return BUILT_IN_PLACEHOLDER;
+  return `show all ${schema.tables[0].name}`;
+}
 
 export function QueryForm({
   domain, setDomain, resourceLevel, setResourceLevel, targetDb, setTargetDb,
   text, setText, onSubmit, loading,
 }) {
+  const { schema } = useActiveSchema();
   const resourceInfo = RESOURCE_LEVEL_INFO[resourceLevel];
+  const placeholder = placeholderFor(schema);
 
   function handleSubmit(e) {
     e.preventDefault();
@@ -47,7 +59,7 @@ export function QueryForm({
           name="naturalLanguageQuery"
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder={PLACEHOLDER}
+          placeholder={placeholder}
           rows={3}
         />
       </label>

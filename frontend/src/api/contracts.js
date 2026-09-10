@@ -82,6 +82,20 @@ export function isLlmSource(handledBy) {
   return handledBy === HandledBy.OLLAMA || handledBy === HandledBy.GEMINI;
 }
 
+
+/**
+ * Where the numbers on an analysis screen came from.
+ *
+ * An uploaded schema's tables are seeded with GENERATED rows. The access
+ * path EXPLAIN reports is real and the magnitude is realistic, but the
+ * distribution is invented - so screens that show row estimates call this
+ * and say so, the same way the comparison screen declares itself simulated.
+ * @param {SchemaSnapshot} [schema]
+ */
+export function isGeneratedData(schema) {
+  return Boolean(schema) && schema.builtIn === false;
+}
+
 export const SuggestionSeverity = {
   INFO: 'INFO',
   WARNING: 'WARNING',
@@ -183,11 +197,38 @@ export const SuggestionSeverity = {
  * @property {string} summary
  */
 
+/**
+ * @typedef {Object} SchemaTableView
+ * @property {string} name
+ * @property {string[]} columns
+ * @property {number} rowCount   0 for the built-in schema - nothing measures the demo tables at startup
+ */
+
+/**
+ * The active schema, from GET /api/schema/active or either upload form.
+ *
+ * `catalog` is null for the built-in schema, deliberately rather than by
+ * omission: the demo schema lives in whatever database spring.datasource.url
+ * resolves to, which varies per machine, so the backend refuses to guess a
+ * name for it. Render null as "the connected database".
+ *
+ * @typedef {Object} SchemaSnapshot
+ * @property {string} schemaId
+ * @property {string} label
+ * @property {string|null} catalog
+ * @property {boolean} builtIn
+ * @property {SchemaTableView[]} tables
+ * @property {{fromTable: string, fromColumn: string, toTable: string, toColumn: string}[]} foreignKeys
+ * @property {string[]} warnings    statements the parser skipped; complete sentences, safe to render
+ * @property {string} loadedAt
+ */
+
 /** Which endpoints are confirmed against real, running backend code vs. simulated. */
 export const ENDPOINT_STATUS = {
   queryBuilder: 'REAL',
   analysis: 'REAL',
   schemaAdvisor: 'REAL',
   history: 'REAL',
+  schemaUpload: 'REAL',
   comparison: 'SIMULATED', // no backend endpoint exists at all yet
 };

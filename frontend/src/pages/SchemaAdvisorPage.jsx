@@ -6,9 +6,11 @@ import { Button } from '../components/common/Button';
 import { RecommendationList } from '../components/schema/RecommendationList';
 import { adviseSchema } from '../api';
 import { useWorkbench } from '../context/WorkbenchContext';
+import { useActiveSchema } from '../context/ActiveSchemaContext';
 
 export function SchemaAdvisorPage() {
   const { build, targetDb, domain, resourceLevel, schemaAdvice, setSchemaAdvice } = useWorkbench();
+  const { schema } = useActiveSchema();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -47,6 +49,12 @@ export function SchemaAdvisorPage() {
         description="Every recommendation is anchored to a specific EXPLAIN or Mongo finding — never a generic 'index everything' rule."
         action={!schemaAdvice && <Button onClick={runAdvisor} loading={loading}>Get recommendations</Button>}
       />
+
+      {schema && !schema.builtIn && (
+        <p className="page-note">
+          Anchored to EXPLAIN over your uploaded schema, whose tables hold generated rows.
+        </p>
+      )}
 
       {error && <EmptyState title="Schema advisor failed" detail={error} />}
 
