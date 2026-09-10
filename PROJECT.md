@@ -1095,6 +1095,16 @@ schema-conformance check before a result is returned or cached) and #3
   `SchemaSeeder`. The status bar says "generated data" whenever an upload is
   active and the analysis screen repeats it; if you are quoting a figure from
   a demo, check which schema was live first.
+- **Restarting the backend reverts the active schema to the built-in one.**
+  `ActiveSchemaProvider` holds the live `SchemaSnapshot` in a `volatile`
+  field initialised to `KnownSchema.builtIn()`; nothing persists which
+  upload was active. The uploaded tables survive in
+  `querysense_uploads` — MySQL still has them — but the app stops reading
+  them, so after any restart you must **re-upload** to get back to the
+  schema you were working against. The status bar is the fastest check: it
+  reads "Built-in demo schema" again. Observed the hard way on 2026-09-11,
+  when a backend restart mid-session silently moved every subsequent query
+  onto the demo tables while the questions still named the uploaded ones.
 - **Uploading a schema drops the previous upload**, and only ever touches
   `querysense_uploads`. The connected `querysense` database — the nine demo
   tables and `query_history` — is never a target of any DDL this feature
@@ -1774,17 +1784,57 @@ this branch.
   project's claim cannot survive, and it exists because everything else in this
   session widened what the engine claims.
 
-#### Not verified
+#### What was verified live, and what still is not
 
-**Nothing in this session was run against a live backend or in a browser.**
-No query was generated end to end, no real MySQL `EXPLAIN` ran against a
-rule-built join, and the `RuleTracePanel` has never been rendered by a browser.
-The evidence is unit tests, a production build and a clean lint — nothing more.
-The user tests personally; this is theirs to confirm.
+The section that stood here said nothing had been run against a live backend.
+That was true when it was written and stopped being true when the user reported
+the `SELECT *` regression — reproducing it required the running app. Corrected
+rather than left standing, since a stale verification claim is the one thing
+this record cannot afford.
 
-Specifically worth exercising first: a join question against an **uploaded**
-schema, since the join path has only ever run against the built-in demo
-schema's foreign keys in tests.
+**Verified live** against the app on `localhost:8080`, MySQL 9.7 on 3306,
+Ollama up — through `POST /api/query/generate` with `curl`, not a browser:
+
+| Input | Result |
+|---|---|
+| `customer name` (built-in schema) | `SELECT name FROM customers;` · `RULE_ENGINE` 0.95 |
+| `customer city` | `SELECT city FROM customers;` · `RULE_ENGINE` 0.95 |
+| `customer joined date` (no such column) | declined, handed to `OLLAMA` |
+| `show only customer name` on an upload with no `name` column | declined with the reason, then answered from cache — see below |
+
+The `ruleTrace` field was present and correctly populated on every one of
+these, in both `BUILT` and `DECLINED` form.
+
+**Still not verified:**
+
+- **No browser has rendered `RuleTracePanel`.** Every live check above was
+  `curl` against the API. The component is covered by four vitest cases and
+  nothing else.
+- **No rule-built join has been run against a live `EXPLAIN`.** The join path
+  has only ever executed against the built-in schema's foreign keys, in unit
+  tests. A join question against an **uploaded** schema remains the single most
+  valuable thing to exercise first.
+- The domain, resource and schema-advisor modules were not re-checked against a
+  rule-built join's plan.
+
+#### The cache defect, observed live for the first time
+
+While reproducing the regression, `show only customer name` against an upload
+whose `customers` table has `first_name`/`last_name` and no `name` returned:
+
+```jsonc
+{ "handledBy": "CACHE", "confidence": 1.0,
+  "generatedQuery": "SELECT first_name, last_name FROM customers;",
+  "ruleTrace": { "outcome": "DECLINED",
+                 "declineReason": "The question asks for specific fields, but at
+                                   least one of them is not a column of customers." } }
+```
+
+The rule engine correctly refused, and the cache served an older LLM answer at
+the highest confidence the system reports. This is §5's open cache defect, not
+a new one — but it is the first time it has been **visible in a response**
+rather than inferred, because the decline reason and the cache hit now travel
+together. That contradiction is precisely what the trace was built to expose.
 
 ### Not verified
 
