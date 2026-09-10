@@ -5,6 +5,8 @@ import { EmptyState } from '../components/common/EmptyState';
 import { CodeBlock } from '../components/common/CodeBlock';
 import { Button } from '../components/common/Button';
 import { ExplainPlanView } from '../components/analysis/ExplainPlanView';
+import { VerdictBanner } from '../components/analysis/VerdictBanner';
+import { RuleTracePanel } from '../components/analysis/RuleTracePanel';
 import { MongoFindingsList } from '../components/analysis/MongoFindingsList';
 import { SuggestionsList } from '../components/analysis/SuggestionsList';
 import { analyzeQuery } from '../api';
@@ -65,6 +67,23 @@ export function AnalysisPage() {
 
       {analysis && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-6)' }}>
+          {/*
+            The plain-English answer comes first, before any EXPLAIN
+            vocabulary. Everything below it is the evidence for it: the
+            warnings say what was found, the metrics say how much, and the
+            per-table plan says where. Absent for MongoDB, which renders
+            nothing here and falls through to MongoFindingsList as before.
+          */}
+          <VerdictBanner verdict={analysis.verdict} />
+
+          {/*
+            Below the verdict, above the evidence. The verdict says whether
+            the query is any good; this says why it is shaped the way it is;
+            the warnings, metrics and plan below are what both are drawn
+            from. Comes from `build`, not `analysis` — no extra request.
+          */}
+          <RuleTracePanel trace={build.ruleTrace} handledBy={build.handledBy} />
+
           {analysis.warnings?.length > 0 && (
             <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
               {analysis.warnings.map((w, i) => (
