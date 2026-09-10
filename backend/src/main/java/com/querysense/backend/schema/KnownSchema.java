@@ -1,7 +1,8 @@
 package com.querysense.backend.schema;
 
+import java.time.Instant;
 import java.util.List;
-import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -102,13 +103,7 @@ public final class KnownSchema {
     }
 
     public static Optional<Table> findTable(String name) {
-        if (name == null || name.isBlank()) {
-            return Optional.empty();
-        }
-        String lower = name.toLowerCase(Locale.ROOT).trim();
-        return TABLES.stream()
-                .filter(t -> t.name().equalsIgnoreCase(lower) || t.singularName().equalsIgnoreCase(lower))
-                .findFirst();
+        return SchemaLookup.findTable(TABLES, name);
     }
 
     /**
@@ -119,13 +114,32 @@ public final class KnownSchema {
      * full entity-linking system.
      */
     public static List<Table> detectTablesMentioned(String text) {
-        if (text == null || text.isBlank()) {
-            return List.of();
-        }
-        String lower = text.toLowerCase(Locale.ROOT);
-        return TABLES.stream()
-                .filter(t -> lower.matches(".*\\b" + t.name() + "\\b.*")
-                        || lower.matches(".*\\b" + t.singularName() + "\\b.*"))
-                .toList();
+        return SchemaLookup.detectTablesMentioned(TABLES, text);
+    }
+
+    /**
+     * This class's contents as a swappable snapshot, for the schema-upload
+     * feature: ActiveSchemaProvider starts here and returns here on reset.
+     *
+     * The tables and foreign keys are the same List.of(...) instances
+     * declared above — this is a VIEW of the built-in schema, not a copy of
+     * it, so KnownSchemaTest still pins exactly what the app uses.
+     *
+     * catalog is null on purpose. See SchemaSnapshot for why: the built-in
+     * schema lives in whatever database spring.datasource.url resolves to,
+     * which is machine-dependent, so naming it here would be a guess.
+     *
+     * rowCounts is empty because nothing measures the live demo tables at
+     * startup; the frontend renders no count rather than a wrong one.
+     */
+    public static SchemaSnapshot builtIn() {
+        return new SchemaSnapshot(
+                SchemaSnapshot.BUILT_IN_ID,
+                "QuerySense demo schema (built-in)",
+                null,
+                TABLES,
+                FOREIGN_KEYS,
+                Map.of(),
+                Instant.EPOCH);
     }
 }
