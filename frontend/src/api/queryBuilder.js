@@ -23,5 +23,9 @@ export async function buildQuery({ naturalLanguageQuery, targetDb }) {
     targetDb,
     handledBy: data.handledBy,
     confidence: data.confidence,
+    // Rendered on the Analysis screen, not here — it answers "why is the
+    // query shaped this way?", which is the question a reader has once
+    // they are looking at the plan, not while checking the SQL itself.
+    ruleTrace: data.ruleTrace ?? null,
   };
 }

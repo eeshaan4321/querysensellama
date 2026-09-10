@@ -52,7 +52,33 @@ export function mockBuildQuery({ naturalLanguageQuery, targetDb }) {
     ? `db.${table}.find({ ${column}: "${lastWord}" }).limit(20)`
     : `SELECT *\nFROM ${table}\nWHERE ${column} = '${lastWord}'\nORDER BY ${column}\nLIMIT 20;`;
 
-  return { generatedQuery, targetDb, handledBy, confidence };
+  // Mock mode has to carry a trace too, or the Analysis screen renders
+  // differently with and without a backend — exactly the divergence that
+  // makes mock mode the project's most misleading failure mode.
+  const ruleTrace = handledBy === 'RULE_ENGINE'
+    ? {
+        outcome: 'BUILT',
+        shape: 'SELECT',
+        bindings: [
+          { phrase: table, kind: 'TABLE', resolvedTo: table },
+          { phrase: column, kind: 'FILTER', resolvedTo: `${table}.${column}` },
+        ],
+        joinEdge: null,
+        checksPassed: ['Every field named in the question matched a column in the active schema'],
+        declineReason: null,
+      }
+    : {
+        outcome: 'DECLINED',
+        shape: null,
+        bindings: [{ phrase: table, kind: 'TABLE', resolvedTo: table }],
+        joinEdge: null,
+        checksPassed: [],
+        declineReason:
+          'The question asks about a period of time. This engine does not build date filters, '
+          + 'so the question went to the language model instead.',
+      };
+
+  return { generatedQuery, targetDb, handledBy, confidence, ruleTrace };
 }
 
 /**
@@ -144,6 +170,35 @@ export function mockAnalyzeQuery({ query, targetDb, domain, resourceLevel }) {
     // AnalyzeResponse so ExplainPlanView doesn't need to special-case mock
     // mode.
     explainFailed: false,
+    // `filtered` is MySQL's estimate of the percentage of read rows that
+    // survive the WHERE clause; the returned count and the wasted-work ratio
+    // on the page are both derived from it. The scan case discards most of
+    // what it reads, which is the whole reason a scan is worth reporting.
+    filtered: hasFullTableScan ? 12.5 : 100,
+    estimatedRowsReturned: hasFullTableScan ? 38 : 4,
+    // Unitless, and only comparable against another plan for the same query
+    // — see QUERY_COST_CAVEAT. Mock values are illustrative, like every
+    // other number in this file.
+    queryCost: hasFullTableScan ? 31.45 : 1.2,
+    // Mirrors VerdictService's ladder for the two cases this mock produces.
+    // 303 rows is below the real large-table threshold (1000), so a full
+    // scan here is correctly graded as normal rather than as a problem —
+    // the same answer the backend gives, and a useful reminder that mock
+    // mode cannot demonstrate the CRITICAL verdict.
+    verdict: hasFullTableScan
+      ? {
+          severity: 'INFO',
+          label: 'Looks efficient',
+          headline: `Reads all ${estimatedRows} rows of ${table}, which is normal at this size.`,
+          detail:
+            'Most of those rows are discarded, but the table is small enough that the cost is negligible.',
+        }
+      : {
+          severity: 'INFO',
+          label: 'Looks efficient',
+          headline: `Uses the idx_${table}_${column} index to find rows instead of reading the whole table.`,
+          detail: `About ${estimatedRows} rows are expected to be read.`,
+        },
     warnings: [
       hasFullTableScan && `Full table scan on ${table} — no index covers ${column}.`,
       usesFilesort && 'Query requires an extra sorting pass (filesort) — an index matching the ORDER BY clause could avoid this.',
@@ -209,6 +264,7 @@ export function mockSchemaAdvise({ query, targetDb, domain, resourceLevel }) {
       type: 'INDEX',
       targetTable: analysis.tableName,
       targetColumn: analysis.filteredColumn,
+      summary: `To answer this, the database is reading every row of ${analysis.tableName} and checking each one, because nothing indexes ${analysis.filteredColumn}. An index works like the index at the back of a book: it lets the database jump straight to the matching rows instead of reading everything.`,
       reason: `Full table scan detected (accessType=ALL) with no index in use on '${analysis.filteredColumn}'.`,
       suggestedAction: `CREATE INDEX idx_${analysis.tableName}_${analysis.filteredColumn} ON ${analysis.tableName}(${analysis.filteredColumn});`,
     });
@@ -220,6 +276,7 @@ export function mockSchemaAdvise({ query, targetDb, domain, resourceLevel }) {
       type: 'INDEX',
       targetTable: analysis.tableName,
       targetColumn: sortCol,
+      summary: `The database can find the rows, but then has to put them in order in a second pass, because nothing keeps ${sortCol} already sorted. This query also narrows by ${filterCol}, and the database can only use one index per table at a time — one index covering both columns together may be what it needs. Re-check after applying rather than assuming it worked.`,
       reason: `Query requires an extra sorting pass for ORDER BY '${sortCol}'. Note: this query also filters on '${filterCol}' — MySQL can only use one index per table access, so a composite index on (${filterCol}, ${sortCol}) may be needed instead. Verify with EXPLAIN after applying.`,
       suggestedAction: `CREATE INDEX idx_${analysis.tableName}_${sortCol} ON ${analysis.tableName}(${sortCol});`,
     });
@@ -229,6 +286,7 @@ export function mockSchemaAdvise({ query, targetDb, domain, resourceLevel }) {
       type: 'STRUCTURAL',
       targetTable: analysis.tableName,
       targetColumn: null,
+      summary: 'The database is building a scratch working table behind the scenes to combine these rows, which usually means the columns being combined on are not indexed. There is no single statement that reliably fixes this, so it is flagged for a person to look at.',
       reason: "Query requires a temporary table, typically caused by GROUP BY or DISTINCT without a supporting index.",
       suggestedAction: `Review the GROUP BY/DISTINCT clause on '${analysis.tableName}'; consider a composite index covering the grouped column(s).`,
     });
@@ -238,6 +296,7 @@ export function mockSchemaAdvise({ query, targetDb, domain, resourceLevel }) {
       type: 'INDEX',
       targetTable: analysis.tableName,
       targetColumn: analysis.filteredColumn,
+      summary: `The database is checking every record in this collection, because nothing indexes ${analysis.filteredColumn}. An index lets it go straight to the matching records instead of reading all of them.`,
       reason: `Filtering on '${analysis.filteredColumn}' with no known index — likely a full collection scan.`,
       suggestedAction: `db.${analysis.tableName || '<collection>'}.createIndex({ "${analysis.filteredColumn}": 1 });`,
     });
@@ -247,6 +306,7 @@ export function mockSchemaAdvise({ query, targetDb, domain, resourceLevel }) {
       type: 'STRUCTURAL',
       targetTable: analysis.tableName,
       targetColumn: null,
+      summary: 'The search pattern can match anywhere inside the text. The database can only take a shortcut when a pattern is pinned to the start of the value, so here it reads every record whether an index exists or not.',
       reason: 'Unanchored $regex pattern detected — MongoDB cannot use an index for a non-left-anchored regex.',
       suggestedAction: "Rewrite the regex with a leading '^', or create a text index if full substring search is required.",
     });
@@ -261,17 +321,27 @@ export function mockCompare({ originalAnalysis, optimizedAnalysis, changes = [] 
   return {
     estimatedCostDelta: after - before,
     isEstimate: true,
-    // Every line the before/after diff can show (index usage, column
-    // pruning, LIMIT) has a matching entry here — `changes` carries whatever
-    // structural edits mockSimulateOptimizedQuery actually made, so nothing
-    // appears in the diff without a citation explaining it.
+    // Every line the before/after diff can show (column pruning, LIMIT) has a
+    // matching entry here — `changes` carries whatever structural edits
+    // mockSimulateOptimizedQuery actually made, so nothing appears in the
+    // diff without a citation explaining it.
+    //
+    // WHAT WAS REMOVED HERE AND WHY: this array used to open with a fixed
+    // 'SCHEMA-01 — Schema Advisor recommended an index on the filtered
+    // column', printed whether or not the advisor had run and whether or not
+    // it had recommended anything. The Optimization page now renders the
+    // advisor's real output directly above this block, so a fabricated claim
+    // of advisor provenance would sit inches from the genuine one. The two
+    // EXPLAIN lines that framed it asserted a scan and a post-index lookup
+    // just as unconditionally; they are now gated on the analysis actually
+    // passed in, and say nothing when it doesn't support them.
     ruleTrace: [
-      { ruleId: 'EXPLAIN-01', explanation: 'EXPLAIN showed accessType ALL before optimization — full table scan detected.' },
-      { ruleId: 'SCHEMA-01', explanation: 'Schema Advisor recommended an index on the filtered column.' },
-      { ruleId: 'EXPLAIN-02', explanation: 'Post-index EXPLAIN shows accessType ref with a matching key — scan replaced by index lookup.' },
+      ...(originalAnalysis?.hasFullTableScan
+        ? [{ ruleId: 'EXPLAIN-01', explanation: `EXPLAIN reported accessType ${originalAnalysis.accessType ?? 'ALL'} with no key in use — full table scan.` }]
+        : []),
       ...changes,
     ],
-    summary: `Estimated rows examined dropped from ${before} to ${after} after applying the recommended index. This is an EXPLAIN-based estimate, not a measured runtime.`,
+    summary: `Estimated rows examined would drop from ${before} to ${after} under this simulated rewrite. Nothing here was measured, and no index was applied — the schema changes above are the part you can actually run.`,
   };
 }
 

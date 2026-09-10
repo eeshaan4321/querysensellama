@@ -114,6 +114,26 @@ export const SuggestionSeverity = {
  * @property {string} targetDb        echoes the request's databaseType
  * @property {'RULE_ENGINE'|'CACHE'|'OLLAMA'} handledBy
  * @property {number} confidence      fixed per-source heuristic, not a computed score — see backend QueryResponse.java
+ * @property {RuleTrace|null} ruleTrace  how the rule engine built this, or why it declined
+ */
+
+/**
+ * How the rule engine built a query — or why it declined and let another
+ * layer answer. Present on BOTH outcomes: `handledBy` says which layer
+ * answered and never why the previous one passed, and the rule engine runs
+ * first on every request, so it has a reason either way.
+ *
+ * Null only when there is no traced generation behind the analysis at all —
+ * a history replay, or a query that did not come from the Workbench. Null
+ * does NOT mean "declined"; that is `outcome: 'DECLINED'`, and it renders.
+ *
+ * @typedef {Object} RuleTrace
+ * @property {'BUILT'|'DECLINED'} outcome
+ * @property {string|null} shape          e.g. "SELECT + JOIN + GROUP BY + HAVING"
+ * @property {Array<{phrase: string, kind: string, resolvedTo: string}>} bindings
+ * @property {{fromTable: string, fromColumn: string, toTable: string, toColumn: string, origin: string}|null} joinEdge
+ * @property {string[]} checksPassed
+ * @property {string|null} declineReason
  */
 
 /**
@@ -162,6 +182,10 @@ export const SuggestionSeverity = {
  * @property {'INDEX'|'NORMALIZATION'|'STRUCTURAL'} type
  * @property {string} [targetTable]
  * @property {string} [targetColumn]
+ * @property {string} [summary]        the finding in plain language, for a reader who does not
+ *                                     know what an access type is; the UI leads with this and
+ *                                     keeps `reason` behind a disclosure. Optional so an older
+ *                                     backend still renders.
  * @property {string} reason            references the specific analysis signal that fired it
  * @property {string} suggestedAction   e.g. a literal CREATE INDEX statement
  */
