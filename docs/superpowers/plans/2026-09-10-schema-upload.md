@@ -101,7 +101,7 @@ Makes the schema swappable without editing any consumer yet. After this task the
 
 **Design note for the implementer — why `catalog()` returns `null` for built-in.** It would be easy to hardcode `"querysense"`. Don't. The database name comes from `spring.datasource.url`, which reads `${DB_HOST}`/`${DB_PORT}` env vars and can legitimately differ per machine. `null` means "whatever the connection pool already points at", which makes Task 3's no-op guarantee structural instead of a string comparison that could drift (R5).
 
-- [ ] **Step 1: Write the failing test for `SchemaLookup`**
+- [x] **Step 1: Write the failing test for `SchemaLookup`**
 
 Create `SchemaLookupTest.java`:
 
@@ -176,12 +176,12 @@ class SchemaLookupTest {
 }
 ```
 
-- [ ] **Step 2: Run it and verify it fails**
+- [x] **Step 2: Run it and verify it fails**
 
 Run from `backend/`: `./mvnw test -Dtest=SchemaLookupTest`
 Expected: compilation failure — `cannot find symbol: class SchemaLookup`.
 
-- [ ] **Step 3: Implement `SchemaLookup`**
+- [x] **Step 3: Implement `SchemaLookup`**
 
 ```java
 package com.querysense.backend.schema;
@@ -250,12 +250,12 @@ public final class SchemaLookup {
 }
 ```
 
-- [ ] **Step 4: Run and verify it passes**
+- [x] **Step 4: Run and verify it passes**
 
 Run: `./mvnw test -Dtest=SchemaLookupTest`
 Expected: PASS, 6 tests.
 
-- [ ] **Step 5: Write `SchemaSnapshot`**
+- [x] **Step 5: Write `SchemaSnapshot`**
 
 ```java
 package com.querysense.backend.schema;
@@ -304,7 +304,7 @@ public record SchemaSnapshot(
 }
 ```
 
-- [ ] **Step 6: Add `builtIn()` to `KnownSchema` and delegate its statics**
+- [x] **Step 6: Add `builtIn()` to `KnownSchema` and delegate its statics**
 
 In `KnownSchema.java`, add these imports: `java.time.Instant`, `java.util.Map`. Then **replace** the existing `findTable` and `detectTablesMentioned` method bodies (keep the Javadoc above `detectTablesMentioned`) and append `builtIn()`:
 
@@ -340,7 +340,7 @@ In `KnownSchema.java`, add these imports: `java.time.Instant`, `java.util.Map`. 
 
 Do not touch `TABLES`, `FOREIGN_KEYS`, the nine `Table` constants, `tableNames()`, or the `Table`/`ForeignKey` records (R7).
 
-- [ ] **Step 7: Write the failing test for `ActiveSchemaProvider`**
+- [x] **Step 7: Write the failing test for `ActiveSchemaProvider`**
 
 Create `ActiveSchemaProviderTest.java`:
 
@@ -428,12 +428,12 @@ class ActiveSchemaProviderTest {
 }
 ```
 
-- [ ] **Step 8: Run and verify it fails**
+- [x] **Step 8: Run and verify it fails**
 
 Run: `./mvnw test -Dtest=ActiveSchemaProviderTest`
 Expected: compilation failure — `cannot find symbol: class ActiveSchemaProvider`.
 
-- [ ] **Step 9: Implement `ActiveSchemaProvider`**
+- [x] **Step 9: Implement `ActiveSchemaProvider`**
 
 ```java
 package com.querysense.backend.schema;
@@ -528,12 +528,12 @@ public class ActiveSchemaProvider {
 }
 ```
 
-- [ ] **Step 10: Run the full suite**
+- [x] **Step 10: Run the full suite**
 
 Run: `./mvnw test`
 Expected: BUILD SUCCESS, 44 existing + 11 new = 55 tests. `KnownSchemaTest` still passes — if it does not, `KnownSchema`'s constants were edited; revert that.
 
-- [ ] **Step 11: Commit**
+- [x] **Step 11: Commit**
 
 ```bash
 git add backend/src/main/java/com/querysense/backend/schema/ backend/src/test/java/com/querysense/backend/schema/
@@ -562,7 +562,7 @@ Pure refactor. Every consumer keeps its behaviour on the built-in schema and gai
 - Consumes: `ActiveSchemaProvider` from Task 1 — `tables()`, `tableNames()`, `findTable(String)`, `detectTablesMentioned(String)`, `foreignKeys()`, `onSchemaChanged(Runnable)`.
 - Produces: `SchemaMetadataService.clearCaches()` (package-visible for tests, public for the listener).
 
-- [ ] **Step 1: Write the failing test proving the rule engine follows an uploaded schema**
+- [x] **Step 1: Write the failing test proving the rule engine follows an uploaded schema**
 
 Create `RuleBasedQueryBuilderSchemaTest.java`:
 
@@ -652,12 +652,12 @@ class RuleBasedQueryBuilderSchemaTest {
 
 **Signature reference:** `RuleBasedQueryBuilder.tryBuild(String input, String databaseType)` returns `Optional<String>` (`RuleBasedQueryBuilder.java:71`) — hence AssertJ's `.contains(...)` and `.isEmpty()` above, which assert on the Optional's contents rather than on a String.
 
-- [ ] **Step 2: Run and verify it fails**
+- [x] **Step 2: Run and verify it fails**
 
 Run: `./mvnw test -Dtest=RuleBasedQueryBuilderSchemaTest`
 Expected: compilation failure — the two-argument `RuleBasedQueryBuilder` constructor does not exist.
 
-- [ ] **Step 3: Rewire `RuleBasedQueryBuilder`**
+- [x] **Step 3: Rewire `RuleBasedQueryBuilder`**
 
 Constructor (replaces lines 48–51):
 
@@ -702,7 +702,7 @@ In `detectColumns` (was line 433): `KnownSchema.findTable(tableName)` → `activ
 
 Leave `extractTableColumnCompound(String, KnownSchema.Table)` alone — it takes a `Table` and uses `Pattern.quote` already.
 
-- [ ] **Step 4: Rewire `GeneratedQueryValidator`**
+- [x] **Step 4: Rewire `GeneratedQueryValidator`**
 
 Add a constructor and swap the one call site (was line 86):
 
@@ -718,7 +718,7 @@ Add a constructor and swap the one call site (was line 86):
         List<KnownSchema.Table> mentionedTables = activeSchema.detectTablesMentioned(userInput);
 ```
 
-- [ ] **Step 5: Rewire `OllamaService` and close the empty-grounding hole**
+- [x] **Step 5: Rewire `OllamaService` and close the empty-grounding hole**
 
 Constructor (replaces lines 96–100):
 
@@ -779,7 +779,7 @@ Replace the body of `buildSchemaContext` (was lines 260–289):
 
 **Scope note:** this is the one behavioural change in Task 2, and it is deliberate. It is fix direction #1 from PROJECT.md's "the LLM invents tables and columns" defect, it costs four lines, and leaving it out would mean shipping a schema-upload feature where uploading a schema still doesn't ground the model for business-worded questions — the feature's main use case. It does **not** close the whole defect: fix directions #2 (schema-conformance check before caching) and #3 (MongoDB grounding) remain open, and PROJECT.md must still say so after this work.
 
-- [ ] **Step 6: Rewire `SchemaMetadataService` and add the cache flush**
+- [x] **Step 6: Rewire `SchemaMetadataService` and add the cache flush**
 
 Replace the constructor (was lines 45–50) and add `clearCaches` plus registration:
 
@@ -824,18 +824,18 @@ Add imports `jakarta.annotation.PostConstruct` and `com.querysense.backend.schem
                 .orElse(false);
 ```
 
-- [ ] **Step 7: Fix `OllamaServiceTest`'s constructor calls**
+- [x] **Step 7: Fix `OllamaServiceTest`'s constructor calls**
 
 Every `new OllamaService(restTemplate)` becomes `new OllamaService(restTemplate, new ActiveSchemaProvider())`. Add the import. Using a real provider rather than a mock keeps the built-in schema in play, which is what those tests assume.
 
 If any existing test asserts that an unmatched question produces a prompt with **no** schema block, it is now asserting the defect. Update it to assert the full-schema fallback and note the change in the commit message.
 
-- [ ] **Step 8: Run the full suite**
+- [x] **Step 8: Run the full suite**
 
 Run: `./mvnw test`
 Expected: BUILD SUCCESS. If `OllamaServiceTest` fails on prompt content, apply Step 7's second paragraph.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add backend/src/main/java backend/src/test/java
@@ -867,7 +867,7 @@ hallucination defect."
 
 **This task carries the plan's central guarantee.** `ExplainExecutorTest` asserting `setCatalog` is never called on the built-in path is what makes "EXPLAIN is intact" a fact rather than a claim (R5).
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `ExplainExecutorTest.java`:
 
@@ -985,12 +985,12 @@ class ExplainExecutorTest {
 }
 ```
 
-- [ ] **Step 2: Run and verify it fails**
+- [x] **Step 2: Run and verify it fails**
 
 Run: `./mvnw test -Dtest=ExplainExecutorTest`
 Expected: compilation failure — `cannot find symbol: class ExplainExecutor`.
 
-- [ ] **Step 3: Implement `ExplainExecutor`**
+- [x] **Step 3: Implement `ExplainExecutor`**
 
 ```java
 package com.querysense.backend.analysis;
@@ -1070,12 +1070,12 @@ public class ExplainExecutor {
 }
 ```
 
-- [ ] **Step 4: Run and verify it passes**
+- [x] **Step 4: Run and verify it passes**
 
 Run: `./mvnw test -Dtest=ExplainExecutorTest`
 Expected: PASS, 4 tests.
 
-- [ ] **Step 5: Route `MySqlExplainAnalyzer.readPlan` through it**
+- [x] **Step 5: Route `MySqlExplainAnalyzer.readPlan` through it**
 
 Constructor (replaces lines 133–143) — the `JdbcTemplate` field goes away entirely:
 
@@ -1120,7 +1120,7 @@ Then split `readPlan` so the body takes its `JdbcTemplate` as a parameter. Keep 
     }
 ```
 
-- [ ] **Step 6: Update `MySqlExplainAnalyzerTest` to construct through the executor**
+- [x] **Step 6: Update `MySqlExplainAnalyzerTest` to construct through the executor**
 
 That test mocks `JdbcTemplate` and asserts on the SQL string passed to it. Keep every existing assertion; only the wiring changes. Add to its `@BeforeEach`:
 
@@ -1138,7 +1138,7 @@ That test mocks `JdbcTemplate` and asserts on the SQL string passed to it. Keep 
 
 Overriding `withActiveCatalog` keeps every existing `verify(jdbcTemplate).query("EXPLAIN FORMAT=TRADITIONAL ...")` assertion working untouched. The catalog behaviour itself is already covered by `ExplainExecutorTest`, so duplicating it here would test the same thing twice.
 
-- [ ] **Step 7: Route `SchemaMetadataService`'s two loaders through the executor**
+- [x] **Step 7: Route `SchemaMetadataService`'s two loaders through the executor**
 
 Inject `ExplainExecutor` alongside what Task 2 added, and wrap both loader bodies. `loadColumnNames` filters on `table_schema = DATABASE()`, which follows the connection's catalog — that is precisely why it needs the wrapper:
 
@@ -1158,12 +1158,12 @@ Inject `ExplainExecutor` alongside what Task 2 added, and wrap both loader bodie
 
 Apply the same wrapper to `loadDistinctValues`'s `jdbcTemplate.queryForList(sql, String.class)` call. The `jdbcTemplate` field can then be removed from this class.
 
-- [ ] **Step 8: Run the full suite**
+- [x] **Step 8: Run the full suite**
 
 Run: `./mvnw test`
 Expected: BUILD SUCCESS. `MySqlExplainAnalyzerTest` still logs its deliberate `ERROR` line — that is the failure path it exercises, not a regression.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add backend/src/main/java/com/querysense/backend/analysis backend/src/test/java/com/querysense/backend/analysis
@@ -1202,7 +1202,7 @@ Turns a `.sql` file into a structured model. No database access at all — this 
 
 **Why a hand-written splitter.** `CCJSqlParserUtil.parseStatements` fails the *whole* input if any one statement is unparseable, and a real `mysqldump` file is full of statements JSqlParser has never claimed to support (`/*!40101 SET ... */`, `LOCK TABLES`, `DELIMITER`). Splitting first and parsing each statement individually is what lets one exotic table cost the user that table instead of the whole upload.
 
-- [ ] **Step 1: Write the failing splitter test**
+- [x] **Step 1: Write the failing splitter test**
 
 Create `SqlStatementSplitterTest.java`:
 
@@ -1271,12 +1271,12 @@ class SqlStatementSplitterTest {
 }
 ```
 
-- [ ] **Step 2: Run and verify it fails**
+- [x] **Step 2: Run and verify it fails**
 
 Run: `./mvnw test -Dtest=SqlStatementSplitterTest`
 Expected: compilation failure — `cannot find symbol: class SqlStatementSplitter`.
 
-- [ ] **Step 3: Implement `SqlStatementSplitter`**
+- [x] **Step 3: Implement `SqlStatementSplitter`**
 
 ```java
 package com.querysense.backend.schema.ddl;
@@ -1386,12 +1386,12 @@ public final class SqlStatementSplitter {
 }
 ```
 
-- [ ] **Step 4: Run and verify it passes**
+- [x] **Step 4: Run and verify it passes**
 
 Run: `./mvnw test -Dtest=SqlStatementSplitterTest`
 Expected: PASS, 7 tests.
 
-- [ ] **Step 5: Write the parsed-model records**
+- [x] **Step 5: Write the parsed-model records**
 
 `ParsedColumn.java`:
 
@@ -1491,7 +1491,7 @@ public record ParsedSchema(List<ParsedTable> tables, List<String> warnings) {
 }
 ```
 
-- [ ] **Step 6: Write the failing parser test**
+- [x] **Step 6: Write the failing parser test**
 
 Create `DdlSchemaParserTest.java`:
 
@@ -1649,12 +1649,12 @@ class DdlSchemaParserTest {
 }
 ```
 
-- [ ] **Step 7: Run and verify it fails**
+- [x] **Step 7: Run and verify it fails**
 
 Run: `./mvnw test -Dtest=DdlSchemaParserTest`
 Expected: compilation failure — `cannot find symbol: class DdlSchemaParser`.
 
-- [ ] **Step 8: Implement `DdlSchemaParser`**
+- [x] **Step 8: Implement `DdlSchemaParser`**
 
 ```java
 package com.querysense.backend.schema.ddl;
@@ -1856,14 +1856,14 @@ public class DdlSchemaParser {
 }
 ```
 
-- [ ] **Step 9: Run and verify it passes**
+- [x] **Step 9: Run and verify it passes**
 
 Run: `./mvnw test -Dtest=DdlSchemaParserTest`
 Expected: PASS, 9 tests.
 
 If the inline-`REFERENCES` or ENUM tests fail, JSqlParser 5.3's spec tokenisation differs from the assumption above. Print `definition.getColumnSpecs()` in a scratch test to see its actual shape, then fix the **implementation** to match. Do not weaken the test to match the code.
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add backend/src/main/java/com/querysense/backend/schema/ddl backend/src/test/java/com/querysense/backend/schema/ddl
@@ -1886,7 +1886,7 @@ in a mysqldump costs that statement rather than the whole upload."
 - Consumes: `ParsedSchema`, `ParsedTable`, `ParsedColumn` from Task 4.
 - Produces: `SchemaUploadValidator.validate(ParsedSchema)` returning void, throwing `SchemaUploadException`; `SchemaUploadException extends RuntimeException` with `(String)` and `(String, Throwable)` constructors.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `SchemaUploadValidatorTest.java`:
 
@@ -2017,12 +2017,12 @@ class SchemaUploadValidatorTest {
 }
 ```
 
-- [ ] **Step 2: Run and verify it fails**
+- [x] **Step 2: Run and verify it fails**
 
 Run: `./mvnw test -Dtest=SchemaUploadValidatorTest`
 Expected: compilation failure — the classes do not exist.
 
-- [ ] **Step 3: Implement `SchemaUploadException`**
+- [x] **Step 3: Implement `SchemaUploadException`**
 
 ```java
 package com.querysense.backend.exception;
@@ -2047,7 +2047,7 @@ public class SchemaUploadException extends RuntimeException {
 }
 ```
 
-- [ ] **Step 4: Implement `SchemaUploadValidator`**
+- [x] **Step 4: Implement `SchemaUploadValidator`**
 
 ```java
 package com.querysense.backend.schema.upload;
@@ -2139,12 +2139,12 @@ public class SchemaUploadValidator {
 }
 ```
 
-- [ ] **Step 5: Run and verify it passes**
+- [x] **Step 5: Run and verify it passes**
 
 Run: `./mvnw test -Dtest=SchemaUploadValidatorTest`
 Expected: PASS, 9 tests.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/src/main/java/com/querysense/backend/schema/upload backend/src/main/java/com/querysense/backend/exception/SchemaUploadException.java backend/src/test/java/com/querysense/backend/schema/upload
@@ -2167,7 +2167,7 @@ git commit -m "feat(schema): validate uploaded DDL before any of it reaches MySQ
 
 **Why re-emit rather than replay.** The user's file is never executed. Each `CREATE TABLE` is rebuilt from `ParsedTable`, whose identifiers `SchemaUploadValidator` has already constrained to `[A-Za-z0-9_]`. That is what makes "only CREATE TABLE runs" true rather than aspirational (R8).
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `SchemaProvisionerTest.java`:
 
@@ -2302,12 +2302,12 @@ class SchemaProvisionerTest {
 }
 ```
 
-- [ ] **Step 2: Run and verify it fails**
+- [x] **Step 2: Run and verify it fails**
 
 Run: `./mvnw test -Dtest=SchemaProvisionerTest`
 Expected: compilation failure — `cannot find symbol: class SchemaProvisioner`.
 
-- [ ] **Step 3: Implement `SchemaProvisioner`**
+- [x] **Step 3: Implement `SchemaProvisioner`**
 
 ```java
 package com.querysense.backend.schema.upload;
@@ -2488,12 +2488,12 @@ public class SchemaProvisioner {
 
 Remove the unused `upper` helper if the implementation does not end up needing it — do not leave dead code.
 
-- [ ] **Step 4: Run and verify it passes**
+- [x] **Step 4: Run and verify it passes**
 
 Run: `./mvnw test -Dtest=SchemaProvisionerTest`
 Expected: PASS, 5 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/src/main/java/com/querysense/backend/schema/upload/SchemaProvisioner.java backend/src/test/java/com/querysense/backend/schema/upload/SchemaProvisionerTest.java
@@ -2522,7 +2522,7 @@ The task that makes `EXPLAIN` mean something. `PROJECT.md` §7 records that on a
   - `SchemaSeeder.seed(ParsedSchema) -> Map<String, Integer>` (table name → rows inserted)
   - `SchemaSeeder.orderTables(ParsedSchema) -> List<ParsedTable>` (package-visible, so the topological order is directly testable)
 
-- [ ] **Step 1: Write the failing `ValueGenerator` test**
+- [x] **Step 1: Write the failing `ValueGenerator` test**
 
 Create `ValueGeneratorTest.java`:
 
@@ -2644,12 +2644,12 @@ class ValueGeneratorTest {
 }
 ```
 
-- [ ] **Step 2: Run and verify it fails**
+- [x] **Step 2: Run and verify it fails**
 
 Run: `./mvnw test -Dtest=ValueGeneratorTest`
 Expected: compilation failure — `cannot find symbol: class ValueGenerator`.
 
-- [ ] **Step 3: Implement `ValueGenerator`**
+- [x] **Step 3: Implement `ValueGenerator`**
 
 ```java
 package com.querysense.backend.schema.upload;
@@ -2842,14 +2842,14 @@ public class ValueGenerator {
 }
 ```
 
-- [ ] **Step 4: Run and verify it passes**
+- [x] **Step 4: Run and verify it passes**
 
 Run: `./mvnw test -Dtest=ValueGeneratorTest`
 Expected: PASS, 9 tests.
 
 Note the email-uniqueness test: `textValue` appends `rowIndex` to emails already, and `withUniqueSuffix` adds another for a UNIQUE column. That is harmless duplication of intent, not a bug — but if `uniqueColumnsDoNotRepeat` fails, the truncation in `withUniqueSuffix` is the place to look.
 
-- [ ] **Step 5: Write the failing `SchemaSeeder` test**
+- [x] **Step 5: Write the failing `SchemaSeeder` test**
 
 Create `SchemaSeederTest.java`:
 
@@ -2998,12 +2998,12 @@ class SchemaSeederTest {
 }
 ```
 
-- [ ] **Step 6: Run and verify it fails**
+- [x] **Step 6: Run and verify it fails**
 
 Run: `./mvnw test -Dtest=SchemaSeederTest`
 Expected: compilation failure — `cannot find symbol: class SchemaSeeder`.
 
-- [ ] **Step 7: Implement `SchemaSeeder`**
+- [x] **Step 7: Implement `SchemaSeeder`**
 
 ```java
 package com.querysense.backend.schema.upload;
@@ -3239,17 +3239,17 @@ public class SchemaSeeder {
 }
 ```
 
-- [ ] **Step 8: Run and verify it passes**
+- [x] **Step 8: Run and verify it passes**
 
 Run: `./mvnw test -Dtest=SchemaSeederTest`
 Expected: PASS, 8 tests.
 
-- [ ] **Step 9: Run the full suite**
+- [x] **Step 9: Run the full suite**
 
 Run: `./mvnw test`
 Expected: BUILD SUCCESS.
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add backend/src/main/java/com/querysense/backend/schema/upload backend/src/test/java/com/querysense/backend/schema/upload
@@ -3273,7 +3273,7 @@ report rows=1/filtered=100 for everything, which is what this prevents."
 - Consumes: `DdlSchemaParser`, `SchemaUploadValidator`, `SchemaProvisioner`, `SchemaSeeder`, `ActiveSchemaProvider`, `Environment`.
 - Produces: `SchemaUploadService.upload(String ddl, String label) -> SchemaSnapshot`; `SchemaUploadService.reset() -> SchemaSnapshot`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `SchemaUploadServiceTest.java`:
 
@@ -3406,12 +3406,12 @@ class SchemaUploadServiceTest {
 }
 ```
 
-- [ ] **Step 2: Run and verify it fails**
+- [x] **Step 2: Run and verify it fails**
 
 Run: `./mvnw test -Dtest=SchemaUploadServiceTest`
 Expected: compilation failure — `cannot find symbol: class SchemaUploadService`.
 
-- [ ] **Step 3: Implement `SchemaUploadService`**
+- [x] **Step 3: Implement `SchemaUploadService`**
 
 ```java
 package com.querysense.backend.schema.upload;
@@ -3527,14 +3527,14 @@ public class SchemaUploadService {
 }
 ```
 
-- [ ] **Step 4: Run and verify it passes**
+- [x] **Step 4: Run and verify it passes**
 
 Run: `./mvnw test -Dtest=SchemaUploadServiceTest`
 Expected: PASS, 7 tests.
 
 `MockEnvironment` comes from `spring-boot-starter-test` (`org.springframework.mock.env.MockEnvironment`) — no new dependency.
 
-- [ ] **Step 5: Add the configuration block**
+- [x] **Step 5: Add the configuration block**
 
 Append to `backend/src/main/resources/application.properties`:
 
@@ -3568,7 +3568,7 @@ querysense.schema.upload.seed=20260910
 querysense.schema.upload.max-file-bytes=2097152
 ```
 
-- [ ] **Step 6: Run the full suite and commit**
+- [x] **Step 6: Run the full suite and commit**
 
 Run: `./mvnw test`
 Expected: BUILD SUCCESS.
@@ -3597,7 +3597,7 @@ provisioning partially into an engine that cannot support it."
 - Consumes: `SchemaUploadService.upload(String, String)`, `.reset()`, `.lastWarnings()`; `ActiveSchemaProvider.active()`.
 - Produces: `POST /api/schema/upload`, `GET /api/schema/active`, `POST /api/schema/reset`, all returning `SchemaUploadResponse`.
 
-- [ ] **Step 1: Write the DTOs**
+- [x] **Step 1: Write the DTOs**
 
 `SchemaTableView.java`:
 
@@ -3680,7 +3680,7 @@ public record SchemaUploadResponse(
 }
 ```
 
-- [ ] **Step 2: Write the failing controller test**
+- [x] **Step 2: Write the failing controller test**
 
 Create `SchemaControllerTest.java`:
 
@@ -3802,12 +3802,12 @@ class SchemaControllerTest {
 }
 ```
 
-- [ ] **Step 3: Run and verify it fails**
+- [x] **Step 3: Run and verify it fails**
 
 Run: `./mvnw test -Dtest=SchemaControllerTest`
 Expected: compilation failure — `cannot find symbol: class SchemaController`.
 
-- [ ] **Step 4: Implement `SchemaController`**
+- [x] **Step 4: Implement `SchemaController`**
 
 ```java
 package com.querysense.backend.controller;
@@ -3903,7 +3903,7 @@ public class SchemaController {
 }
 ```
 
-- [ ] **Step 5: Handle `SchemaUploadException` in `GlobalExceptionHandler`**
+- [x] **Step 5: Handle `SchemaUploadException` in `GlobalExceptionHandler`**
 
 Add alongside the existing handlers, following the file's established pattern (`buildError(HttpStatus, String)`):
 
@@ -3926,12 +3926,12 @@ Add alongside the existing handlers, following the file's established pattern (`
 
 Add the import for `SchemaUploadException`. If the class has no `log` field, use the logger name the surrounding handlers use.
 
-- [ ] **Step 6: Run the full suite**
+- [x] **Step 6: Run the full suite**
 
 Run: `./mvnw test`
 Expected: BUILD SUCCESS, 6 more tests.
 
-- [ ] **Step 7: Verify the endpoints against a running backend**
+- [x] **Step 7: Verify the endpoints against a running backend**
 
 This is the first point at which the feature can be exercised end to end. Start MySQL and the backend (`./mvnw spring-boot:run`), then:
 
@@ -3967,7 +3967,7 @@ Record the actual numbers — they go into `PROJECT.md` in Task 14.
 
 Also confirm R9 while the backend is up: `SHOW TABLES IN querysense_uploads;` must not list `query_history`, and `SHOW TABLES IN querysense;` must still list all nine demo tables plus `query_history`.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add backend/src/main/java/com/querysense/backend/controller/SchemaController.java backend/src/main/java/com/querysense/backend/dto backend/src/main/java/com/querysense/backend/exception backend/src/test/java/com/querysense/backend/controller
@@ -3997,7 +3997,7 @@ Follows `PROJECT.md` §4's stated rule for wiring a new endpoint: shape and `END
 - Consumes: `apiClient`, `USE_MOCK`, `mockDelay` from `./client`; backend `SchemaUploadResponse` from Task 9.
 - Produces: `uploadSchemaFile(file)`, `uploadSchemaText({ ddl, label })`, `getActiveSchema()`, `resetSchema()`, all resolving to a `SchemaSnapshot` object; `mockActiveSchema()`, `mockSchemaUpload({ ddl, label })`.
 
-- [ ] **Step 1: Add the contract shapes**
+- [x] **Step 1: Add the contract shapes**
 
 Append to `contracts.js`, before `ENDPOINT_STATUS`:
 
@@ -4057,7 +4057,7 @@ export function isGeneratedData(schema) {
 }
 ```
 
-- [ ] **Step 2: Write `api/schemaUpload.js`**
+- [x] **Step 2: Write `api/schemaUpload.js`**
 
 ```js
 import { apiClient, USE_MOCK, mockDelay } from './client';
@@ -4123,13 +4123,13 @@ export async function resetSchema() {
 }
 ```
 
-- [ ] **Step 3: Export from `api/index.js`**
+- [x] **Step 3: Export from `api/index.js`**
 
 ```js
 export { uploadSchemaFile, uploadSchemaText, getActiveSchema, resetSchema } from './schemaUpload';
 ```
 
-- [ ] **Step 4: Add the fixtures**
+- [x] **Step 4: Add the fixtures**
 
 Append to `src/mock/fixtures.js`:
 
@@ -4224,12 +4224,12 @@ export function mockSchemaUpload({ ddl, label }) {
 }
 ```
 
-- [ ] **Step 5: Verify lint and build**
+- [x] **Step 5: Verify lint and build**
 
 Run from `frontend/`: `npm run lint` then `npm run build`
 Expected: 0 errors, at most the 3 pre-existing warnings; build clean.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add frontend/src/api frontend/src/mock/fixtures.js
@@ -4253,7 +4253,7 @@ built-in schema matches the backend's KnownSchema table for table."
 - Consumes: `getActiveSchema`, `resetSchema` from Task 10.
 - Produces: `useActiveSchema()` returning `{ schema, loading, error, refresh, applySchema, reset }`, where `applySchema(snapshot)` sets the schema from an upload response without a second fetch.
 
-- [ ] **Step 1: Write `ActiveSchemaContext.jsx`**
+- [x] **Step 1: Write `ActiveSchemaContext.jsx`**
 
 ```jsx
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
@@ -4318,7 +4318,7 @@ export function useActiveSchema() {
 }
 ```
 
-- [ ] **Step 2: Wrap the app**
+- [x] **Step 2: Wrap the app**
 
 In `App.jsx`, import and nest the provider inside `EngineStatusProvider` and outside `WorkbenchProvider`:
 
@@ -4344,7 +4344,7 @@ Add the route inside the `AppShell` route element:
 
 with `import { SchemaSourcePage } from './pages/SchemaSourcePage';`. That page arrives in Task 12; add the import and route in that task if you would rather keep the build green between commits.
 
-- [ ] **Step 3: Add the schema pill to `EngineStatusBar`**
+- [x] **Step 3: Add the schema pill to `EngineStatusBar`**
 
 The bar currently renders one pill. Add a second, to the right, reading the active schema. Keep the existing pill and its animation exactly as they are:
 
@@ -4410,11 +4410,11 @@ Add matching CSS to `EngineStatusBar.css`, reusing the existing pill's shape:
 
 Check `src/styles/tokens.css` for the real token names and use those rather than the fallbacks above. If the header is not already a flex row, add `display: flex; align-items: center;` to `.engine-status-bar`.
 
-- [ ] **Step 4: Verify**
+- [x] **Step 4: Verify**
 
 Run `npm run lint` and `npm run build` — both clean. Then `npm run dev` with the backend up: the bar shows "Built-in demo schema" on load.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/context/ActiveSchemaContext.jsx frontend/src/App.jsx frontend/src/components/shell
@@ -4439,7 +4439,7 @@ can imply its row estimates were measured."
 - Consumes: `useActiveSchema()`, `uploadSchemaFile`, `uploadSchemaText`, existing `PageHeader`, `Button`, `EmptyState` from `components/common/`.
 - Produces: the `/schema-source` route.
 
-- [ ] **Step 1: Write `SchemaTablePreview.jsx`**
+- [x] **Step 1: Write `SchemaTablePreview.jsx`**
 
 ```jsx
 import './SchemaTablePreview.css';
@@ -4510,7 +4510,7 @@ export function SchemaTablePreview({ schema }) {
 
 `SchemaTablePreview.css` — follow the tokens and spacing of `src/components/schema/RecommendationList.css`; do not invent a new visual language for this screen.
 
-- [ ] **Step 2: Write `SchemaSourcePanel.jsx`**
+- [x] **Step 2: Write `SchemaSourcePanel.jsx`**
 
 ```jsx
 import { useRef, useState } from 'react';
@@ -4604,7 +4604,7 @@ export function SchemaSourcePanel() {
 
 Check `components/common/Button.jsx` for the props it actually accepts (`variant`, `loading`, `disabled`) and adjust if they differ.
 
-- [ ] **Step 3: Write `SchemaSourcePage.jsx`**
+- [x] **Step 3: Write `SchemaSourcePage.jsx`**
 
 ```jsx
 import { PageHeader } from '../components/common/PageHeader';
@@ -4630,7 +4630,7 @@ export function SchemaSourcePage() {
 }
 ```
 
-- [ ] **Step 4: Add the nav entry**
+- [x] **Step 4: Add the nav entry**
 
 In `NavRail.jsx`, add an icon and an item. Put it after "Workbench" — choosing a schema precedes writing a query against it:
 
@@ -4646,7 +4646,7 @@ In `NavRail.jsx`, add an icon and an item. Put it after "Workbench" — choosing
 
 **Label check:** the rail already has "Schema advisor" at `/schema`. "Schema source" sits next to it and they are different things — one changes which schema is live, the other advises on indexes for the current one. If the two read as confusable on screen, rename this one "Data source" rather than shortening either.
 
-- [ ] **Step 5: Verify**
+- [x] **Step 5: Verify**
 
 `npm run lint` and `npm run build` clean. With the backend up, `npm run dev`, then in the browser:
 - `/schema-source` renders and lists the nine built-in tables.
@@ -4655,7 +4655,7 @@ In `NavRail.jsx`, add an icon and an item. Put it after "Workbench" — choosing
 - Analysis shows a real plan with `estimatedRows` in the hundreds, not `explainFailed`.
 - Press "Back to the built-in schema" — the bar returns to "Built-in demo schema" and "Show all customers" works again.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add frontend/src/pages/SchemaSourcePage.jsx frontend/src/components/schemaSource frontend/src/components/shell/NavRail.jsx frontend/src/App.jsx
@@ -4676,7 +4676,7 @@ The last piece of R6. The analysis and schema-advisor screens show row estimates
 - Modify: `frontend/src/pages/SchemaAdvisorPage.jsx`
 - Modify: `frontend/src/components/workbench/QueryForm.jsx:27`
 
-- [ ] **Step 1: Add the note to `ExplainPlanView`**
+- [x] **Step 1: Add the note to `ExplainPlanView`**
 
 Read the file first — it renders the flat summary plus one block per table from `analysis.tables[]`. Add near the top of its output, above the plan itself:
 
@@ -4700,7 +4700,7 @@ import { useActiveSchema } from '../../context/ActiveSchemaContext';
 
 Style `.explain-plan__provenance` as a muted note, matching whatever the file already uses for its secondary text.
 
-- [ ] **Step 2: Add the same note to `SchemaAdvisorPage`**
+- [x] **Step 2: Add the same note to `SchemaAdvisorPage`**
 
 That page's description already says recommendations are "anchored to observed EXPLAIN behavior". When an upload is active, append to the rendered description or add a line beneath the `PageHeader`:
 
@@ -4714,7 +4714,7 @@ That page's description already says recommendations are "anchored to observed E
 
 with `const { schema } = useActiveSchema();` added to the component.
 
-- [ ] **Step 3: Make the workbench placeholder follow the schema**
+- [x] **Step 3: Make the workbench placeholder follow the schema**
 
 `QueryForm.jsx:27` hardcodes `const PLACEHOLDER = 'show customers from Mumbai';`. Replace the constant with a derivation:
 
@@ -4733,11 +4733,11 @@ function placeholderFor(schema) {
 
 Then inside the component, `const placeholder = placeholderFor(useActiveSchema().schema);` and use `placeholder` where `PLACEHOLDER` was. A placeholder naming a table that no longer exists is a small thing that makes the whole feature look unfinished.
 
-- [ ] **Step 4: Verify**
+- [x] **Step 4: Verify**
 
 `npm run lint`, `npm run build` clean. In the browser with an upload active, the analysis screen carries the provenance note; after reset, it does not.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/components/analysis frontend/src/pages/SchemaAdvisorPage.jsx frontend/src/components/workbench/QueryForm.jsx
@@ -4759,7 +4759,7 @@ rows. The screens that show them now say so."
 
 These are tracked in the monorepo like everything else — edit them and commit them with the rest of the work.
 
-- [ ] **Step 1: Run everything one final time**
+- [x] **Step 1: Run everything one final time**
 
 ```bash
 cd backend && ./mvnw test
@@ -4768,11 +4768,11 @@ cd "../frontend" && npm run lint && npm run build
 
 Record the real numbers: total backend tests passing, frontend warning count. **Do not write a number into PROJECT.md that you have not just seen in output.**
 
-- [ ] **Step 2: Document the three endpoints in §3**
+- [x] **Step 2: Document the three endpoints in §3**
 
 Add a `POST /api/schema/upload` subsection alongside the existing four, with the request and response shapes **captured from a live call**, not copied from this plan. Note both content types, and that `catalog` is null for the built-in schema.
 
-- [ ] **Step 3: Update the risk table in §5**
+- [x] **Step 3: Update the risk table in §5**
 
 Change its heading from "Planned feature: schema upload — risks accepted going in" to reflect that the feature now exists, and mark each of R1–R10 with what actually happened. Specifically:
 
@@ -4780,13 +4780,13 @@ Change its heading from "Planned feature: schema upload — risks accepted going
 - **R6 stays open by nature.** Seeding fixes magnitude; the distribution is still invented. Say what the UI does about it and leave the risk standing.
 - Keep the closing note that this work does **not** fix the `order_items` defect — and update the LLM-hallucination section to record that fix direction #1 (grounding on all tables when none are named) is now implemented, while #2 and #3 remain open.
 
-- [ ] **Step 4: Add a session entry to §7**
+- [x] **Step 4: Add a session entry to §7**
 
 Follow the format of the existing "Session of 2026-09-10 — EXPLAIN repair" entry. Include the actual `estimatedRows` observed on an uploaded table versus a built-in one — that contrast is the evidence the feature does what it claims, and it is exactly the measurement §7 already records for the empty-vs-populated case.
 
 Be explicit about what was **not** verified. If no browser check happened, say so — §7 already carries that caveat for the current frontend and it must not silently disappear.
 
-- [ ] **Step 5: Final review**
+- [x] **Step 5: Final review**
 
 Re-read the diff across both repos. Confirm:
 - `KnownSchema`'s nine table constants and `FOREIGN_KEYS` are byte-identical to before.
@@ -4805,3 +4805,59 @@ Re-read the diff across both repos. Confirm:
 **Placeholder scan.** No TBD/TODO. Every code step carries the actual code. The two places that say "check the real token names" (Task 11 CSS) and "check Button's props" (Task 12) are instructions to read existing code the plan cannot quote without inventing it, not deferred decisions.
 
 **Type consistency.** `SchemaSnapshot` fields are identical across Tasks 1, 8, 9. `catalog` is `null` for built-in in Task 1, Task 3's no-op branch, Task 9's DTO and Task 10's contract. `ActiveSchemaProvider.publish` returns `SchemaSnapshot` in Tasks 1, 8. `SchemaSeeder.seed` returns `Map<String,Integer>` in Tasks 7, 8. `uploadCatalog()` is used in Tasks 6, 8. Frontend `builtIn`/`tables[].rowCount`/`warnings` match the DTO in Task 9. Note the backend class `ActiveSchemaProvider` (Java) and the React `ActiveSchemaProvider` (Task 11) share a name across languages — they are unrelated, and neither file imports the other.
+
+---
+
+## Completion record — 2026-09-10
+
+All 14 tasks executed, all 101 steps done. Test counts are what the suite
+actually printed after each task, not estimates.
+
+| Task | What landed | Suite after |
+|---|---|---|
+| 1 | `SchemaSnapshot`, `SchemaLookup`, `ActiveSchemaProvider`; `KnownSchema` statics delegate | 55 |
+| 2 | Four consumers read the active schema by injection; metadata caches flush on change | 59 |
+| 3 | `ExplainExecutor`; `MySqlExplainAnalyzer` and `SchemaMetadataService` routed through it | 63 |
+| 4 | `SqlStatementSplitter`, `DdlSchemaParser`, parsed model | 80 |
+| 5 | `SchemaUploadValidator`, `SchemaUploadException` | 90 |
+| 6 | `SchemaProvisioner` | 97 |
+| 7 | `ValueGenerator`, `SchemaSeeder` | 115 |
+| 8 | `SchemaUploadService`, configuration block | 123 |
+| 9 | `SchemaController`, DTOs, `GlobalExceptionHandler` case | **130** |
+| 10 | `contracts.js`, `schemaUpload.js`, fixtures | build clean |
+| 11 | `ActiveSchemaContext`, status-bar indicator | build clean |
+| 12 | `SchemaSourcePage`, panel, preview, nav entry | build clean |
+| 13 | Provenance notes; schema-following placeholder | build clean |
+| 14 | `PROJECT.md`, spec and plan updated | — |
+
+### Where the plan was wrong
+
+Four things. Recording them because a plan that only records its successes
+teaches nothing the next time.
+
+1. **`ColDataType.getArgumentsStringList()` looked like the right accessor
+   and is not.** JSqlParser 5.3 returns null from it for `VARCHAR` and
+   `DECIMAL`, baking the arguments into `getDataType()` as `"VARCHAR (120)"`
+   — but populates it correctly for `ENUM`. Trusting either alone loses real
+   information. Found by probing the library rather than reading its docs;
+   the implementation now reads both.
+2. **500 seed rows cleared one analysis threshold in four.** Corrected to
+   12000 after measuring the profiles' behaviour live. See PROJECT.md §5.
+3. **Seeding at that volume took 24.6s** and would have exceeded the
+   frontend's 65s timeout on a ten-table schema. Fixed with
+   `rewriteBatchedStatements=true`, not by lowering the row count.
+4. **Two test-authoring mistakes of my own**, both caught by the suite:
+   `ValueGeneratorTest` built nullable columns and then asserted values were
+   never null, and `SchemaSeederTest` used a raw `List` that would not
+   compile. Both were the tests being wrong, not the code — fixed in the
+   tests.
+
+### What execution added beyond the plan
+
+- `page-note` in `base.css`, since more than one screen needed the same
+  muted-prose treatment.
+- Unmount cancellation in `ActiveSchemaContext`'s mount fetch, prompted by
+  an oxlint `set-state-in-effect` warning that turned out to be pointing at
+  something real.
+- `SchemaMetadataService`'s class doc, which still described `KnownSchema` as
+  "a static source of truth" after it had stopped being one.

@@ -721,6 +721,90 @@ Mongo accuracy as its own figure; folding it into a blended number hides this.
    rather than leaving it as an inherited no-op. Schema upload does not help
    here; see §5.5.
 
+### Schema upload — where the code lives
+
+Added 2026-09-10. Everything below is new unless marked *modified*.
+
+**The seam that made the schema swappable** — `backend/src/main/java/com/querysense/backend/schema/`
+
+| File | Job |
+|---|---|
+| `SchemaSnapshot.java` | One schema, immutable: tables, FKs, catalog, row counts. `catalog` is null for built-in |
+| `SchemaLookup.java` | The name/singular matching logic, lifted out of `KnownSchema` so it runs against any table list |
+| `ActiveSchemaProvider.java` | Holds the live snapshot; notifies listeners on change |
+| `KnownSchema.java` *(modified)* | Gains `builtIn()`; its two static methods delegate to `SchemaLookup`. **Constants untouched** |
+
+**The upload pipeline** — `schema/ddl/` and `schema/upload/`
+
+| File | Job |
+|---|---|
+| `ddl/SqlStatementSplitter.java` | Quote- and comment-aware statement splitting, so one bad statement in a dump doesn't cost the upload |
+| `ddl/DdlSchemaParser.java` | JSqlParser → `ParsedSchema`. Reads `CREATE TABLE` and nothing else |
+| `ddl/ParsedColumn/Table/Schema.java` | The parsed model |
+| `upload/SchemaUploadValidator.java` | The gate before anything reaches MySQL |
+| `upload/SchemaProvisioner.java` | `CREATE DATABASE`, drop, re-emit `CREATE TABLE`, add FKs. **Only ever writes to `querysense_uploads`** |
+| `upload/ValueGenerator.java` | Type- and column-name-driven values, with deliberately skewed cardinality |
+| `upload/SchemaSeeder.java` | Topological order, batched inserts, self-FK repair pass, `ANALYZE TABLE` |
+| `upload/SchemaUploadService.java` | Orchestration; refuses under `h2` before touching anything |
+
+**Reaching the uploaded catalog** — `analysis/ExplainExecutor.java`. Sets and
+restores the catalog inside one `ConnectionCallback`. A no-op when built-in is
+active. `MySqlExplainAnalyzer` and `SchemaMetadataService` both route through
+it *(both modified)*.
+
+**API** — `controller/SchemaController.java`, `dto/SchemaUploadRequest`,
+`SchemaUploadResponse`, `SchemaTableView`, `exception/SchemaUploadException`,
+plus a case in `GlobalExceptionHandler` *(modified)*.
+
+**Frontend** — `api/schemaUpload.js`, `context/ActiveSchemaContext.jsx`,
+`pages/SchemaSourcePage.jsx`, `components/schemaSource/`. Modified:
+`contracts.js`, `index.js`, `mock/fixtures.js`, `App.jsx`, `NavRail.jsx`,
+`EngineStatusBar.jsx`, `ExplainPlanView.jsx`, `SchemaAdvisorPage.jsx`,
+`QueryForm.jsx`, `styles/base.css`.
+
+**Tests** — 86 new, all plain JUnit + Mockito with a mocked `JdbcTemplate`;
+none needs a running MySQL. The load-bearing one is
+`ExplainExecutorTest.builtInSchemaNeverSwitchesCatalog`.
+
+**Design and plan** — `docs/superpowers/specs/2026-09-10-schema-upload-design.md`
+and `docs/superpowers/plans/2026-09-10-schema-upload.md`. The plan carries a
+completion record listing the four things it got wrong.
+
+#### Commit trail
+
+Eleven commits on `main`, on top of the `c386cc1` monorepo snapshot. Each
+builds and passes its suite on its own.
+
+```
+236f629  docs: design, implementation plan and risk register
+2e27450  docs: retarget paths after the move to a single monorepo
+6e4af20  feat(schema): swappable SchemaSnapshot behind ActiveSchemaProvider
+1c447cb  refactor(schema): read the active schema by injection, not statically
+8ec1124  feat(analysis): run EXPLAIN in the active schema's catalog
+c72f122  feat(schema): parse uploaded DDL into a structural model
+abc0bc8  feat(schema): validate, provision and seed an uploaded schema
+17ea652  feat(api): POST /api/schema/upload, GET /active, POST /reset
+8d2d3b2  fix(schema): seed 12000 rows, enable rewriteBatchedStatements
+09fca74  feat(ui): schema source screen, provenance made visible
+d225725  docs: record the feature and what measuring it changed
+```
+
+The risk register was committed **first**, before any implementation, which
+is why the outcomes below can be read as a reckoning rather than a summary.
+
+#### Still not verified
+
+- **The multipart file-upload path.** Only the JSON/paste form was driven end
+  to end. `SchemaControllerTest` covers the size cap and empty-file rejection
+  as unit tests; no live multipart request was made.
+- **R1's missing-privilege branch.** The dev account is `root`, so the
+  `GRANT` message has never actually fired.
+- **A real, large mysqldump.** The tables tested were hand-written. The
+  parser's dump handling is covered against realistic fragments, not a
+  genuine multi-hundred-table export.
+- **Optimization, Schema advisor, History and Architecture screens** were not
+  opened in the browser this session.
+
 ### Schema upload — how each risk actually landed
 
 **Status: implemented and verified live 2026-09-10** against MySQL 9.7 on
