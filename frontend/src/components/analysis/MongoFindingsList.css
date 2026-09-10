@@ -1,0 +1,44 @@
+.mongo-findings {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.mongo-findings__item {
+  display: flex;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--danger-wash);
+  border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
+  border-radius: var(--radius-md);
+}
+
+.mongo-findings__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--danger);
+  margin-top: 6px;
+  flex: none;
+}
+
+.mongo-findings__title {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.mongo-findings__detail {
+  font-size: var(--text-xs);
+  color: var(--ink-secondary);
+  margin-top: 2px;
+  line-height: var(--leading-relaxed);
+}
+
+.mongo-findings__clear {
+  color: var(--ink-muted);
+  font-size: var(--text-sm);
+}

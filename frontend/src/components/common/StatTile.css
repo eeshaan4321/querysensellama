@@ -1,0 +1,38 @@
+.stat-tile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-4);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.stat-tile__label {
+  font-size: var(--text-xs);
+  color: var(--ink-muted);
+}
+
+.stat-tile__value {
+  font-family: var(--font-mono);
+  font-size: var(--text-xl);
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1.1;
+}
+
+.stat-tile__delta {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+.stat-tile__delta--good { color: var(--good); }
+.stat-tile__delta--warning { color: var(--warning); }
+.stat-tile__delta--danger { color: var(--danger); }
+
+.stat-tile__caption {
+  font-size: var(--text-xs);
+  color: var(--ink-muted);
+  line-height: var(--leading-normal);
+}

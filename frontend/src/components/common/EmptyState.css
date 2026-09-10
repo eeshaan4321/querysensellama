@@ -1,0 +1,22 @@
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-items: flex-start;
+  padding: var(--space-6);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-md);
+  color: var(--ink-muted);
+}
+
+.empty-state__title {
+  color: var(--ink-secondary);
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+.empty-state__detail {
+  font-size: var(--text-xs);
+  max-width: 32rem;
+  line-height: var(--leading-relaxed);
+}

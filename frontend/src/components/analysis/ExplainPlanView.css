@@ -1,0 +1,91 @@
+.explain-plan {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.explain-plan__rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.explain-plan__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-sm);
+}
+
+.explain-plan__row + .explain-plan__row {
+  border-top: 1px solid var(--border);
+}
+
+.explain-plan__row-label {
+  color: var(--ink-secondary);
+}
+
+.explain-plan__row-value {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--ink);
+}
+
+.explain-plan__row-value--good {
+  color: var(--good);
+}
+
+.explain-plan__row-value--danger {
+  color: var(--danger);
+}
+
+.explain-plan__row-value--unavailable {
+  color: var(--ink-muted);
+  font-style: italic;
+}
+
+/* Per-table breakdown — one block per EXPLAIN row on a multi-table plan. */
+.explain-plan__table {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.explain-plan__table-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.explain-plan__table-name {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--ink);
+}
+
+.explain-plan__table-badge {
+  font-size: var(--text-xs);
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-sm);
+  border: 1px solid currentColor;
+  white-space: nowrap;
+}
+
+.explain-plan__table-badge--good {
+  color: var(--good);
+}
+
+.explain-plan__table-badge--danger {
+  color: var(--danger);
+}
+
+.explain-plan__table-extra {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--ink-muted);
+}

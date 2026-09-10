@@ -1,0 +1,37 @@
+.before-after-diff {
+  margin: 0;
+  padding: var(--space-3) 0;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  overflow-x: auto;
+}
+
+.before-after-diff__line {
+  display: flex;
+  gap: var(--space-3);
+  padding: 2px var(--space-4);
+  white-space: pre;
+}
+
+.before-after-diff__gutter {
+  width: 1ch;
+  flex: none;
+  color: var(--ink-muted);
+}
+
+.before-after-diff__line--removed {
+  background: var(--danger-wash);
+  color: var(--danger-tint);
+}
+
+.before-after-diff__line--added {
+  background: var(--rule-wash);
+  color: var(--rule-tint);
+}
+
+.before-after-diff__line--same {
+  color: var(--ink-secondary);
+}

@@ -1,0 +1,103 @@
+/*
+  QuerySense design tokens.
+
+  The five accent hues are not decoration — they are the same color
+  key already used on the team's architecture/component diagrams
+  (teal = rule-based engine, amber = LLM fallback, blue = frontend/API,
+  purple = data access, red = data layer / errors). Reusing them here
+  means the live demo visually matches the diagrams the panel has
+  already seen. Validated with the dataviz accessibility checker
+  (CVD-safe adjacency, lightness band, contrast) before use.
+*/
+
+:root {
+  /* ---- surface & ink (dark, developer-tool register) ---- */
+  --bg: #0b1210;
+  --bg-elevated: #101917;
+  --bg-sunken: #080d0c;
+  --bg-overlay: rgba(6, 10, 9, 0.72);
+
+  --border: #1e2b27;
+  --border-strong: #2a3b36;
+
+  --ink: #e7ede9;
+  --ink-secondary: #9fb0aa;
+  --ink-muted: #647670;
+  --ink-on-accent: #06110d;
+
+  /* ---- engine identity colors (categorical, validated as a set) ---- */
+  --rule: #1fa98a;        /* teal   — rule-based engine */
+  --rule-tint: #bdeee0;
+  --rule-wash: rgba(31, 169, 138, 0.12);
+
+  --llm: #c9922f;         /* amber  — LLM fallback */
+  --llm-tint: #f0cf94;
+  --llm-wash: rgba(201, 146, 47, 0.14);
+
+  --api: #3e7bff;         /* blue   — frontend / API layer */
+  --api-tint: #b9cdff;
+  --api-wash: rgba(62, 123, 255, 0.12);
+
+  --data: #a855d6;        /* purple — data access layer */
+  --data-tint: #e3c2f5;
+  --data-wash: rgba(168, 85, 214, 0.12);
+
+  --danger: #dc5b6e;      /* red/pink — data layer states & errors */
+  --danger-tint: #f4c2cb;
+  --danger-wash: rgba(220, 91, 110, 0.13);
+
+  --good: #1fa98a;
+  --warning: #c9922f;
+
+  /* ---- typography ---- */
+  /* IBM Plex was designed by IBM specifically for technical/engineering
+     products — an authentic fit for a query tool, not a generic default.
+     Sans carries UI + headings; Mono is reserved strictly for literal
+     system output (queries, identifiers, metrics). */
+  --font-sans: 'IBM Plex Sans', -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+
+  --text-xs: 0.75rem;
+  --text-sm: 0.8125rem;
+  --text-base: 0.9375rem;
+  --text-md: 1.0625rem;
+  --text-lg: 1.375rem;
+  --text-xl: 1.875rem;
+  --text-2xl: 2.5rem;
+
+  --leading-tight: 1.2;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.65;
+
+  /* ---- spacing (4px base) ---- */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+  --space-8: 4rem;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+
+  /* ---- motion ---- */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --duration-fast: 140ms;
+  --duration-base: 220ms;
+  --duration-slow: 420ms;
+
+  --nav-width: 15.5rem;
+  --shell-header-height: 3rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-fast: 1ms;
+    --duration-base: 1ms;
+    --duration-slow: 1ms;
+  }
+}

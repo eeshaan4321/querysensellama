@@ -1,0 +1,46 @@
+.cost-delta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.cost-delta__row {
+  display: grid;
+  grid-template-columns: 3.5rem 1fr 3rem;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.cost-delta__label {
+  font-size: var(--text-sm);
+  color: var(--ink-secondary);
+}
+
+.cost-delta__track {
+  height: 10px;
+  border-radius: 6px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.cost-delta__bar {
+  height: 100%;
+  border-radius: 6px;
+  transition: width var(--duration-slow) var(--ease-out);
+}
+
+.cost-delta__bar--danger { background: var(--danger); }
+.cost-delta__bar--good { background: var(--good); }
+
+.cost-delta__value {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  text-align: right;
+}
+
+.cost-delta__caption {
+  margin-top: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--ink-muted);
+}

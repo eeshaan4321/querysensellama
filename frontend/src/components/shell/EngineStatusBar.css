@@ -1,0 +1,42 @@
+.engine-status-bar {
+  height: var(--shell-header-height);
+  display: flex;
+  align-items: center;
+  padding: 0 var(--space-5);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+
+.engine-status-bar__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--ink-secondary);
+}
+
+.engine-status-bar__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ink-muted);
+}
+
+.engine-status-bar__pill--rule .engine-status-bar__dot {
+  background: var(--rule);
+  box-shadow: 0 0 0 4px var(--rule-wash);
+}
+.engine-status-bar__pill--rule {
+  color: var(--rule-tint);
+}
+
+.engine-status-bar__pill--llm .engine-status-bar__dot {
+  background: var(--llm);
+  box-shadow: 0 0 0 4px var(--llm-wash);
+}
+.engine-status-bar__pill--llm {
+  color: var(--llm-tint);
+}
