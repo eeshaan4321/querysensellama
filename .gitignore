@@ -1,0 +1,31 @@
+# Build output
+backend/target/
+frontend/dist/
+frontend/node_modules/
+
+# The previous React 18 frontend, kept locally for reference only.
+# PROJECT.md section 7 explains why it is retained; it is not part of the
+# project and is deliberately not tracked.
+frontend.local-backup/
+
+# The two original per-repo git directories, preserved after the move to
+# this monorepo so their branches and history stay recoverable. Never
+# tracked — they are repositories, not source.
+backend/.git.disabled/
+frontend/.git.disabled/
+
+# Local environment overrides. frontend/.env IS tracked (it carries the
+# documented VITE_* defaults); only local overrides are ignored.
+.env.local
+*.local
+
+# Editors and OS
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*

@@ -16,6 +16,15 @@ FULL CAPSTONE/
 Each half is its own git repository (`querysense-backend`, `querysense-frontend`);
 this file spans both and lives in neither.
 
+**A combined snapshot is also published** at
+`github.com/eeshaan4321/querysensellama` (private) — a monorepo holding
+`backend/`, `frontend/` and this file, pushed as a single commit. It is a
+snapshot, not a working remote: the two repositories above remain the places
+work happens, and the monorepo does not track them. Note the directory names
+differ there (`backend/`, `frontend/` rather than `CAPSTONE CODE/`,
+`CAPSTONE FRONTEND/`), so paths quoted in this file need translating when read
+from that repo.
+
 ---
 
 ## 1. Running it
@@ -130,6 +139,20 @@ with MySQL error 1054 and surfaced in the UI as "Unavailable — EXPLAIN failed"
 `KnownSchemaTest` now pins every table, column and FK to the real database, so
 the next drift fails at build time instead.
 
+**Index reality, straight from `information_schema.statistics`:** every foreign
+key is indexed and *nothing else is*. There is no index on `customers.city`,
+`orders.order_date`, `orders.status`, `products.price` or
+`payments.payment_date` — precisely the columns a user filters on. This is why
+`accessType` comes back `ALL` for almost every generated query, and it is the
+raw material the schema advisor exists to act on.
+
+**Row counts are small** — 5 to 49 per table (`order_items` 49, `orders` 25,
+`payments` 21, `products` 20, `customers` 15, the rest 5-10). Consequence worth
+knowing before demoing: every domain suggestion appends "the estimated row count
+is low, so the performance impact is likely minor," because that branch reads
+`estimatedRows`. At this scale the optimisation modules can identify a problem
+but never show one costing anything.
+
 It declines — and hands to the LLM — anything containing a join, an aggregate
 (`average`, `sum`, `maximum`, `group by`), a date range (`last month`, `today`,
 `recent`), a comparison (`more than`, `above`, `between`), a question word
@@ -152,6 +175,21 @@ These are the five sample prompts in the app, run against the live backend:
 | Show customers in Mumbai | rule | `SELECT * FROM customers WHERE city = 'mumbai';` |
 | How many orders are there | rule | `SELECT COUNT(*) FROM orders;` |
 | Which customers placed more than three orders | LLM → cache on a repeat | a `LEFT JOIN` with `GROUP BY` |
+
+Re-verified against the live backend after the schema fix below, on tables and
+columns the engine could not previously name at all:
+
+| Question | Layer | Result | `explainFailed` |
+|---|---|---|---|
+| Show all payments | rule | `SELECT * FROM payments;` | false |
+| Show all products | rule | `SELECT * FROM products;` | false |
+| Show only the name and price of products | rule | `SELECT name, price FROM products;` | false |
+| Show only the amount and method of payments | rule | `SELECT amount, method FROM payments;` | false |
+| Show only the name and phone of customers | rule | `SELECT name, phone FROM customers;` | false |
+
+`amount`, `method`, `price` and `phone` were all unknown to the engine before —
+`phone` was missing from the `customers` list and the rest belong to tables it
+had never heard of.
 
 ---
 
@@ -409,6 +447,65 @@ numbers.
    string. It is used as the health probe; if that becomes load-bearing it
    deserves a real health response.
 
+### Correctness defect: the rule engine resolves multi-word tables to the wrong table
+
+**Status: open, reproducible, found 2026-09-10.** Introduced by the
+`KnownSchema` expansion documented above — adding tables whose names contain
+underscores without teaching the matcher to recognise them in prose.
+
+```
+"Show all order items"            -> SELECT * FROM orders;          RULE_ENGINE  0.95
+"how many order items are there"  -> SELECT COUNT(*) FROM orders;   RULE_ENGINE  0.95
+"Show all order_items"            -> SELECT * FROM order_items;     RULE_ENGINE  0.95   correct
+```
+
+Only the phrasing that spells the identifier with an underscore is right.
+`order_items` has 49 rows and holds `quantity` and `unit_price`; `orders` has 25
+and holds neither, so the answer is the wrong table, the wrong row count and a
+column set that cannot answer the question.
+
+#### Mechanism
+
+`detectTable` walks `KnownSchema.TABLES` and returns the first table whose name
+or singular appears in the input as a whole word. Traced on
+`"show all order items"`:
+
+```
+order_items   plural=false   singular(order_item)=false     underscore != space, both miss
+orders        plural=false   singular(order)=true           "order" is a standalone word here
+=> returns: orders
+```
+
+`order_items` is tested **first** and still loses, so declaration order is not
+the cause — the cause is that an underscored identifier can never match natural
+phrasing, while `orders`' singular `order` happily matches the word "order"
+sitting inside the phrase "order items".
+
+`hasAnyComplexity` has a guard for exactly this shape: two known tables
+mentioned means decline to the LLM. It reuses the same matcher, so it counts one
+table here, not two. The gate meant to catch ambiguity is blind to it for the
+same reason.
+
+#### Why it matters more than its size suggests
+
+The project's claim is that routing is auditable — the engine claims only what
+it is certain of and defers the rest. A wrong table returned as `RULE_ENGINE`
+at `0.95` is the one output that claim cannot survive, because nothing on screen
+gives the user a reason to doubt it. A deferral to the LLM would have been fine.
+
+The same trap waits on every other underscored name (`payment_date`,
+`unit_price`, `hire_date`). `categories` is safe only because `singularName()`
+was taught the `-ies` case at the same time.
+
+#### Fix shape (not implemented)
+
+Match on the most specific candidate rather than the first; normalise
+identifiers to prose forms (`order_items` <-> "order items", "line items") on
+both sides of the comparison; and when two tables tie, decline to the LLM rather
+than pick. All three make the engine decline **more**, not less.
+
+---
+
 ### Correctness defect: the LLM invents tables and columns
 
 **Status: open, reproducible on demand, verified 2026-09-09 against the live
@@ -506,6 +603,39 @@ Mongo accuracy as its own figure; folding it into a blended number hides this.
 3. Decide explicitly what MongoDB grounding should look like, rather than
    leaving it as an inherited no-op.
 
+### Planned feature: schema upload — risks accepted going in
+
+**Status: design approved 2026-09-10, not yet implemented.** Recorded here
+before the code exists so that each item is either closed by the
+implementation or still visibly open afterwards, rather than being
+rediscovered.
+
+The feature lets a user upload their own DDL, creates those tables in a
+**separate MySQL database `querysense_uploads`**, and seeds them with
+generated rows so `EXPLAIN` has real statistics to plan against. The
+built-in nine-table `querysense` schema stays untouched and remains the
+default. Every risk below follows from one of those three choices.
+
+| # | Risk | Why it bites | Mitigation in the design |
+|---|---|---|---|
+| R1 | Needs `CREATE DATABASE` privilege | The app connects as `${DB_USER:root}`, so it works here, but the grant is a real deployment constraint. Without it the whole feature 500s. | Detect the failure and return a message naming the missing grant, the way the 503 names Ollama. Never a generic 500. |
+| R2 | Cannot work under the `h2` profile | H2 has no `CREATE DATABASE`/catalog semantics matching MySQL's, and §6 already records that the H2 profile is the most confusing failure mode in the project. A half-succeeding upload would be worse than the `explainFailed: true` confusion it resembles. | Upload **refuses** under `h2` with an explicit message. It does not partially provision. |
+| R3 | Upload is destructive to the previous upload | `querysense_uploads` is dropped and recreated per upload. Fine for a single-user MVP, silently lossy for anyone who assumed it accumulated. | UI states it before the upload is committed. Only `querysense_uploads` is ever dropped — the demo database is never a target. |
+| R4 | `SchemaMetadataService` caches never evict | `columnCache` and `distinctValueCache` are `ConcurrentHashMap`s keyed by table name with no eviction, written before this feature existed. Without a flush, the first upload keeps serving the **demo** schema's columns to `SqlPreflightValidator` and the demo's city values to the rule engine — silently, and looking correct. | Publishing a new snapshot flushes both caches. This is a defect the feature *introduces*, so it is on the critical path, not a nice-to-have. |
+| R5 | Catalog switching can poison the connection pool | `EXPLAIN` runs on a pooled `JdbcTemplate`. Switching catalog without restoring it hands the next borrower a connection pointing at the wrong database — and the symptom would be a wrong-but-plausible plan, not an error. | `ExplainExecutor` sets and restores the catalog inside one `ConnectionCallback`, in a `finally`. When the built-in schema is active, `target` equals the pool's own catalog and the branch is a **no-op** — the demo path issues exactly the statements it does today. |
+| R6 | Seeded statistics are generated, not real | §7 already records the underlying fact: on an empty table MySQL reports `rows=1, filtered=100.00` where the populated one reports `rows=15, filtered=10.00` — same access path, useless magnitude. Seeding fixes the magnitude but the *distribution* is invented, so selectivity findings describe generated data. | Seed with deliberately skewed cardinality (a `status`-like column ~5 distinct values, an `email`-like one ~500) and ~10% NULLs, so `filtered` varies. The UI must label an uploaded schema's plan as describing generated data — this is the one place the feature could otherwise present invented numbers as measurements, which §4 already calls out as the comparison screen's sin. |
+| R7 | `KnownSchemaTest` pins the built-in schema to the live DB | That test is the guard that caught the `orders` drift documented in §2. Making the schema swappable must not weaken it. | `KnownSchema`'s constants stay exactly as they are and become the *built-in snapshot*; the test is unchanged and still pins them. Swappability is added around it, not to it. |
+| R8 | Uploaded DDL is user-supplied SQL | Executing an uploaded file verbatim would run whatever it contains. | Only `CREATE TABLE` is honoured, and statements are **re-emitted from the parsed JSqlParser model rather than the user's raw text**, so no uploaded string reaches the database as written. Identifiers are constrained to `[A-Za-z0-9_]{1,64}`. |
+| R9 | Hibernate `ddl-auto=update` vs. the second database | `spring.jpa.hibernate.ddl-auto=update` manages `query_history`. The uploaded catalog sits outside JPA's control, but that is an assumption until observed. | Verify explicitly after implementation that Hibernate does not touch `querysense_uploads`. Record the result here rather than assuming it. |
+| R10 | Two schemas, one UI | The uploaded schema drives generation while a plan may describe a different database. A user who cannot tell which is active cannot trust either. | Active schema is shown persistently in `EngineStatusBar`, alongside the engine indicator — same class of provenance fact, same treatment. |
+
+**What this feature does *not* change:** `MySqlExplainAnalyzer` never read
+`KnownSchema` and still does not. The routing layers, confidence tiers and
+history writing are untouched. The two open correctness defects above
+(`order_items` mis-resolution, LLM inventing tables) are **not** fixed by
+this work — a dynamic schema runs through the same matcher, so both defects
+follow the uploaded schema rather than being cured by it.
+
 ### Frontend housekeeping
 
 - **Mock mode exists and fails toward mock.** `client.js` checks
@@ -581,13 +711,53 @@ Unchanged from the earlier record; the backend was not modified by the swap.
 - `npm run build` — clean.
 - Dev server and backend confirmed listening on 5173 and 8080 together.
 
+### Session of 2026-09-10 — EXPLAIN repair
+
+Run against the live backend on MySQL 3306 with Ollama up.
+
+- `mvn test` — **44/44 pass**, BUILD SUCCESS, including the 6 new
+  `KnownSchemaTest` cases. (`MySqlExplainAnalyzerTest` logs an `ERROR` line by
+  design; it exercises the failure path.)
+- `npm run build` clean; `npm run lint` 0 errors, 3 pre-existing warnings, none
+  in the changed files.
+- Single-table EXPLAIN: `explainFailed: false`, full scan, 15 rows on
+  `customers`; 25 on `orders`.
+- **Join EXPLAIN returns both tables** — `customers c LEFT JOIN orders o`
+  yields `c: ALL, no key, 15 rows, Using temporary` and
+  `o: ref, customer_id, 1 row, Using index`, plus three domain/resource
+  suggestions. This is what `ExplainPlanView` now renders per table.
+- Five NL round-trips through generate then analyze on previously-unknown
+  tables and columns, all `explainFailed: false` (table in section 2).
+- Confirmed the failure that started it: `EXPLAIN SELECT order_id, amount FROM
+  orders` returns `ERROR 1054 (42S22): Unknown column 'order_id' in 'field
+  list'`.
+- Confirmed EXPLAIN's dependency on live tables and statistics:
+  `EXPLAIN ... FROM invoices` (absent from the connected database) returns
+  `ERROR 1146`, and on an empty table of identical shape MySQL reports
+  `rows=1, filtered=100.00` where the populated table reports
+  `rows=15, filtered=10.00` — same access path, useless magnitude. Relevant to
+  any future "upload a schema" feature: structure alone gets EXPLAIN to run,
+  but not to mean anything.
+
 ### Not verified
 
 - **No screen of the current frontend has been exercised against the live
   backend in a browser.** No page render, no request, no console check. The
-  contract alignment above is a code-level review, not an observation.
+  contract alignment above is a code-level review, not an observation. This
+  still holds after the 2026-09-10 changes: the per-table plan blocks added to
+  `ExplainPlanView` have been verified as data and as a clean build, **never as
+  pixels** — the browser extension was unavailable throughout.
 - The populated states of the analysis, optimisation and schema-advisor screens
   (a real plan tree, non-empty suggestions, real index proposals) still require
   a backend on real MySQL, since H2 cannot produce `EXPLAIN` output.
 - The `OLLAMA` rename fix is exactly what an end-to-end fallback run would
   confirm, and is the first thing to check.
+
+### Behavioural shift worth watching
+
+Widening `KnownSchema` from two tables to nine widened the `tableCount > 1`
+complexity gate along with it. Questions like "products in a category" or
+"employees in a department" now mention two known tables and route to the LLM,
+where before neither table existed and they were handled or declined on other
+grounds. **More traffic depends on Ollama than it used to.** With Ollama down,
+more questions now fail with a 503 than did under the two-table schema.
