@@ -14,7 +14,7 @@
 
 ## Global Constraints
 
-- **Repos:** backend is `CAPSTONE CODE/` (git repo `querysense-backend`, branch `master`); frontend is `CAPSTONE FRONTEND/` (git repo `querysense-frontend`, branch `master`). `PROJECT.md` and `docs/` sit at the parent level, inside neither repo — they are **not** committed. Commit steps below apply only within the two repos.
+- **One repository.** Everything lives in the `querysensellama` monorepo (branch `main`), rooted at `FULL CAPSTONE/`: `backend/`, `frontend/`, `docs/` and `PROJECT.md`. All commit steps run from the root and use paths prefixed `backend/` or `frontend/` — never `cd` into a subdirectory to commit. Maven and npm commands, however, *do* run from `backend/` and `frontend/` respectively.
 - **The built-in path must not change.** With no upload performed, every consumer resolves to the built-in snapshot and every SQL statement issued is byte-identical to today's. Task 3 asserts this rather than claiming it.
 - **`KnownSchema`'s constants and `KnownSchemaTest` are not edited.** `TABLES`, `FOREIGN_KEYS`, `CATEGORIES`…`SUPPLIERS` keep their exact current values. Only additive methods are allowed on that class (R7).
 - **No uploaded string is ever executed verbatim.** Every `CREATE TABLE` is re-emitted from the parsed model (R8).
@@ -78,12 +78,12 @@
 Makes the schema swappable without editing any consumer yet. After this task the app behaves identically; nothing reads the provider.
 
 **Files:**
-- Create: `CAPSTONE CODE/src/main/java/com/querysense/backend/schema/SchemaSnapshot.java`
-- Create: `CAPSTONE CODE/src/main/java/com/querysense/backend/schema/SchemaLookup.java`
-- Create: `CAPSTONE CODE/src/main/java/com/querysense/backend/schema/ActiveSchemaProvider.java`
-- Modify: `CAPSTONE CODE/src/main/java/com/querysense/backend/schema/KnownSchema.java`
-- Test: `CAPSTONE CODE/src/test/java/com/querysense/backend/schema/SchemaLookupTest.java`
-- Test: `CAPSTONE CODE/src/test/java/com/querysense/backend/schema/ActiveSchemaProviderTest.java`
+- Create: `backend/src/main/java/com/querysense/backend/schema/SchemaSnapshot.java`
+- Create: `backend/src/main/java/com/querysense/backend/schema/SchemaLookup.java`
+- Create: `backend/src/main/java/com/querysense/backend/schema/ActiveSchemaProvider.java`
+- Modify: `backend/src/main/java/com/querysense/backend/schema/KnownSchema.java`
+- Test: `backend/src/test/java/com/querysense/backend/schema/SchemaLookupTest.java`
+- Test: `backend/src/test/java/com/querysense/backend/schema/ActiveSchemaProviderTest.java`
 
 **Interfaces:**
 - Consumes: `KnownSchema.Table`, `KnownSchema.ForeignKey` (existing records, unchanged).
@@ -172,7 +172,7 @@ class SchemaLookupTest {
 
 - [ ] **Step 2: Run it and verify it fails**
 
-Run from `CAPSTONE CODE/`: `./mvnw test -Dtest=SchemaLookupTest`
+Run from `backend/`: `./mvnw test -Dtest=SchemaLookupTest`
 Expected: compilation failure — `cannot find symbol: class SchemaLookup`.
 
 - [ ] **Step 3: Implement `SchemaLookup`**
@@ -530,8 +530,7 @@ Expected: BUILD SUCCESS, 44 existing + 11 new = 55 tests. `KnownSchemaTest` stil
 - [ ] **Step 11: Commit**
 
 ```bash
-cd "CAPSTONE CODE"
-git add src/main/java/com/querysense/backend/schema/ src/test/java/com/querysense/backend/schema/
+git add backend/src/main/java/com/querysense/backend/schema/ backend/src/test/java/com/querysense/backend/schema/
 git commit -m "feat(schema): add swappable SchemaSnapshot behind ActiveSchemaProvider
 
 KnownSchema's statics become the built-in snapshot and delegate their
@@ -546,12 +545,12 @@ behaviour is unchanged."
 Pure refactor. Every consumer keeps its behaviour on the built-in schema and gains the ability to follow an uploaded one.
 
 **Files:**
-- Modify: `CAPSTONE CODE/src/main/java/com/querysense/backend/querybuilder/RuleBasedQueryBuilder.java:48-51, 207-211, 222-230, 341, 433, 479`
-- Modify: `CAPSTONE CODE/src/main/java/com/querysense/backend/querybuilder/GeneratedQueryValidator.java:65, 86`
-- Modify: `CAPSTONE CODE/src/main/java/com/querysense/backend/service/impl/OllamaService.java:96-100, 260-289`
-- Modify: `CAPSTONE CODE/src/main/java/com/querysense/backend/analysis/SchemaMetadataService.java:45-50, 100`
-- Modify: `CAPSTONE CODE/src/test/java/com/querysense/backend/service/impl/OllamaServiceTest.java`
-- Test: `CAPSTONE CODE/src/test/java/com/querysense/backend/querybuilder/RuleBasedQueryBuilderSchemaTest.java`
+- Modify: `backend/src/main/java/com/querysense/backend/querybuilder/RuleBasedQueryBuilder.java:48-51, 207-211, 222-230, 341, 433, 479`
+- Modify: `backend/src/main/java/com/querysense/backend/querybuilder/GeneratedQueryValidator.java:65, 86`
+- Modify: `backend/src/main/java/com/querysense/backend/service/impl/OllamaService.java:96-100, 260-289`
+- Modify: `backend/src/main/java/com/querysense/backend/analysis/SchemaMetadataService.java:45-50, 100`
+- Modify: `backend/src/test/java/com/querysense/backend/service/impl/OllamaServiceTest.java`
+- Test: `backend/src/test/java/com/querysense/backend/querybuilder/RuleBasedQueryBuilderSchemaTest.java`
 
 **Interfaces:**
 - Consumes: `ActiveSchemaProvider` from Task 1 — `tables()`, `tableNames()`, `findTable(String)`, `detectTablesMentioned(String)`, `foreignKeys()`, `onSchemaChanged(Runnable)`.
@@ -833,8 +832,7 @@ Expected: BUILD SUCCESS. If `OllamaServiceTest` fails on prompt content, apply S
 - [ ] **Step 9: Commit**
 
 ```bash
-cd "CAPSTONE CODE"
-git add src/main/java src/test/java
+git add backend/src/main/java backend/src/test/java
 git commit -m "refactor(schema): read the active schema by injection, not statically
 
 RuleBasedQueryBuilder, GeneratedQueryValidator, OllamaService and
@@ -851,11 +849,11 @@ hallucination defect."
 ## Task 3: `ExplainExecutor` — reach the active catalog without touching the built-in path
 
 **Files:**
-- Create: `CAPSTONE CODE/src/main/java/com/querysense/backend/analysis/ExplainExecutor.java`
-- Modify: `CAPSTONE CODE/src/main/java/com/querysense/backend/analysis/MySqlExplainAnalyzer.java:133-143, 232-256`
-- Modify: `CAPSTONE CODE/src/main/java/com/querysense/backend/analysis/SchemaMetadataService.java` (route both loaders)
-- Modify: `CAPSTONE CODE/src/test/java/com/querysense/backend/analysis/MySqlExplainAnalyzerTest.java`
-- Test: `CAPSTONE CODE/src/test/java/com/querysense/backend/analysis/ExplainExecutorTest.java`
+- Create: `backend/src/main/java/com/querysense/backend/analysis/ExplainExecutor.java`
+- Modify: `backend/src/main/java/com/querysense/backend/analysis/MySqlExplainAnalyzer.java:133-143, 232-256`
+- Modify: `backend/src/main/java/com/querysense/backend/analysis/SchemaMetadataService.java` (route both loaders)
+- Modify: `backend/src/test/java/com/querysense/backend/analysis/MySqlExplainAnalyzerTest.java`
+- Test: `backend/src/test/java/com/querysense/backend/analysis/ExplainExecutorTest.java`
 
 **Interfaces:**
 - Consumes: `ActiveSchemaProvider.catalog()` from Task 1.
@@ -1162,8 +1160,7 @@ Expected: BUILD SUCCESS. `MySqlExplainAnalyzerTest` still logs its deliberate `E
 - [ ] **Step 9: Commit**
 
 ```bash
-cd "CAPSTONE CODE"
-git add src/main/java/com/querysense/backend/analysis src/test/java/com/querysense/backend/analysis
+git add backend/src/main/java/com/querysense/backend/analysis backend/src/test/java/com/querysense/backend/analysis
 git commit -m "feat(analysis): run EXPLAIN in the active schema's catalog
 
 ExplainExecutor sets and restores the catalog on one pooled connection.
@@ -1180,13 +1177,13 @@ ExplainExecutorTest asserts setCatalog is never called there."
 Turns a `.sql` file into a structured model. No database access at all — this task is pure parsing and is fully unit-testable.
 
 **Files:**
-- Create: `CAPSTONE CODE/src/main/java/com/querysense/backend/schema/ddl/ParsedColumn.java`
-- Create: `CAPSTONE CODE/src/main/java/com/querysense/backend/schema/ddl/ParsedTable.java`
-- Create: `CAPSTONE CODE/src/main/java/com/querysense/backend/schema/ddl/ParsedSchema.java`
-- Create: `CAPSTONE CODE/src/main/java/com/querysense/backend/schema/ddl/SqlStatementSplitter.java`
-- Create: `CAPSTONE CODE/src/main/java/com/querysense/backend/schema/ddl/DdlSchemaParser.java`
-- Test: `CAPSTONE CODE/src/test/java/com/querysense/backend/schema/ddl/SqlStatementSplitterTest.java`
-- Test: `CAPSTONE CODE/src/test/java/com/querysense/backend/schema/ddl/DdlSchemaParserTest.java`
+- Create: `backend/src/main/java/com/querysense/backend/schema/ddl/ParsedColumn.java`
+- Create: `backend/src/main/java/com/querysense/backend/schema/ddl/ParsedTable.java`
+- Create: `backend/src/main/java/com/querysense/backend/schema/ddl/ParsedSchema.java`
+- Create: `backend/src/main/java/com/querysense/backend/schema/ddl/SqlStatementSplitter.java`
+- Create: `backend/src/main/java/com/querysense/backend/schema/ddl/DdlSchemaParser.java`
+- Test: `backend/src/test/java/com/querysense/backend/schema/ddl/SqlStatementSplitterTest.java`
+- Test: `backend/src/test/java/com/querysense/backend/schema/ddl/DdlSchemaParserTest.java`
 
 **Interfaces:**
 - Consumes: JSqlParser 5.3 (`net.sf.jsqlparser.parser.CCJSqlParserUtil`, `net.sf.jsqlparser.statement.create.table.CreateTable`), `KnownSchema.ForeignKey`.
@@ -1863,8 +1860,7 @@ If the inline-`REFERENCES` or ENUM tests fail, JSqlParser 5.3's spec tokenisatio
 - [ ] **Step 10: Commit**
 
 ```bash
-cd "CAPSTONE CODE"
-git add src/main/java/com/querysense/backend/schema/ddl src/test/java/com/querysense/backend/schema/ddl
+git add backend/src/main/java/com/querysense/backend/schema/ddl backend/src/test/java/com/querysense/backend/schema/ddl
 git commit -m "feat(schema): parse uploaded DDL into a structural model
 
 Quote- and comment-aware statement splitting so one unparseable statement
@@ -1876,9 +1872,9 @@ in a mysqldump costs that statement rather than the whole upload."
 ## Task 5: `SchemaUploadValidator`
 
 **Files:**
-- Create: `CAPSTONE CODE/src/main/java/com/querysense/backend/schema/upload/SchemaUploadValidator.java`
-- Create: `CAPSTONE CODE/src/main/java/com/querysense/backend/exception/SchemaUploadException.java`
-- Test: `CAPSTONE CODE/src/test/java/com/querysense/backend/schema/upload/SchemaUploadValidatorTest.java`
+- Create: `backend/src/main/java/com/querysense/backend/schema/upload/SchemaUploadValidator.java`
+- Create: `backend/src/main/java/com/querysense/backend/exception/SchemaUploadException.java`
+- Test: `backend/src/test/java/com/querysense/backend/schema/upload/SchemaUploadValidatorTest.java`
 
 **Interfaces:**
 - Consumes: `ParsedSchema`, `ParsedTable`, `ParsedColumn` from Task 4.
@@ -2145,8 +2141,7 @@ Expected: PASS, 9 tests.
 - [ ] **Step 6: Commit**
 
 ```bash
-cd "CAPSTONE CODE"
-git add src/main/java/com/querysense/backend/schema/upload src/main/java/com/querysense/backend/exception/SchemaUploadException.java src/test/java/com/querysense/backend/schema/upload
+git add backend/src/main/java/com/querysense/backend/schema/upload backend/src/main/java/com/querysense/backend/exception/SchemaUploadException.java backend/src/test/java/com/querysense/backend/schema/upload
 git commit -m "feat(schema): validate uploaded DDL before any of it reaches MySQL"
 ```
 
@@ -2155,8 +2150,8 @@ git commit -m "feat(schema): validate uploaded DDL before any of it reaches MySQ
 ## Task 6: `SchemaProvisioner` — create the database and the tables
 
 **Files:**
-- Create: `CAPSTONE CODE/src/main/java/com/querysense/backend/schema/upload/SchemaProvisioner.java`
-- Test: `CAPSTONE CODE/src/test/java/com/querysense/backend/schema/upload/SchemaProvisionerTest.java`
+- Create: `backend/src/main/java/com/querysense/backend/schema/upload/SchemaProvisioner.java`
+- Test: `backend/src/test/java/com/querysense/backend/schema/upload/SchemaProvisionerTest.java`
 
 **Interfaces:**
 - Consumes: `ParsedSchema`/`ParsedTable`/`ParsedColumn` (Task 4), `JdbcTemplate`.
@@ -2495,8 +2490,7 @@ Expected: PASS, 5 tests.
 - [ ] **Step 5: Commit**
 
 ```bash
-cd "CAPSTONE CODE"
-git add src/main/java/com/querysense/backend/schema/upload/SchemaProvisioner.java src/test/java/com/querysense/backend/schema/upload/SchemaProvisionerTest.java
+git add backend/src/main/java/com/querysense/backend/schema/upload/SchemaProvisioner.java backend/src/test/java/com/querysense/backend/schema/upload/SchemaProvisionerTest.java
 git commit -m "feat(schema): provision uploaded tables into a separate catalog
 
 Statements are re-emitted from the parsed model, never replayed from the
@@ -2510,10 +2504,10 @@ uploaded text, and only querysense_uploads is ever written to."
 The task that makes `EXPLAIN` mean something. `PROJECT.md` §7 records that on an empty table MySQL reports `rows=1, filtered=100.00` where a populated one reports `rows=15, filtered=10.00` — same access path, useless magnitude.
 
 **Files:**
-- Create: `CAPSTONE CODE/src/main/java/com/querysense/backend/schema/upload/ValueGenerator.java`
-- Create: `CAPSTONE CODE/src/main/java/com/querysense/backend/schema/upload/SchemaSeeder.java`
-- Test: `CAPSTONE CODE/src/test/java/com/querysense/backend/schema/upload/ValueGeneratorTest.java`
-- Test: `CAPSTONE CODE/src/test/java/com/querysense/backend/schema/upload/SchemaSeederTest.java`
+- Create: `backend/src/main/java/com/querysense/backend/schema/upload/ValueGenerator.java`
+- Create: `backend/src/main/java/com/querysense/backend/schema/upload/SchemaSeeder.java`
+- Test: `backend/src/test/java/com/querysense/backend/schema/upload/ValueGeneratorTest.java`
+- Test: `backend/src/test/java/com/querysense/backend/schema/upload/SchemaSeederTest.java`
 
 **Interfaces:**
 - Consumes: `ParsedSchema`, `ParsedTable`, `ParsedColumn`, `JdbcTemplate`, `SchemaProvisioner.uploadCatalog()`.
@@ -3252,8 +3246,7 @@ Expected: BUILD SUCCESS.
 - [ ] **Step 10: Commit**
 
 ```bash
-cd "CAPSTONE CODE"
-git add src/main/java/com/querysense/backend/schema/upload src/test/java/com/querysense/backend/schema/upload
+git add backend/src/main/java/com/querysense/backend/schema/upload backend/src/test/java/com/querysense/backend/schema/upload
 git commit -m "feat(schema): seed uploaded tables so EXPLAIN has real statistics
 
 500 rows per table in foreign-key order, with deliberately skewed
@@ -3266,9 +3259,9 @@ report rows=1/filtered=100 for everything, which is what this prevents."
 ## Task 8: `SchemaUploadService` — orchestration
 
 **Files:**
-- Create: `CAPSTONE CODE/src/main/java/com/querysense/backend/schema/upload/SchemaUploadService.java`
-- Modify: `CAPSTONE CODE/src/main/resources/application.properties`
-- Test: `CAPSTONE CODE/src/test/java/com/querysense/backend/schema/upload/SchemaUploadServiceTest.java`
+- Create: `backend/src/main/java/com/querysense/backend/schema/upload/SchemaUploadService.java`
+- Modify: `backend/src/main/resources/application.properties`
+- Test: `backend/src/test/java/com/querysense/backend/schema/upload/SchemaUploadServiceTest.java`
 
 **Interfaces:**
 - Consumes: `DdlSchemaParser`, `SchemaUploadValidator`, `SchemaProvisioner`, `SchemaSeeder`, `ActiveSchemaProvider`, `Environment`.
@@ -3537,7 +3530,7 @@ Expected: PASS, 7 tests.
 
 - [ ] **Step 5: Add the configuration block**
 
-Append to `CAPSTONE CODE/src/main/resources/application.properties`:
+Append to `backend/src/main/resources/application.properties`:
 
 ```properties
 # =========================
@@ -3575,8 +3568,7 @@ Run: `./mvnw test`
 Expected: BUILD SUCCESS.
 
 ```bash
-cd "CAPSTONE CODE"
-git add src/main/java/com/querysense/backend/schema/upload/SchemaUploadService.java src/test/java/com/querysense/backend/schema/upload/SchemaUploadServiceTest.java src/main/resources/application.properties
+git add backend/src/main/java/com/querysense/backend/schema/upload/SchemaUploadService.java backend/src/test/java/com/querysense/backend/schema/upload/SchemaUploadServiceTest.java backend/src/main/resources/application.properties
 git commit -m "feat(schema): orchestrate parse -> validate -> provision -> seed -> publish
 
 Refuses under the h2 profile before touching the database, rather than
@@ -3588,12 +3580,12 @@ provisioning partially into an engine that cannot support it."
 ## Task 9: `SchemaController`, DTOs and error handling
 
 **Files:**
-- Create: `CAPSTONE CODE/src/main/java/com/querysense/backend/dto/SchemaUploadRequest.java`
-- Create: `CAPSTONE CODE/src/main/java/com/querysense/backend/dto/SchemaTableView.java`
-- Create: `CAPSTONE CODE/src/main/java/com/querysense/backend/dto/SchemaUploadResponse.java`
-- Create: `CAPSTONE CODE/src/main/java/com/querysense/backend/controller/SchemaController.java`
-- Modify: `CAPSTONE CODE/src/main/java/com/querysense/backend/exception/GlobalExceptionHandler.java`
-- Test: `CAPSTONE CODE/src/test/java/com/querysense/backend/controller/SchemaControllerTest.java`
+- Create: `backend/src/main/java/com/querysense/backend/dto/SchemaUploadRequest.java`
+- Create: `backend/src/main/java/com/querysense/backend/dto/SchemaTableView.java`
+- Create: `backend/src/main/java/com/querysense/backend/dto/SchemaUploadResponse.java`
+- Create: `backend/src/main/java/com/querysense/backend/controller/SchemaController.java`
+- Modify: `backend/src/main/java/com/querysense/backend/exception/GlobalExceptionHandler.java`
+- Test: `backend/src/test/java/com/querysense/backend/controller/SchemaControllerTest.java`
 
 **Interfaces:**
 - Consumes: `SchemaUploadService.upload(String, String)`, `.reset()`, `.lastWarnings()`; `ActiveSchemaProvider.active()`.
@@ -3972,8 +3964,7 @@ Also confirm R9 while the backend is up: `SHOW TABLES IN querysense_uploads;` mu
 - [ ] **Step 8: Commit**
 
 ```bash
-cd "CAPSTONE CODE"
-git add src/main/java/com/querysense/backend/controller/SchemaController.java src/main/java/com/querysense/backend/dto src/main/java/com/querysense/backend/exception src/test/java/com/querysense/backend/controller
+git add backend/src/main/java/com/querysense/backend/controller/SchemaController.java backend/src/main/java/com/querysense/backend/dto backend/src/main/java/com/querysense/backend/exception backend/src/test/java/com/querysense/backend/controller
 git commit -m "feat(api): add POST /api/schema/upload, GET /active and POST /reset
 
 Upload accepts a multipart file or pasted DDL. Rejections carry a sentence
@@ -3991,10 +3982,10 @@ The frontend has no test runner configured — verification is `npm run lint`, `
 Follows `PROJECT.md` §4's stated rule for wiring a new endpoint: shape and `ENDPOINT_STATUS` into `contracts.js`, one module in `api/` branching on `USE_MOCK`, exported from `index.js`. Nothing in `components/` or `pages/` moves.
 
 **Files:**
-- Modify: `CAPSTONE FRONTEND/src/api/contracts.js` (append typedefs; `ENDPOINT_STATUS` at :187)
-- Create: `CAPSTONE FRONTEND/src/api/schemaUpload.js`
-- Modify: `CAPSTONE FRONTEND/src/api/index.js`
-- Modify: `CAPSTONE FRONTEND/src/mock/fixtures.js`
+- Modify: `frontend/src/api/contracts.js` (append typedefs; `ENDPOINT_STATUS` at :187)
+- Create: `frontend/src/api/schemaUpload.js`
+- Modify: `frontend/src/api/index.js`
+- Modify: `frontend/src/mock/fixtures.js`
 
 **Interfaces:**
 - Consumes: `apiClient`, `USE_MOCK`, `mockDelay` from `./client`; backend `SchemaUploadResponse` from Task 9.
@@ -4229,14 +4220,13 @@ export function mockSchemaUpload({ ddl, label }) {
 
 - [ ] **Step 5: Verify lint and build**
 
-Run from `CAPSTONE FRONTEND/`: `npm run lint` then `npm run build`
+Run from `frontend/`: `npm run lint` then `npm run build`
 Expected: 0 errors, at most the 3 pre-existing warnings; build clean.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-cd "CAPSTONE FRONTEND"
-git add src/api src/mock/fixtures.js
+git add frontend/src/api frontend/src/mock/fixtures.js
 git commit -m "feat(api): wire the schema upload endpoints
 
 Contract shapes, a module branching on USE_MOCK, and fixtures whose
@@ -4248,10 +4238,10 @@ built-in schema matches the backend's KnownSchema table for table."
 ## Task 11: `ActiveSchemaContext` and the persistent indicator
 
 **Files:**
-- Create: `CAPSTONE FRONTEND/src/context/ActiveSchemaContext.jsx`
-- Modify: `CAPSTONE FRONTEND/src/App.jsx`
-- Modify: `CAPSTONE FRONTEND/src/components/shell/EngineStatusBar.jsx`
-- Modify: `CAPSTONE FRONTEND/src/components/shell/EngineStatusBar.css`
+- Create: `frontend/src/context/ActiveSchemaContext.jsx`
+- Modify: `frontend/src/App.jsx`
+- Modify: `frontend/src/components/shell/EngineStatusBar.jsx`
+- Modify: `frontend/src/components/shell/EngineStatusBar.css`
 
 **Interfaces:**
 - Consumes: `getActiveSchema`, `resetSchema` from Task 10.
@@ -4421,8 +4411,7 @@ Run `npm run lint` and `npm run build` — both clean. Then `npm run dev` with t
 - [ ] **Step 5: Commit**
 
 ```bash
-cd "CAPSTONE FRONTEND"
-git add src/context/ActiveSchemaContext.jsx src/App.jsx src/components/shell
+git add frontend/src/context/ActiveSchemaContext.jsx frontend/src/App.jsx frontend/src/components/shell
 git commit -m "feat(shell): show the active schema permanently in the status bar
 
 An uploaded schema is labelled as carrying generated data, so no screen
@@ -4434,11 +4423,11 @@ can imply its row estimates were measured."
 ## Task 12: The schema source page
 
 **Files:**
-- Create: `CAPSTONE FRONTEND/src/pages/SchemaSourcePage.jsx`
-- Create: `CAPSTONE FRONTEND/src/components/schemaSource/SchemaSourcePanel.jsx` + `.css`
-- Create: `CAPSTONE FRONTEND/src/components/schemaSource/SchemaTablePreview.jsx` + `.css`
-- Modify: `CAPSTONE FRONTEND/src/components/shell/NavRail.jsx`
-- Modify: `CAPSTONE FRONTEND/src/App.jsx` (route, if not added in Task 11)
+- Create: `frontend/src/pages/SchemaSourcePage.jsx`
+- Create: `frontend/src/components/schemaSource/SchemaSourcePanel.jsx` + `.css`
+- Create: `frontend/src/components/schemaSource/SchemaTablePreview.jsx` + `.css`
+- Modify: `frontend/src/components/shell/NavRail.jsx`
+- Modify: `frontend/src/App.jsx` (route, if not added in Task 11)
 
 **Interfaces:**
 - Consumes: `useActiveSchema()`, `uploadSchemaFile`, `uploadSchemaText`, existing `PageHeader`, `Button`, `EmptyState` from `components/common/`.
@@ -4663,8 +4652,7 @@ In `NavRail.jsx`, add an icon and an item. Put it after "Workbench" — choosing
 - [ ] **Step 6: Commit**
 
 ```bash
-cd "CAPSTONE FRONTEND"
-git add src/pages/SchemaSourcePage.jsx src/components/schemaSource src/components/shell/NavRail.jsx src/App.jsx
+git add frontend/src/pages/SchemaSourcePage.jsx frontend/src/components/schemaSource frontend/src/components/shell/NavRail.jsx frontend/src/App.jsx
 git commit -m "feat(ui): add the schema source page
 
 File picker and paste-in textarea, a preview of what was actually
@@ -4678,9 +4666,9 @@ provisioned, and a reset back to the built-in schema."
 The last piece of R6. The analysis and schema-advisor screens show row estimates; when those come from an uploaded schema they describe generated rows, and the screen must say so.
 
 **Files:**
-- Modify: `CAPSTONE FRONTEND/src/components/analysis/ExplainPlanView.jsx`
-- Modify: `CAPSTONE FRONTEND/src/pages/SchemaAdvisorPage.jsx`
-- Modify: `CAPSTONE FRONTEND/src/components/workbench/QueryForm.jsx:27`
+- Modify: `frontend/src/components/analysis/ExplainPlanView.jsx`
+- Modify: `frontend/src/pages/SchemaAdvisorPage.jsx`
+- Modify: `frontend/src/components/workbench/QueryForm.jsx:27`
 
 - [ ] **Step 1: Add the note to `ExplainPlanView`**
 
@@ -4746,8 +4734,7 @@ Then inside the component, `const placeholder = placeholderFor(useActiveSchema()
 - [ ] **Step 5: Commit**
 
 ```bash
-cd "CAPSTONE FRONTEND"
-git add src/components/analysis src/pages/SchemaAdvisorPage.jsx src/components/workbench/QueryForm.jsx
+git add frontend/src/components/analysis frontend/src/pages/SchemaAdvisorPage.jsx frontend/src/components/workbench/QueryForm.jsx
 git commit -m "feat(ui): say when a plan describes generated data
 
 An uploaded schema's row estimates are real EXPLAIN output over synthetic
@@ -4762,15 +4749,15 @@ rows. The screens that show them now say so."
 
 **Files:**
 - Modify: `FULL CAPSTONE/PROJECT.md` (§3 API reference, §5 risk table, §7 verification record)
-- Modify: `CAPSTONE CODE/CLAUDE.md` if it documents the schema layer
+- Modify: `backend/CLAUDE.md` if it documents the schema layer
 
-These files are outside both git repos — edit them, but there is nothing to commit.
+These are tracked in the monorepo like everything else — edit them and commit them with the rest of the work.
 
 - [ ] **Step 1: Run everything one final time**
 
 ```bash
-cd "CAPSTONE CODE" && ./mvnw test
-cd "../CAPSTONE FRONTEND" && npm run lint && npm run build
+cd backend && ./mvnw test
+cd "../frontend" && npm run lint && npm run build
 ```
 
 Record the real numbers: total backend tests passing, frontend warning count. **Do not write a number into PROJECT.md that you have not just seen in output.**

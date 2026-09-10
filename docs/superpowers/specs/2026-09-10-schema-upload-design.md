@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-10
 **Status:** approved, not yet implemented
-**Spans:** `CAPSTONE CODE` (backend) and `CAPSTONE FRONTEND`
+**Spans:** `backend/` and `frontend/` in the querysensellama monorepo
 **Risk register:** `PROJECT.md` §5, "Planned feature: schema upload — risks
 accepted going in" (R1–R10). That table is the live tracker; this document
 does not duplicate it.
@@ -268,7 +268,7 @@ Wired per `PROJECT.md` §4's stated rule — shape and `ENDPOINT_STATUS` into
 
 Note: `PROJECT.md` §2 refers to "the five sample prompts in the app". Those
 belonged to the **previous** React 18 frontend, now at
-`CAPSTONE FRONTEND.local-backup/`. The current frontend has no sample-prompt
+`frontend.local-backup/`. The current frontend has no sample-prompt
 chips — only the single `PLACEHOLDER` string above.
 
 Two UI rules carried from the risk register:

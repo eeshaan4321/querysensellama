@@ -4,26 +4,39 @@ Natural-language questions in, MySQL or MongoDB queries out — with the routing
 decision, the execution plan, and the optimisation advice all shown rather than
 hidden.
 
-The project is two codebases that now talk to each other:
+The project is two codebases that talk to each other, in one repository:
 
 ```
-FULL CAPSTONE/
-├── CAPSTONE CODE/       Spring Boot 3 backend (Java, Maven)   → :8080
-├── CAPSTONE FRONTEND/   React 19 + Vite SPA                   → :5173
-└── PROJECT.md           this file
+FULL CAPSTONE/                  → github.com/eeshaan4321/querysensellama (private, branch main)
+├── backend/                    Spring Boot 3 backend (Java, Maven)   → :8080
+├── frontend/                   React 19 + Vite SPA                   → :5173
+├── docs/superpowers/           design specs and implementation plans
+└── PROJECT.md                  this file
 ```
 
-Each half is its own git repository (`querysense-backend`, `querysense-frontend`);
-this file spans both and lives in neither.
+**This is a monorepo, and it is the only place work happens.** Paths quoted
+throughout this file are relative to the root above and are literal — no
+translation needed.
 
-**A combined snapshot is also published** at
-`github.com/eeshaan4321/querysensellama` (private) — a monorepo holding
-`backend/`, `frontend/` and this file, pushed as a single commit. It is a
-snapshot, not a working remote: the two repositories above remain the places
-work happens, and the monorepo does not track them. Note the directory names
-differ there (`backend/`, `frontend/` rather than `CAPSTONE CODE/`,
-`CAPSTONE FRONTEND/`), so paths quoted in this file need translating when read
-from that repo.
+### History, and two things that will confuse you otherwise
+
+The halves began as separate repositories, `AnantKekre01/querysense-backend`
+and `AnantKekre01/querysense-frontend`, and were consolidated here on
+2026-09-10. Two artefacts of that move survive locally and are deliberately
+untracked:
+
+- **`backend/.git.disabled/` and `frontend/.git.disabled/`** are the original
+  per-repo git directories, renamed rather than deleted so their branches and
+  history stay recoverable. They are ignored by the root `.gitignore`. Nothing
+  reads them; they exist only so the old history is not lost. The old remotes
+  are no longer used and are behind this repository.
+- **`frontend.local-backup/`** is the previous React 18 frontend, kept for
+  reference. See §7 — the verification record was reset when the frontend was
+  replaced, and this directory is what it was replaced with.
+
+The directories were also renamed during the move: `CAPSTONE CODE/` →
+`backend/` and `CAPSTONE FRONTEND/` → `frontend/`. Any older note quoting the
+former names refers to the same code.
 
 ---
 
@@ -34,7 +47,7 @@ You need three things up, in this order. Only the first is mandatory.
 ### Backend — required
 
 ```bash
-cd "CAPSTONE CODE"
+cd backend
 
 # Default profile: expects MySQL on ${DB_PORT:-3306}, database `querysense`
 ./mvnw spring-boot:run
@@ -55,7 +68,7 @@ the analysis modules to actually say something.
 ### Frontend — required
 
 ```bash
-cd "CAPSTONE FRONTEND"
+cd frontend
 npm install
 npm run dev          # → http://localhost:5173
 ```
@@ -84,10 +97,10 @@ API and no key exists.
 
 | File | Setting | Meaning |
 |---|---|---|
-| `CAPSTONE CODE/src/main/resources/application.properties` | `spring.datasource.url` | `${DB_HOST:localhost}:${DB_PORT:3306}` — **defaults to 3306**; set `DB_PORT` if your instance differs |
+| `backend/src/main/resources/application.properties` | `spring.datasource.url` | `${DB_HOST:localhost}:${DB_PORT:3306}` — **defaults to 3306**; set `DB_PORT` if your instance differs |
 | | `ollama.model` | `qwen2.5-coder:7b` |
 | | `http.client.read-timeout-ms` | 60 s — how long the backend waits for the model |
-| `CAPSTONE FRONTEND/.env` | `VITE_API_BASE_URL` | `http://localhost:8080` — called directly, no proxy |
+| `frontend/.env` | `VITE_API_BASE_URL` | `http://localhost:8080` — called directly, no proxy |
 | | `VITE_API_TIMEOUT` | 65000 ms. Must stay above the backend's 60 s read timeout above |
 | | `VITE_USE_MOCK` | `false`. **Any other value, including unset, means mock mode** — the check is `!== 'false'` |
 
@@ -317,7 +330,7 @@ names the fix.
 
 The two halves were built in parallel and did not agree on names. Rather than
 rename fields across twenty React files or across the Java DTOs, all translation
-is centralised in **`CAPSTONE FRONTEND/src/api/contracts.js`** — the only file
+is centralised in **`frontend/src/api/contracts.js`** — the only file
 in the frontend that knows a backend field name.
 
 | Frontend | Backend |
@@ -363,7 +376,7 @@ comparison screen as a preview of a feature, not a measurement.
 ### Layout
 
 ```
-CAPSTONE FRONTEND/src/
+frontend/src/
 ├── api/
 │   ├── contracts.js     ← all field translation, enums, isLlmSource, ENDPOINT_STATUS
 │   ├── client.js        ← axios instance, USE_MOCK flag
@@ -687,7 +700,7 @@ follow the uploaded schema rather than being cured by it.
 
 **This record was reset when the frontend was replaced.** The previous entry
 described a different React 18 codebase (now kept at
-`CAPSTONE FRONTEND.local-backup/`, untracked by git) and its 40-check adapter
+`frontend.local-backup/`, untracked by git) and its 40-check adapter
 suite, none of which exists in the current frontend. Do not read the claims
 below as covering more than they say.
 

@@ -2,7 +2,7 @@
 
 React (Vite) frontend for QuerySense — a hybrid rule-based/LLM-fallback
 natural-language query builder, analyzer, and advisory system. Talks to the
-Spring Boot backend in `../CAPSTONE CODE`.
+Spring Boot backend in `../backend`.
 
 Stack: React 19, Vite 8, react-router-dom 7, framer-motion, axios, oxlint.
 
