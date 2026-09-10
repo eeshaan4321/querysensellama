@@ -83,6 +83,14 @@ If the backend is down, the failure surfaces per-request as an error on the
 screen that made the call, not as a global banner. Check the backend yourself
 with `curl http://localhost:8080/test`.
 
+**The "Connected to backend" line at the foot of the nav rail is not one.**
+`NavRail.jsx` renders it from the `USE_MOCK` flag alone — it means "this
+build is configured to call a real backend", never "a backend answered". It
+reads exactly the same with nothing listening on 8080. Combined with the
+mock-mode trap below (`VITE_USE_MOCK` unset ⇒ mock), the two indicators
+between them can state "Connected to backend" while every figure on screen
+came from `fixtures.js`, or while the backend is stopped.
+
 ### Ollama — optional, only for the LLM fallback
 
 ```bash
@@ -166,25 +174,60 @@ is low, so the performance impact is likely minor," because that branch reads
 `estimatedRows`. At this scale the optimisation modules can identify a problem
 but never show one costing anything.
 
-**This is the one place the built-in schema demos worse than an uploaded
-one.** The thresholds behind that sentence are `TRANSACTIONAL` 100,
-`ECOMMERCE` 1000, `ResourceConsciousService` 5000 and `ANALYTICAL` 10000, so
-nothing here clears more than the first. A schema uploaded through
-`/api/schema/upload` is seeded to 12000 rows per table precisely to get past
-all four — every profile then returns a `CRITICAL` finding with a real row
-count attached. If you need the optimisation modules to say something
-substantial in a demo, upload a schema rather than using the built-in one.
+**Row counts gate how much the optimisation modules can say.** The
+thresholds are `TRANSACTIONAL` 100, `ECOMMERCE` 1000,
+`ResourceConsciousService` 5000 and `ANALYTICAL` 10000, all exclusive, and
+the built-in tables clear none of them.
 
-It declines — and hands to the LLM — anything containing a join, an aggregate
-(`average`, `sum`, `maximum`, `group by`), a date range (`last month`, `today`,
-`recent`), a comparison (`more than`, `above`, `between`), a question word
-(`who`, `which`), or a mention of two tables at once. **It also declines every
-MongoDB request outright**, so with the target set to MongoDB every question
-goes to the LLM.
+**Uploading a schema no longer changes that by default.** `seed-rows` was
+12000 — chosen to clear all four, and verified live doing so (§7) — and was
+lowered to **100 on 2026-09-10** at the user's direction, because a sample
+database should not leave twelve thousand rows per table sitting in MySQL.
+At 100 an upload clears no threshold either, so every domain suggestion
+reads "the estimated row count is low, so the performance impact is likely
+minor" and `ResourceConsciousService` emits nothing of its own.
 
-It has one live-data safety net: if the input names a city that exists in
-`customers.city` but the `WHERE` clause it was about to build does not contain
-that city, it bails to the LLM rather than emit a query it half-understood.
+**To demo the optimisation modules saying something substantial, raise the
+property** — no code change, no rebuild:
+
+```bash
+./mvnw spring-boot:run -Dspring-boot.run.arguments=--querysense.schema.upload.seed-rows=12000
+```
+
+then re-upload. §7 records what the same query returns at each scale. The
+engine identifies every problem correctly at 100; it just cannot show one
+costing anything.
+
+**Rewritten 2026-09-11 — the decline rule is no longer a word list.** It used
+to hand to the LLM anything containing a join, an aggregate, a date range, a
+comparison, a question word, or a mention of two tables at once. None of those
+signals had anything to do with the schema, so uploading one changed the
+engine's vocabulary but never what it was willing to claim — which is why
+uploading a schema appeared to change nothing.
+
+It now declines on **binding failure** instead: every noun in the question is
+resolved against the active schema, and the engine gives up when
+
+- nothing in the question matches a table, or more than two tables do;
+- a table pair has no declared foreign key between them, or more than one;
+- a named field is not a column of the bound table;
+- two candidates tie on specificity;
+- a filter's literal appears in no column's data;
+- the question contains a temporal expression (`last month`, `in January`,
+  `before 2024`) — date arithmetic is still out of scope, but it declines as a
+  binder rather than as a token veto. The old month regex contained `may`, so
+  *any* sentence with the word "may" in it was declined.
+
+`who`, `which`, `more than`, `average`, `sum` and single-hop joins are now
+handled. **It still declines every MongoDB request outright**, so with the
+target set to MongoDB every question goes to the LLM.
+
+Its live-data safety net was rebuilt at the same time. It used to emit a
+literal `city = …` and then check that against `customers.city` — a table and
+column an uploaded schema need not have, where the check went silently inert
+and the emitted column was simply wrong. It now works the other way round:
+find the column whose data actually contains the value, and decline if none
+does.
 
 ### Verified behaviour
 
@@ -196,7 +239,7 @@ These are the five sample prompts in the app, run against the live backend:
 | Show only the name and email of customers | rule | `SELECT name, email FROM customers;` |
 | Show customers in Mumbai | rule | `SELECT * FROM customers WHERE city = 'mumbai';` |
 | How many orders are there | rule | `SELECT COUNT(*) FROM orders;` |
-| Which customers placed more than three orders | LLM → cache on a repeat | a `LEFT JOIN` with `GROUP BY` |
+| Which customers placed more than three orders | **rule** (since 2026-09-11) | `SELECT customers.id, customers.name FROM customers JOIN orders ON customers.id = orders.customer_id GROUP BY customers.id, customers.name HAVING COUNT(orders.id) > 3;` — the `ON` clause read from the declared FK |
 
 Re-verified against the live backend after the schema fix below, on tables and
 columns the engine could not previously name at all:
@@ -338,7 +381,7 @@ Response — captured from a live call, not documented from the DTO:
   "builtIn": false,
   "tables": [ { "name": "clients",
                 "columns": ["id","name","city","email"],
-                "rowCount": 12000 } ],
+                "rowCount": 100 } ],
   "foreignKeys": [ { "fromTable": "invoices", "fromColumn": "client_id",
                      "toTable": "clients", "toColumn": "id" } ],
   "warnings": [],
@@ -432,16 +475,26 @@ once at startup rather than per query:
                                        ├── Domain rules      (no request)
                                        └── Resource policy   (no request)
 3. POST /api/query/schema-advisor    → Schema advice
-   (no request)                      → Compare: simulated in the browser
+   (reuses step 3)                   → Optimization, real half
+   (no request)                      → Optimization, simulated half
 ```
 
 Stages that make no request are derived from a response already in hand.
 History needs no call at all — the backend writes the row during step 1.
 
-**Compare is the exception, and it is the one place the UI shows invented
-numbers.** `src/api/comparison.js` has no endpoint to call, so it always
-returns generated data regardless of `VITE_USE_MOCK`. Treat anything on the
-comparison screen as a preview of a feature, not a measurement.
+**Optimization's real half reuses step 3 rather than repeating it.** The
+advisor's result is held in `WorkbenchContext`, and the Schema advisor
+screen's own button navigates to Optimization, so the response is normally
+already in hand. The page fetches only when someone arrived without passing
+through that screen, and writes the result back to context so neither screen
+asks twice. This matters because `EXPLAIN` already runs twice per pipeline
+(§3, `/schema-advisor`); a naive refetch here would make it four.
+
+**The simulated half is the one place the UI shows invented numbers.**
+`src/api/comparison.js` has no endpoint to call, so it always returns
+generated data regardless of `VITE_USE_MOCK`. Treat the before/after diff and
+the cost chart as a preview of a feature, not a measurement — the schema
+changes above them on the same screen are real.
 
 ### Layout
 
@@ -458,7 +511,8 @@ frontend/src/
 │                          History, About
 ├── components/          ← shell/, common/, then one folder per feature area
 ├── mock/fixtures.js     ← every generator behind VITE_USE_MOCK
-├── lib/                 ← query highlighter, line diff, resource levels
+├── lib/                 ← query highlighter, line diff, resource levels,
+│                          applyScript.js (+ its test — the only tested file)
 └── styles/              ← tokens.css (design tokens), base.css (reset)
 ```
 
@@ -468,6 +522,96 @@ frontend/src/
 should need to move — they only read shapes defined in `contracts.js`.
 `schemaUpload.js` was added exactly this way and touched no existing component
 except to add the provenance notes described below.
+
+### What the Analysis screen is actually telling you
+
+Written down because the screen shows sections that look alike, carry
+different weight, and are sourced differently — and one of them duplicates
+a job the Schema advisor does better.
+
+**Restructured 2026-09-10.** The screen used to open directly on MySQL's own
+vocabulary — "Access type: ALL", "Uses filesort: Yes", "Joined on: —". Every
+line was true, nothing said which line mattered, and the single number on the
+page ("Estimated rows examined: 100") had no denominator, so it could not
+answer *is that bad?* for anyone. It now reads top to bottom as verdict →
+warnings → metrics → plan: the plain-English answer first, then the evidence
+for it, in increasing technical depth. The plan itself is unchanged; it
+stopped being the whole answer and became the supporting detail.
+
+**Section 0, `VerdictBanner` — the answer.** One severity chip, one headline
+sentence, one supporting sentence, composed server-side by `VerdictService`
+(§ below) and rendered before any `EXPLAIN` vocabulary. It carries **no
+numbers of its own** — every figure it phrases comes from the same fields the
+metrics below are drawn from, so the banner cannot contradict the plan it
+sits above. Absent for MongoDB and for non-`SELECT` statements, which are not
+graded; the component renders nothing rather than an empty box.
+
+Its `UNKNOWN` state is deliberately not a grade. "MySQL couldn't produce an
+execution plan" must never look like a pass — the same distinction
+`explainFailed` was introduced to preserve (§7, 2026-09-07).
+
+**Section 1, `PlanMetrics` — the four numbers.** Rows examined, rows
+returned, wasted work, query cost — each with the sentence that makes it
+mean something. Rows returned is `rows × filtered/100`, which is what finally
+gives rows-examined a denominator; wasted work states the ratio outright
+("200 rows read for every 1 returned"). A missing value **omits its tile
+entirely** rather than rendering a dash, because `filtered` is read as an
+optional `EXPLAIN` column and the cost probe is allowed to fail — absence
+means "MySQL did not report this", and a dash in a metric row reads as zero.
+
+**Section 2, `ExplainPlanView` — the plan.** Access type, index used,
+**indexes considered**, rows examined, rows returned, joined on, full table
+scan, filesort, temporary table — each with a one-line plain-English gloss
+from `lib/explainGlossary.js`. The glosses are static reference text and live
+in the frontend deliberately; the *judgement* is data-dependent and comes
+from the backend. Boolean rows gloss only when true, so "Full table scan: No"
+stays quiet.
+
+"Indexes considered" is `possible_keys`, which the row mapper had always
+captured and which nothing ever rendered. Without it, "no index exists on
+this table" and "an index exists and MySQL passed over it" both displayed as
+an empty "Index used" — two different problems with two different answers,
+shown identically. It is now also the evidence a reader can check the
+verdict's "an index was available" finding against.
+
+These flags are MySQL's own report rather than anything inferred, and every
+rule downstream — domain, resource and schema advisor alike — fires on
+exactly them, so this section remains the evidence the rest of the app
+reasons from.
+
+What it still does **not** give you: a plan *tree* — `EXPLAIN`'s tabular
+output is a flat list of table accesses in join order (§5.3) — and no
+measured anything, since the analyzer never executes the query. The per-table
+breakdown now renders whenever the backend returns `tables` at all, including
+for a single table: `possibleKeys` and `estimatedRowsReturned` exist only on
+the per-table rows, so the old `tables.length > 1` condition dropped the two
+most useful facts on the page for the most common kind of query. The
+collapsed five-row view survives only as the fallback for results carrying no
+`tables` (mock mode, Mongo).
+
+Blunt framing worth keeping in mind: **this section is the diagnosis and the
+Schema advisor is the prescription for the same finding.** "Unindexed scan
+on `gender`" versus "`CREATE INDEX idx_user_details_gender`". If a demo is
+short on time, the advisor is the more useful of the two.
+
+**Section 2, `SuggestionsList` — domain and resource advice.** This is the
+part with no equivalent anywhere else in the app, and the project's most
+defensible novelty claim: identical `EXPLAIN` facts, read differently
+according to declared context. Same query, same plan, three domains:
+
+| Domain | Reading |
+|---|---|
+| E-commerce | filesort framed as a product-listing "sort by" |
+| Analytical | full scan "often acceptable for analytical queries" — **and no filesort complaint at all** |
+| Transactional | "should be simple key lookups" — escalated to `CRITICAL` |
+
+The analytical profile actively *withholds* a warning the others raise,
+which is the clearest demonstration that these are separate rule sets and
+not one rule set with different wording.
+
+**Do not confuse this section with the Optimization screen's "Simulated
+domain rules" list.** They look alike and are framed alike. This one is
+`/api/query/analyze`; that one is `fixtures.js`.
 
 ### Two things the shell shows permanently
 
@@ -494,6 +638,38 @@ Everything below is genuinely absent, not merely unwired. The UI states each one
 on the relevant screen rather than filling the gap with plausible-looking
 numbers.
 
+### Not a gap: QuerySense recommends, it never executes
+
+**Decided 2026-09-10. This is a non-goal, not a TODO.** No endpoint runs the
+DDL the schema advisor produces, and none will be added. The advisor hands
+you `CREATE INDEX` statements; running them is the user's, in their own
+client.
+
+The reasoning is proportionality. A tool that reads `EXPLAIN` needs only
+`SELECT` on the schema it advises about. One that applies its own advice
+needs `CREATE`/`ALTER` on a live database, on the strength of five rules that
+fire off single `EXPLAIN` flags with **no consistency checking between them**
+(§5.2) — two recommendations can already contradict each other, and the
+`(gender, status)` composite case is a live example where running both
+emitted statements is the wrong move. Advice a human reviews can be wrong.
+DDL a tool executes unattended cannot.
+
+It also keeps the project's central claim intact: QuerySense shows its
+reasoning rather than acting on it.
+
+**What this forbids, so later work doesn't quietly reintroduce it:** any
+`POST /api/schema/apply`-shaped endpoint; any "fix it for me" control in the
+UI; and any widening of the upload path's DDL execution beyond the isolated
+`querysense_uploads` catalog it already provisions. The upload feature is the
+one place this project emits DDL, and it does so only into a scratch catalog
+it owns — never the connected database (§3, §6).
+
+The UI carries this in its wording. The Optimization screen's real half is
+headed **"Recommended schema changes"** and its script block **"Copy as one
+script"** — an earlier draft read "Schema changes to apply" and "Apply all",
+which implied an action the app does not perform. The only control on that
+block is Copy.
+
 ### Missing endpoints
 
 | Endpoint | Status | What is needed |
@@ -509,6 +685,15 @@ numbers.
    `QueryHistory.optimizedQuery` is always `null`, and the optimisation screen's
    `BeforeAfterDiff` has no real "after" to render — it diffs against a rewrite
    the browser simulated, not one the backend produced.
+
+   **This is now stated by the screen's shape rather than only in its
+   caption.** The Optimization page was split on 2026-09-10 into a real half
+   (the schema advisor's recommendations, with the DDL to run) above a
+   simulated half (this rewrite preview, behind the amber badge). The two
+   optimise different things: the advisor changes the *database* and leaves
+   the query alone; the preview changes the *query* and leaves the database
+   alone. Only the first has a backend behind it. See §7 for what the split
+   removed.
 
 2. **No consistency checking in the schema advisor.**
    `SchemaAdvisorServiceImpl` emits each recommendation independently from a
@@ -556,7 +741,12 @@ numbers.
 
 ### Correctness defect: the rule engine resolves multi-word tables to the wrong table
 
-**Status: open, reproducible, found 2026-09-10.** Introduced by the
+**Status: FIXED 2026-09-11** by `SchemaBinder` — see the session entry in §7.
+`SchemaBinderTest.orderItemsBeatsOrders` is the regression guard. The account
+below is kept because the mechanism is worth understanding and the same trap
+waits on any future matcher.
+
+**Status when found: open, reproducible, found 2026-09-10.** Introduced by the
 `KnownSchema` expansion documented above — adding tables whose names contain
 underscores without teaching the matcher to recognise them in prose.
 
@@ -915,8 +1105,22 @@ schema-conformance check before a result is returned or cached) and #3
   half-succeeding upload would leave the app pointing at tables that do not
   exist — the same shape of confusion as the `explainFailed: true` trap two
   bullets up.
-- **Numbers on the comparison screen are invented.** That screen has no
-  endpoint and never did; it is simulated even in real mode.
+- **Numbers in the Optimization screen's lower half are invented.** The
+  rewrite preview has no endpoint and never did; it is simulated even in real
+  mode. The schema changes in the upper half of the same screen are real
+  `/api/query/schema-advisor` output — the divider and the amber badge are
+  the only thing separating them, so read which half a figure came from
+  before quoting it.
+- **An advisor recommendation is not always runnable.** When `EXPLAIN`
+  reports a full scan but no filterable column, `SchemaAdvisorServiceImpl`
+  falls back to a placeholder — `CREATE INDEX idx_orders_col ON
+  orders(<the column used in the WHERE clause>);` — rather than emit
+  `idx_orders_null`. `buildApplyScript` demotes any statement containing a
+  `<…>` placeholder, and every `STRUCTURAL` recommendation (whose action is
+  English prose, not DDL), into commented review notes, so the "Apply all"
+  block is always safe to paste whole. The per-recommendation card above it
+  still shows the raw text with its own Copy button, exactly as the Schema
+  advisor screen does.
 - **Generated SQL naming a table you do not have** (`transactions`, `buyer_id`)
   is the schema-grounding gap, not a model quirk: if the question does not
   literally contain `customer(s)`/`order(s)`, the LLM prompt carries no schema
@@ -1086,16 +1290,489 @@ the upload catalog.
   fragments, not by a genuine multi-hundred-table export.
 - **MongoDB is unaffected and untested here**, as ever.
 
+### Session of 2026-09-10 — the Optimization screen gets a real half
+
+Run against the live backend on MySQL 9.7 (port 3306), built-in demo schema
+active, and driven in a real browser with `VITE_USE_MOCK=false`.
+
+#### What the screen did before
+
+`OptimizationPage` read only `{ build, analysis, domain }` from
+`WorkbenchContext`. It never read `schemaAdvice` — **even though that value
+was already in the same context**, populated by the Schema advisor screen,
+whose own button navigates straight here. Every figure on the page came from
+`mockSimulateOptimizedQuery()` (a regex rewrite in the browser) and
+`comparison.js` (no endpoint, generated in all modes).
+
+The one mention of the advisor anywhere on the screen was a **fabricated
+trace line** in `fixtures.js`:
+
+```js
+{ ruleId: 'SCHEMA-01', explanation: 'Schema Advisor recommended an index on the filtered column.' },
+```
+
+It rendered whether or not the advisor had run and whether or not it had
+recommended anything. The two `EXPLAIN-0n` lines bracketing it asserted a
+full scan and a post-index lookup just as unconditionally. All three are
+gone; `EXPLAIN-01` is now gated on `originalAnalysis.hasFullTableScan` and
+prints the real `accessType`.
+
+#### What replaced it
+
+Two halves, divided and separately labelled — real advisor output above, the
+simulated rewrite below its amber badge. The real half renders on arrival
+with no button, because gating real output behind one labelled "Simulate" was
+the confusion being removed.
+
+`buildApplyScript` (`src/lib/applyScript.js`) aggregates the recommendations
+into one pasteable block. **The risk it exists for is real, not
+hypothetical** — it was observed in a live response during this session:
+
+| Verified | Query | Advisor returned | Script emitted |
+|---|---|---|---|
+| Rule engine → analyse → optimization, **skipping the advisor screen** | `SELECT * FROM customers WHERE city = 'mumbai';` | 1 × `INDEX` on `customers.city` | `1 runnable` — `CREATE INDEX idx_customers_city ON customers(city);` |
+| Same path | `SELECT * FROM customers;` | 1 × `INDEX`, `targetColumn: null` | `0 runnable · 1 for review` — the `<the column used in the WHERE clause>` statement demoted to a comment |
+| Direct API, `ORDER BY` + `GROUP BY` on `orders` | 2 × `INDEX` (one with a placeholder) + 1 × `STRUCTURAL` | `1 runnable · 2 for review` — only `idx_orders_status` executable |
+
+In the second and third cases the emitted script contains **no executable
+line at all** beyond the real statement: asserted directly against the live
+response, not against a fixture. The first case also confirms the auto-fetch
+path — the advisor had never been visited in that session, and the page
+fetched once and cached to context.
+
+Console clean on load and after both interactions: no errors, no React
+warnings, no effect loop. `npm run lint` unchanged at 4 warnings (3
+react-refresh, 1 unused parameter — all pre-existing); `npm run build` clean.
+
+#### Vitest was added, and this is the frontend's first test file
+
+`vitest` is now a devDependency with `npm test` / `npm run test:watch`.
+`applyScript.test.js` is 10 cases, written before the implementation and red
+first. It is the **only** tested file in the frontend — the rest of the
+directory is still verified by build, lint and hand.
+
+#### Not fixed here, and worth knowing
+
+- `RecommendationList` renders each raw `suggestedAction` with its own Copy
+  button, placeholder statements included. Safe on the Schema advisor screen,
+  which only diagnoses; slightly sharper now that the same component appears
+  on a screen framed as "run this". The aggregated block is guarded; the
+  individual cards are not. Left alone because the component is shared.
+- `NORMALIZATION` remains a declared type that nothing emits — it exists in
+  the DTO comment, in `contracts.js` and in `RecommendationList`'s
+  `TYPE_META`, but no rule in `SchemaAdvisorServiceImpl` produces one.
+- The advisor still reads the collapsed `QueryAnalysisResult`, not
+  `tables[]`, so on a join it advises against whichever table the collapse
+  kept. Unchanged by this work; see §5.3.
+
+### Session of 2026-09-10 — the seeder was emptying narrow-integer tables
+
+Found while answering "what am I actually gaining from the Analysis window",
+which turned out to have the answer "less than you think, because the table
+you are analysing is empty."
+
+#### Root cause
+
+`ValueGenerator.integerValue` ended at `1 + random.nextInt(1000)` and
+`valueFor` routed all six integer widths into it:
+
+```java
+case "TINYINT", "SMALLINT", "MEDIUMINT", "INT", "INTEGER", "BIGINT" -> integerValue(column, rowIndex);
+```
+
+A `TINYINT` holds 127, so roughly 87% of generated values were out of
+range. MySQL rejects the whole batch on the first bad row, `SchemaSeeder`
+caught the `DataAccessException`, logged `WARN` and carried on, and **every
+batch died**. The upload returned HTTP 200 with `rowCount: 0` and
+`warnings: []`.
+
+Observed on a real upload (`sample1.sql`, one table `user_details` with a
+`status TINYINT`): `SELECT COUNT(*)` returned **0**, while `/api/schema/active`
+reported the schema as live and every downstream module happily analysed it.
+`EXPLAIN` gave `estimatedRows: 1`, so every domain suggestion came back
+`INFO` with "the estimated row count is low, so the performance impact is
+likely minor" — a screen full of output describing nothing.
+
+This is precisely the failure `SchemaSeeder`'s own class comment says the
+component exists to prevent: *"output that looks fine and means nothing —
+the worst failure shape this project has, because nothing on screen would
+say so."*
+
+#### Three fixes
+
+1. **Width-aware clamping.** `ValueGenerator.maxFor` gives the signed
+   maximum per width and every branch of `integerValue` now folds its value
+   back into range — including the name heuristics, since a column called
+   `year` returned 2015..2025 and overflowed a TINYINT independently of the
+   default branch. Signed maxima are the real bound, not a conservative
+   one: `ParsedColumn` carries no `UNSIGNED` flag, so `SchemaProvisioner`
+   re-emits these columns signed.
+2. **Row-count capping for keys.** A primary key, unique or auto-increment
+   column gets `rowIndex + 1` and cannot be clamped without breaking
+   uniqueness — 12000 distinct ids do not fit in a TINYINT. So a narrow key
+   shrinks the *table* instead: `SchemaSeeder.seedableRowsFor` takes the
+   minimum over every such column, and the shortfall is warned about.
+   Foreign-key picks are clamped the same way, since a `TINYINT` FK would
+   otherwise reject every batch of the child table.
+3. **Short seeds are now loud.** `SchemaSeeder.seed` returns a
+   `SeedReport(rowCounts, warnings)` rather than a bare map, carrying the
+   innermost driver message — the one that names the offending column.
+   `SchemaUploadService` appends these to the parser's own warnings rather
+   than replacing them, so `SchemaUploadResponse.warnings[]` (already
+   rendered by the UI) shows both. A 0-row seed stays HTTP 200: the tables
+   exist, the rule engine binds to them and `EXPLAIN` runs, so failing the
+   whole upload would discard valid work. It just may never again be silent.
+
+#### Verified live
+
+Re-uploaded an identical schema against MySQL 9.7:
+
+| | Before | After |
+|---|---|---|
+| `SELECT COUNT(*) FROM user_details` | **0** | **12000** |
+| `status` values | all rejected | 1..127, 127 distinct |
+| `estimatedRows` on a filtered query | 1 | ~12200 |
+
+And the effect on the screens this was blocking, same query and profile,
+`WHERE gender='M' ORDER BY status`:
+
+| | Before | After |
+|---|---|---|
+| Full-scan suggestion | `INFO` — "row count is low… impact likely minor" | **`CRITICAL`** — "over an estimated 12225 rows" |
+| Filesort suggestion | `WARNING` | `WARNING` |
+| Resource suggestions | **none at all** | 1 at MEDIUM, **2 at LOW** |
+
+**That last row is the significant one.** `ResourceConsciousService` gates
+its own messages on `estimatedRows > 5000` (`ResourceConsciousService.java:42`).
+The built-in demo tables hold 5-49 rows and every upload was landing empty,
+so on this project's data the Resource-Conscious Decision System had — as
+far as anything here can tell — **never emitted a suggestion in its life**.
+It was visible only as the severity shift it applies to the domain module's
+output. It now writes genuinely different text per level:
+
+- **LOW** — "likely to spill to disk", plus a second suggestion about scan
+  pressure that the other levels do not produce
+- **MEDIUM** — "usually fine, but worth monitoring"
+- **HIGH** — "unlikely to cause a disk-based sort"
+
+If that module is being presented as one of the project's objectives, it
+could not have been demonstrated before this fix.
+
+Suite: **143 tests, 0 failures**, including 8 new ones. Two of the new
+seeder tests were written vacuously at first — `SchemaSeederTest` builds its
+seeder with `seedRows = 50`, so a TINYINT cap of 127 never binds and the
+assertion passed without testing anything. They now construct a seeder at
+the production 12000 and assert the cap actually falls to 127.
+
+#### Then the default came down to 100, deliberately
+
+Immediately after the above was verified, `seed-rows` was lowered from
+**12000 to 100** at the user's direction: *"I dont want a sample seeded
+database to have 100000 rows."* That is a reasonable thing to want from
+something labelled a sample, and it is a real trade, so both halves are
+recorded here.
+
+**What it costs.** None of the four thresholds clear at 100. The table
+above — `INFO` becoming `CRITICAL`, the Resource module speaking for the
+first time — describes behaviour at 12000 and **does not describe the
+default any more**. At 100 the modules are back to "impact is likely minor"
+and `ResourceConsciousService` is silent again.
+
+**What it does not cost.** The seeding bug itself is still fixed, and that
+was the real defect: tables now actually receive rows instead of silently
+receiving none, narrow integer columns no longer reject every batch, and a
+short seed is reported rather than swallowed. A 100-row table is a small
+table; a 0-row table was a broken one that looked healthy. Those are
+different problems and only the second was a bug.
+
+**The setting is one flag, not a code change:**
+
+```bash
+./mvnw spring-boot:run -Dspring-boot.run.arguments=--querysense.schema.upload.seed-rows=12000
+```
+
+Re-upload the schema afterwards — existing tables keep whatever they were
+seeded with.
+
+#### Still open
+
+- **The built-in demo schema is untouched by this.** It holds 5-49 rows by
+  design and still produces "row count is low" on every suggestion.
+- **At the 100-row default, an upload now behaves the same way**, so the
+  advice "upload a schema to see the modules work" is only true with the
+  property raised. §2 says so in place.
+- No cost figure. Reviewed as item 3 in §8 and still not built.
+
+### Session of 2026-09-10 — plain language on the schema advisor
+
+Prompted by reading the copied script and asking what it actually meant.
+The advisor spoke one register only, and it was the wrong one to lead with.
+
+#### A teammate's name was in user-facing output
+
+`SchemaAdvisorServiceImpl` ended every full-scan recommendation with:
+
+> — this is the same signal **Anant's engine** flags via EXPLAIN.
+
+Not a comment. A string, in the `reason` field, rendered on the Schema
+advisor screen, on the Optimization screen, and inside the copied script.
+It shipped on **every** full-scan recommendation the system produced. A
+repo-wide check found it was the only teammate name inside a string
+literal — the others are all in Javadoc, where they belong.
+
+It survived because `SchemaAdvisorServiceImpl` had **no tests at all**:
+five rules, zero coverage, so nothing ever read those strings back.
+
+#### `summary` alongside `reason`, not instead of it
+
+`SchemaRecommendation` gained a `summary` field carrying the finding in
+plain language. `reason` is unchanged and still names the exact EXPLAIN
+signal.
+
+**Both registers, deliberately.** `reason` is what makes a recommendation
+auditable rather than an assertion — the project's whole argument for a
+rule-based system over a black box (§2, and Papers #2/#4/#6 in CLAUDE.md).
+Rewriting it for readability would have deleted the evidence. So the UI
+leads with `summary` and keeps `reason` behind a "Technical detail"
+disclosure, and both travel in the payload.
+
+Sample, for the same finding:
+
+| Register | Text |
+|---|---|
+| `summary` | "To answer this, the database is reading all 100 rows of user_details and checking each one, because nothing indexes status. An index works like the index at the back of a book: it lets the database jump straight to the matching rows instead of reading everything." |
+| `reason` | "Full table scan detected (accessType=ALL) with no index in use on 'status' — the same signal reported by EXPLAIN." |
+
+Summaries say "the database", not "MySQL", because the same class serves
+the MongoDB rules. Row counts come from `estimatedRows`, which the advisor
+received all along and never read; where it is null (Mongo, or a failed
+EXPLAIN) the wording degrades to "every row" rather than leaving a gap.
+
+#### The copied script switched register too
+
+`buildApplyScript` now comments each statement with `summary`, not
+`reason`. The script travels — into a ticket, a chat, a teammate's
+terminal — where the reader has none of the UI's context and no
+disclosure to open. The evidence claim is still in the script header
+("Anchored to EXPLAIN over …"), so the per-statement comment is free to be
+the readable one. It falls back to `reason` when `summary` is absent.
+
+#### Tests, including two on the writing
+
+New `SchemaAdvisorServiceImplTest`: 12 cases covering all five firing
+conditions, both suppression cases, and the null-row-count fallback. Two
+of them test the **copy** rather than the logic, because prose drifts back
+toward the vocabulary of the code around it:
+
+- `jargonFreeSummaries` — no summary may contain `accessType`, `EXPLAIN`,
+  `filesort`, `$regex`, `GROUP BY`, `DISTINCT`, `querysense_uploads`, or a
+  teammate name.
+- `noTeammateNamesAnywhere` — across `summary`, `reason` and
+  `suggestedAction` together, so the original defect cannot return through
+  any field.
+
+Backend **155 tests, 0 failures**. Frontend **12**, lint unchanged at 4
+pre-existing warnings, build clean. **Not run in a browser or against a
+live backend** — at the user's instruction, they test personally.
+
+#### Deliberately not done
+
+Scope was the schema advisor only. The Analysis screen's domain and
+resource suggestions (`OptimizationSuggestion.message`) are written in the
+same technical register and have the same problem — there are more of
+them, across three domain rule sets plus the resource module. Considered
+and deferred, not overlooked.
+
+### Session of 2026-09-10 — the Analysis screen gets an answer, not just a report
+
+The complaint that started it: the Analysis screen "is not giving any useful
+information for the layman. No metrics." Both halves were true, and they had
+different causes.
+
+**Why there were no metrics.** The analyzer only ever runs `EXPLAIN` and
+never executes the query, so nothing on the screen was ever a measurement —
+that part is by design and stays. But three figures that `EXPLAIN` *does*
+report were being discarded:
+
+- **`filtered`** — MySQL's estimate of the percentage of read rows that
+  survive the `WHERE` clause — was never read by `EXPLAIN_ROW_MAPPER`, which
+  took `table, type, possible_keys, key, key_len, ref, rows, Extra` and
+  stopped. It is the only column that distinguishes a scan doing useful work
+  from one throwing its work away.
+- **`query_cost`** was reachable but unread — see §8 item 3 for the full
+  account of how it is now obtained without flipping the EXPLAIN format.
+- **`possible_keys`** was captured and never rendered anywhere in the UI.
+
+**Why it read as useless to a layman.** The screen opened on MySQL's
+vocabulary with nothing ranking it, and its one number — estimated rows —
+had no denominator. Adding `filtered` supplies the denominator; the verdict
+supplies the ranking.
+
+**What was built.**
+
+| Piece | Where |
+|---|---|
+| `AnalysisVerdict` DTO — severity, label, headline, detail | `dto/` |
+| `VerdictService` — the nine-rule ladder | `analysis/` |
+| `filtered` on `TableAnalysis`, plus derived `estimatedRowsReturned` / `readAmplification` | `dto/` |
+| `queryCost` + `verdict` on `QueryAnalysisResult` | `dto/` |
+| `parseQueryCost` + the separate cost probe | `MySqlJsonExplainParser`, `MySqlExplainAnalyzer` |
+| `VerdictBanner`, `PlanMetrics`, `explainGlossary.js` | frontend |
+
+**The two rules that keep the verdict defensible.** A naive implementation
+grades every full table scan as a fault, and a reviewer breaks that in thirty
+seconds. Rule 7 catches a big scan that *returns* most of what it reads —
+`SELECT * FROM customers` — and grades it `INFO`, because an index cannot
+improve a query that genuinely needs the whole table. Rule 8 does the same
+for any scan under `querysense.verdict.large-table-rows` (default 1000).
+Splitting on `filtered` is what makes rule 7 possible at all, which is the
+practical argument for having read that column.
+
+The wording follows the rule already established in
+`MySqlExplainAnalyzer.addWarningsFor`: report what MySQL *chose*, never
+assert that an index would fix it. Two tests in `VerdictServiceTest` are
+regression guards on the writing rather than the logic — one asserts no
+headline contains "add an index" / "create index" / "you should", the other
+that no headline leaks `access type` / `filesort` / `eq_ref` / `possible_keys`.
+That mirrors `SchemaAdvisorServiceImplTest.jargonFreeSummaries`, and exists
+for the same reason: copy drifts back toward the vocabulary of the code
+around it.
+
+**`seed-rows` changed from 100 to 12000.** Not cosmetic, and reversible in
+one word. At 100 rows every table is below the verdict's large-table
+threshold *and* below all four domain/resource thresholds, so a fresh install
+was configured to produce "reads all 100 rows, which is normal at this size"
+for effectively every query — correct, and useless as a demonstration. The
+paragraphs recording why 100 was originally chosen are kept in
+`application.properties` rather than deleted.
+
+**Verified.** `mvnw test` — full suite green, including 18 new
+`VerdictServiceTest` cases covering every rung of the ladder, the
+configurable threshold, the near-zero `filtered` cap, and join table
+selection. `vite build` — clean, 560 modules.
+
+**Not verified: any of this against the running app.** No query was analyzed
+end to end this session; the browser has not rendered the banner, the metric
+tiles or the glosses, and no real MySQL `EXPLAIN` has exercised the `filtered`
+column or the cost probe against a live server. The evidence above is unit
+tests and a production build, nothing more.
+
+### Session of 2026-09-11 — the rule engine follows the schema, and joins
+
+The complaint that started it: uploading a schema still sent everything to the
+LLM, and *"there is no novelty in always falling back to the LLM."* Both halves
+were accurate. The reason was not the one this file implied.
+
+Design: `docs/superpowers/specs/2026-09-10-schema-adaptive-rule-engine-design.md`.
+Plan: `docs/superpowers/plans/2026-09-10-schema-adaptive-rule-engine.md`.
+
+#### Why an upload did not change routing
+
+`RuleBasedQueryBuilder` read `ActiveSchemaProvider`, so **table and column
+names** followed an upload. Three things did not, and the third was two bugs
+nothing in this file had recorded:
+
+1. **The decline gate was a hardcoded English blacklist** — `who`, `which`,
+   `average`, `more than`, month names. Schema-independent by construction, so
+   an upload could not affect it.
+2. **Two tables mentioned was an automatic decline**, because there was no
+   join builder to hand off to.
+3. **Both data-driven paths were pinned to the demo schema.** The location
+   branch emitted a literal `city = …` regardless of what columns existed, and
+   the safety net called `getDistinctValues("customers", "city")` — on an
+   uploaded schema `SchemaMetadataService` logged *"Refused to load distinct
+   values for unrecognized table/column"* and returned empty, so **the net was
+   silently inert on every upload**. This file's own §7 records *"show clients
+   in Mumbai"* as evidence of adaptation; it worked because that sample
+   happened to have a `city` column.
+
+The engine adapted its nouns, kept someone else's grammar, and turned off its
+own seatbelt.
+
+#### What replaced it
+
+Binding-based decline. Every noun is resolved against the active schema, and
+the engine gives up when a binding fails or ties — so the decision now depends
+on the schema that is loaded. §2 carries the full list.
+
+| Piece | Job |
+|---|---|
+| `querybuilder/SchemaBinder` | Nouns to tables/columns. Most-specific wins; underscores and spaces normalise to one form |
+| `querybuilder/JoinPathResolver` | A table pair to its declared FK. 0 or 2+ edges decline |
+| `querybuilder/QueryIntent` | The schema-bound intent — nothing in it is a raw user string |
+| `querybuilder/SqlEmitter` | Intent to SQL. Knows no English |
+| `querybuilder/QueryIntentParser` | The binders, and every decline reason |
+| `querybuilder/RuleBuildResult` · `dto/RuleTrace` | Both outcomes, with the reason |
+| `components/analysis/RuleTracePanel` | Renders it, on the Analysis screen only |
+
+`RuleBasedQueryBuilder` is now a 60-line orchestrator. `tryBuild` was kept as
+a delegate over the new `build`, so `RuleBasedQueryBuilderSchemaTest` keeps
+its four assertions byte-identical.
+
+#### The novelty claim, and why it is checkable
+
+`SchemaSnapshot` has carried `foreignKeys()` since the schema-upload work and
+the generator never read it. A rule-built join's `ON` clause is now **read from
+the declared foreign key**, and `RuleTrace.JoinEdge.origin` says so in those
+words next to the exact columns — so a reviewer confirms it against their own
+DDL rather than taking it on trust. Two FKs between the same pair decline as
+ambiguous rather than picking one.
+
+**The routing decision itself is now auditable.** `handledBy` has always said
+which layer answered and never why the previous one passed. A decline carries
+its reason onto the response, so an LLM-answered query shows *why* the rules
+declined. That is the half of this project's central claim that was previously
+not demonstrable.
+
+#### Four defects closed
+
+- The `order_items` mis-resolution (§5) — `SchemaBinderTest.orderItemsBeatsOrders`.
+- The dropped `per <column>` grouping (§8).
+- The hardcoded `city` filter column — **not previously recorded**.
+- The inert known-value safety net on uploaded schemas — **not previously
+  recorded**.
+
+#### Verified
+
+- `./mvnw test` — **229 tests, 0 failures** (174 before, all green at the
+  start of the session).
+- `npm test` — **16 tests, 0 failures**; `RuleTracePanel` is the frontend's
+  second tested file after `applyScript`.
+- `npm run build` clean; `npm run lint` unchanged at the 4 pre-existing warnings.
+- `RuleBasedQueryBuilderSchemaTest` green with all four assertions unedited —
+  only its `setUp` wiring changed, because the builder takes its collaborators
+  now instead of constructing them.
+- `DeclineBoundaryTest` — 17 cases pinning what must still decline. It is the
+  only thing holding the line against the failure §5 names as the one this
+  project's claim cannot survive, and it exists because everything else in this
+  session widened what the engine claims.
+
+#### Not verified
+
+**Nothing in this session was run against a live backend or in a browser.**
+No query was generated end to end, no real MySQL `EXPLAIN` ran against a
+rule-built join, and the `RuleTracePanel` has never been rendered by a browser.
+The evidence is unit tests, a production build and a clean lint — nothing more.
+The user tests personally; this is theirs to confirm.
+
+Specifically worth exercising first: a join question against an **uploaded**
+schema, since the join path has only ever run against the built-in demo
+schema's foreign keys in tests.
+
 ### Not verified
 
 - ~~**No screen of the current frontend has been exercised against the live
   backend in a browser.**~~ **Partially retired 2026-09-10** — see the schema
-  upload session above. Workbench, Analysis and the new Schema source screen
-  were driven in a real browser against the live backend, with a console
-  check. **Optimization, Schema advisor, History and Architecture still have
-  not been**, and the per-table plan blocks in `ExplainPlanView` have only
-  been seen in their single-table state on screen; the multi-table rendering
-  remains verified as data and as a clean build, never as pixels.
+  upload session above, and the Optimization session after it. Workbench,
+  Analysis, Schema source and **Optimization** have now been driven in a real
+  browser against the live backend, with a console check. **Schema advisor,
+  History and Architecture still have not been** — note that Optimization
+  renders the advisor's output through the same `RecommendationList` the
+  Schema advisor screen uses, so that component is now verified on screen
+  even though its own page is not. The per-table plan blocks in
+  `ExplainPlanView` have only been seen in their single-table state; the
+  multi-table rendering remains verified as data and as a clean build, never
+  as pixels.
 - The populated states of the analysis, optimisation and schema-advisor screens
   (a real plan tree, non-empty suggestions, real index proposals) still require
   a backend on real MySQL, since H2 cannot produce `EXPLAIN` output.
@@ -1110,3 +1787,185 @@ complexity gate along with it. Questions like "products in a category" or
 where before neither table existed and they were handled or declined on other
 grounds. **More traffic depends on Ollama than it used to.** With Ollama down,
 more questions now fail with a 503 than did under the two-table schema.
+
+---
+
+## 8. Review requirements — what is built, checked 2026-09-10
+
+A six-item list came back from review. Each row below was **re-verified
+against the running backend on the day this was written**, with an uploaded
+schema (`sample1.sql`, one table `user_details`) active — not read off the
+rest of this document. Five were built; the sixth, query cost, was built on
+2026-09-10 and its row is updated below — so all six now stand as built.
+
+| # | Requirement | Status |
+|---|---|---|
+| 1 | Upload schema **and simulate the rules on it** | **Built** — seeding defect fixed 2026-09-10, see §7 |
+| 2 | Show code for optimization on the interface | **Built** — for schema DDL; the query rewrite is still simulated |
+| 3 | Calculate query **cost** in the EXPLAIN | **Built 2026-09-10** — `query_cost` via a separate JSON probe, labelled unitless |
+| 4 | Rule-based system customised to schema | **Built** |
+| 5 | LLM fallback | **Built** |
+| 6 | Cached queries | **Built** |
+
+### 1 · Upload a schema and run the rules against it — built
+
+`POST /api/schema/upload` (multipart or pasted DDL), `GET /api/schema/active`,
+`POST /api/schema/reset`, and the Schema source screen — see §3. What review
+is really asking is whether the *rules* follow the upload rather than staying
+pinned to the built-in demo tables. They do, end to end, verified with
+`sample1.sql` active:
+
+- **Rule engine** — see #4 below; it generated against `user_details`.
+- **`EXPLAIN`** — runs in the `querysense_uploads` catalog. Real plan output:
+  `accessType: ALL`, `explainFailed: false`.
+- **Schema advisor** — returned `CREATE INDEX idx_user_details_gender ON
+  user_details(gender);` and four more, one per filtered column.
+- **Domain + resource modules** — return live suggestions of both kinds.
+  Verified as a `DOMAIN` suggestion only at first; the `RESOURCE` half was
+  silent because the upload had seeded 0 rows and that module needs >5000.
+  After the seeder fix (§7) the same query returns both, and the resource
+  text changes per level.
+
+### 2 · Optimisation code on the interface — built for schema changes
+
+Added 2026-09-10; see the §7 session entry. The Optimization screen's upper
+half renders the advisor's recommendations with the DDL in a copyable block,
+and `buildApplyScript` aggregates them into one pasteable script.
+
+**The distinction to keep straight when demoing:** *schema-change* code is
+real and comes from the backend. *Query-rewrite* code — the before/after diff
+in the lower half — is generated by a regex in the browser, because the
+Comparison Engine does not exist (§5). If review meant "show us the optimised
+**query**", that is the simulated half and is not built.
+
+Per §5's "Not a gap", the interface shows this code and never runs it.
+
+### 3 · Query cost — built 2026-09-10
+
+`QueryAnalysisResult.queryCost` carries MySQL's own whole-plan cost estimate,
+and the Analysis screen renders it as one of four metric tiles. This entry
+previously read "NOT built"; the two caveats it recorded are both addressed
+below rather than discarded, because both were correct.
+
+**How the number is obtained, and why not the obvious way.** The obvious way
+is to set `querysense.explain.format=JSON`, and that is the wrong way. That
+setting is an *either/or* — it replaces the tabular reader for every analysis
+in the app, and the tabular reader is the one that has actually been
+exercised against this project's database. Swapping an unexercised reader in
+front of every user to obtain one extra number is a bad trade, and a subtly
+different plan (a join ordering, an inherited filesort flag) would pass
+silently.
+
+So the plan still comes from the tabular reader, unchanged, and the cost is
+asked for on the side: `MySqlExplainAnalyzer.readQueryCost` issues a
+**second, separate** `EXPLAIN FORMAT=JSON` purely to read
+`query_block.cost_info.query_cost`, via the new
+`MySqlJsonExplainParser.parseQueryCost`. The extra round trip is cheap —
+`EXPLAIN` does not execute the query, it asks the optimiser for a plan it has
+already computed. Every failure in the probe is swallowed and returns `null`;
+the caller already has a complete plan, so a cost-format problem must not
+cost anyone an analysis. Logged at `DEBUG`, not `WARN`, because a null cost
+is an expected outcome rather than a fault.
+
+One parsing detail worth keeping: MySQL emits `query_cost` as a JSON
+**string** (`"1264.35"`), not a number, so `asDouble()` on that node returns
+`0.0` — a plan silently reported as free. The text is parsed explicitly and
+anything that will not parse returns null.
+
+**Caveat 1 was right and is honoured in the UI.** `query_cost` is a unitless
+optimiser estimate that looks like milliseconds and is not. It is never shown
+bare: `QUERY_COST_CAVEAT` in `lib/explainGlossary.js` travels with it
+wherever it appears — *"MySQL's own estimate of the effort this plan takes.
+It has no unit — it is only meaningful compared against another plan for the
+same query."* That is the same discipline that produced "Estimated rows"
+instead of "cost" in the first place (§5.4).
+
+**It is also the one legitimately whole-query figure on the screen**, which
+is worth knowing. Rows examined is per-table and deliberately not summed: for
+a `JOIN`, MySQL nests loops, so a sum would be a confident wrong number.
+`QueryAnalysisResult` documents that reasoning at the field, and the headline
+keeps its honest "most rows examined at one table" framing. `query_cost`
+covers the whole plan by construction, which makes it the right figure for
+the before/after bars on the Optimization screen — those currently chart
+estimated rows and label them cost.
+
+**Still deliberately not taken: `EXPLAIN ANALYZE`.** The decision this entry
+asked for was made on 2026-09-10: **no**. The analyzer stays non-executing.
+MySQL 8.0.18+ would report actual time and actual rows — the only genuine
+magnitudes available — but it executes the query, and the query may be
+LLM-generated SQL that invented a column (§5). Everything on the Analysis
+screen therefore remains an estimate, and `PlanMetrics` says so once, in a
+footnote, rather than hedging every tile.
+
+### 4 · Rule engine customised to the uploaded schema — built
+
+The strongest of the six, and the one most worth demonstrating live, because
+it is the claim a reviewer is most likely to doubt. With `sample1.sql`
+active — a table this project had never seen — the rule engine handled all
+three of these itself, no LLM involved:
+
+| Question | `handledBy` | Generated |
+|---|---|---|
+| Show all user_details | `RULE_ENGINE` | `SELECT * FROM user_details;` |
+| Show only the username and status of user_details | `RULE_ENGINE` | `SELECT username, status FROM user_details;` |
+| Show user_details with gender M | `RULE_ENGINE` | `SELECT * FROM user_details WHERE gender = 'm';` |
+
+The templates are fixed; the schema they bind to is not.
+
+### 5 · LLM fallback — built · 6 · Cached queries — built
+
+Both verified in a single pair of calls, same input twice:
+
+| Call | `handledBy` | Confidence | Latency |
+|---|---|---|---|
+| 1st — "Which user_details have a status of active and were created last month" | `OLLAMA` | 0.65 | 0.75 s |
+| 2nd — identical input | `CACHE` | 1.00 | 0.07 s |
+
+The question contains a question word (`which`) and a date range (`last
+month`), so the rule engine declines it and the LLM answers; the repeat is
+served from `query_history`. Ollama has `qwen2.5-coder:7b` pulled.
+
+### Two defects the same verification run exposed
+
+Both matter specifically because review asked for these tiers to be *shown*,
+and both are reproducible on the demo path.
+
+**The LLM invented a column, and the cache then served it at confidence 1.00.**
+The fallback above returned:
+
+```sql
+SELECT * FROM user_details WHERE status = 'active'
+  AND created_at >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH);
+```
+
+`user_details` has no `created_at` — its columns are `user_id, username,
+first_name, last_name, gender, password, status`. This is the hallucination
+defect of §5 occurring on an *uploaded* schema, and the second call returned
+the same broken SQL labelled `CACHE` at **confidence 1.00**, the highest tier
+the system reports. Demoing the LLM and the cache with one question shows
+both tiers working and one wrong answer being promoted from 0.65 to 1.00.
+Pick the demo question deliberately.
+
+**The rule engine silently drops a grouping. — FIXED 2026-09-11.** `per
+<column>` is now bound like any other phrase: it becomes a real `GROUP BY`
+when the column resolves, and declines when it does not. "How many user_details
+are there per gender" returned `SELECT COUNT(*) FROM user_details;` at
+`RULE_ENGINE` confidence 0.95 — the `COUNT` template matched "how many" and
+`per gender` was discarded without a word. The engine declines `group by`
+as a phrase but does not recognise `per <column>` as asking for one, so
+instead of handing this to the LLM it answers a question that was not asked.
+Not the same as the multi-word-table defect in §5; a separate, newly observed
+case of the rule engine over-claiming.
+
+### Summary for review
+
+Built: schema upload with all rule layers following it, the three-tier
+routing (rule engine / cache / LLM) with the tier shown and auditable,
+optimisation DDL on screen, and — since 2026-09-10 — MySQL's `query_cost`
+alongside a plain-English verdict and a rows-examined/rows-returned/wasted-work
+breakdown on the Analysis screen. Simulated and clearly labelled as such: the
+query rewrite and its before/after numbers.
+
+Every figure the Analysis screen shows is an optimiser **estimate**. The
+analyzer runs `EXPLAIN` and never executes the query — a decision reaffirmed
+on 2026-09-10 when `EXPLAIN ANALYZE` was considered and declined (§8 item 3).

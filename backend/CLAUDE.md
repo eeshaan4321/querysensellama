@@ -40,6 +40,19 @@ filling that gap with a lightweight, explainable, rule-based-first system.
 
 - The rule-based engine (MySQL EXPLAIN analysis, JSQL Parser structural
   parsing, domain/resource profiles) handles the majority of queries.
+- **Since 2026-09-11 the generator binds against the ACTIVE schema rather
+  than a hardcoded word list, and builds single-hop joins.** The decline
+  decision is now "can every noun be bound to something real?", not "does
+  this sentence contain a scary word?" — which is what makes an uploaded
+  schema actually change what the engine will claim. A join's `ON` clause
+  is read from a declared foreign key, never inferred from a naming
+  convention, and the `RuleTrace` on `/api/query/generate` names the exact
+  edge so a reviewer can check it. Two foreign keys between the same pair
+  decline as ambiguous. Design and plan:
+  `docs/superpowers/specs/2026-09-10-schema-adaptive-rule-engine-design.md`
+  and the matching plan under `docs/superpowers/plans/`. Section 16.2's
+  six bail-out conditions describe the OLD gate and are superseded by
+  PROJECT.md §2.
 - A local LLM (`qwen2.5-coder:7b` on Ollama) is invoked ONLY when the rule
   engine declines a query — never on a query the rules can handle. It is
   the *only* place in the system that uses a model at all; analysis,
@@ -417,6 +430,25 @@ public class QueryAnalysisResult {
     private boolean usesFilesort;
     private boolean usesTemporaryTable;
     private String keyUsed;
+
+    // Selectivity of the table estimatedRows came from — NOT an average
+    // across the plan, since averaging percentages over tables of different
+    // sizes describes nothing. Added 2026-09-10 (Section 18).
+    private Double filtered;               // % of read rows surviving WHERE
+    private Long estimatedRowsReturned;    // rows x filtered/100
+
+    // MySQL's whole-plan cost estimate, from EXPLAIN FORMAT=JSON's
+    // query_block.cost_info.query_cost. UNITLESS — not milliseconds, not
+    // rows — and only meaningful compared against another plan for the SAME
+    // query. Null means "not reported", never "free": the tabular EXPLAIN
+    // that produces every other field here carries no cost at all.
+    // The one figure here that legitimately covers the whole query; rows are
+    // per-table and deliberately never summed (a JOIN nests loops).
+    private Double queryCost;
+
+    // The plain-English judgement rendered above the plan. Null for MongoDB
+    // and non-SELECT statements, which are not graded. Section 18.
+    private AnalysisVerdict verdict;
 
     // Simple rule-based (MongoDB only)
     private boolean hasUnindexedFilter;
@@ -1376,3 +1408,123 @@ two new `mysql/` scripts and this section, on top of a large body of
 pre-existing uncommitted work from earlier sessions (the Ollama migration,
 the multi-table EXPLAIN rewrite, the H2 profile). Anyone committing should
 separate those rather than sweeping them into one commit.
+
+---
+
+## 18. Claude Code Session Log — The Analysis Verdict (2026-09-10)
+
+The Analysis screen was reported as giving "no useful information for the
+layman. No metrics." Both halves were accurate and had separate causes. This
+section records what was added, and — more usefully for anyone changing it —
+the three judgement calls that keep it defensible.
+
+### What was wrong
+
+The screen opened on MySQL's own vocabulary (`Access type: ALL`,
+`Uses filesort: Yes`, `Joined on: —`) with nothing ranking those lines, and
+its single number — estimated rows — had no denominator, so it could not
+answer *is that bad?*. Separately, three figures `EXPLAIN` already reports
+were being discarded: `filtered` was never read by `EXPLAIN_ROW_MAPPER`,
+`possible_keys` was read and never rendered, and `query_cost` was reachable
+but unextracted.
+
+### What was added
+
+- **`dto/AnalysisVerdict.java`** — severity (`UNKNOWN`/`INFO`/`WARNING`/
+  `CRITICAL`, reusing `OptimizationSuggestion`'s scale rather than a second
+  one), label, headline, detail.
+- **`analysis/VerdictService.java`** — a nine-rule ladder, first match wins.
+  Computes no statistics of its own; it ranks and phrases what the analyzer
+  already found, so the headline can never contradict the metrics below it.
+- **`TableAnalysis.filtered`** plus derived `getEstimatedRowsReturned()` and
+  `getReadAmplification()`; **`QueryAnalysisResult.filtered`,
+  `estimatedRowsReturned`, `queryCost`, `verdict`** (Section 9).
+- **`MySqlJsonExplainParser.parseQueryCost`** and
+  **`MySqlExplainAnalyzer.readQueryCost`** — see the cost probe below.
+- Frontend: `VerdictBanner`, `PlanMetrics`, `lib/explainGlossary.js`.
+
+### Judgement call 1 — the cost probe does NOT flip the EXPLAIN format
+
+`querysense.explain.format` is an **either/or**: setting it to `JSON`
+replaces the tabular reader for every analysis in the app. The tabular reader
+is the one actually exercised against this project's database;
+`MySqlJsonExplainParser` is opt-in precisely because it is not. Swapping an
+unexercised reader in front of every user to obtain one number is a bad
+trade, and a subtly different plan (a join ordering, an inherited filesort
+flag) would pass silently.
+
+So the plan still comes from the tabular reader and the cost is asked for on
+the side — a **second, separate** `EXPLAIN FORMAT=JSON` issued only to read
+`query_block.cost_info.query_cost`. `EXPLAIN` does not execute the query, so
+the extra round trip is cheap. Every failure in the probe is swallowed and
+returns null, logged at `DEBUG` not `WARN`, because a null cost is an
+expected outcome rather than a fault — the caller already has a complete plan
+and must not lose it over a cost-format problem.
+
+⚠️ **`query_cost` arrives as a JSON *string*** (`"1264.35"`), not a number.
+`asDouble()` on a textual node returns `0.0` — a plan silently reported as
+free. It is parsed from text explicitly.
+
+### Judgement call 2 — a full table scan is NOT automatically a fault
+
+This is the easiest thing for a reviewer to break and the easiest behaviour
+to lose to a well-meaning edit. Two rules exist solely to prevent it:
+
+- **Rule 7** — a big scan that *returns* most of what it reads
+  (`SELECT * FROM customers`) grades `INFO`, not a finding. An index cannot
+  improve a query that genuinely needs the whole table.
+- **Rule 8** — any scan below `querysense.verdict.large-table-rows`
+  (default **1000**, matching the existing `ECOMMERCE` threshold) is normal.
+  Reading every row of an 80-row table costs nothing, and MySQL will choose
+  that over an index that exists.
+
+Rule 7 is only possible because `filtered` is now read. That is the practical
+argument for having added the column, beyond the metric tile it feeds.
+
+`UNKNOWN` is likewise not a grade: when `explainFailed` is set, the verdict
+says so and never falls through to an `INFO` rule — the same distinction
+`explainFailed` was added for in Section 15.
+
+### Judgement call 3 — the wording rule is enforced by tests
+
+`VerdictService` inherits `MySqlExplainAnalyzer.addWarningsFor`'s rule:
+`EXPLAIN` reports what MySQL *chose*, not why it was wrong. No sentence
+asserts that an index would help — recommendations belong to the Schema
+Advisor, which has the schema in front of it.
+
+Two of the 18 `VerdictServiceTest` cases are regression guards on the
+**writing** rather than the logic: no headline may contain "add an index" /
+"create index" / "you should", and none may leak `access type` / `filesort` /
+`eq_ref` / `possible_keys`. This mirrors
+`SchemaAdvisorServiceImplTest.jargonFreeSummaries` and exists for the same
+reason recorded there — copy drifts back toward the vocabulary of the code
+around it, and review alone does not catch it.
+
+### Where the plain-English glosses live, and why
+
+The **judgement** is data-dependent and computed server-side. The
+**explanations** of MySQL's vocabulary ("ALL — reads every row in the table,
+one at a time") are static reference text: the same sentence on every query
+forever. They live in the frontend's `lib/explainGlossary.js`, because
+shipping them over the wire on every `/analyze` call would be sending a
+dictionary to look up one word. Keep that split if either side grows.
+
+### `seed-rows` changed 100 → 12000
+
+Reversible in one word, and not cosmetic. At 100, every table sits below the
+verdict's large-table threshold *and* below all four domain/resource
+thresholds, so a fresh install was configured to answer "reads all 100 rows,
+which is normal at this size" for effectively every query — correct, and
+useless as a demonstration. The paragraphs recording why 100 was originally
+chosen are kept in `application.properties` rather than deleted.
+
+### Verification status
+
+Full `mvnw test` suite green, including 18 new `VerdictServiceTest` cases
+covering every rung of the ladder, the configurable threshold, the near-zero
+`filtered` cap and join table selection. Frontend `vite build` clean.
+
+**Not verified: anything against the running app.** No query was analyzed end
+to end, the browser has not rendered the banner or the tiles, and no live
+MySQL `EXPLAIN` has exercised the `filtered` column or the cost probe. The
+evidence is unit tests and a production build, nothing more.
