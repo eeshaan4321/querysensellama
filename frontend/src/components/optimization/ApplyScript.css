@@ -1,0 +1,24 @@
+.apply-script {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.apply-script__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.apply-script__title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--ink-secondary);
+}
+
+.apply-script__counts {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--ink-muted);
+}
