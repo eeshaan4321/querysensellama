@@ -1,6 +1,7 @@
 package com.querysense.backend.querybuilder;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 /** A question resolved against the active schema, ready to be written as SQL. */
 public record QueryIntent(
@@ -28,6 +29,12 @@ public record QueryIntent(
     }
 
     public record Predicate(String lhs, String operator, String literal, boolean quoted) {
+        public static Predicate in(String lhs, List<String> values) {
+            return new Predicate(lhs, "IN",
+                    values.stream().map(v -> "'" + v + "'").collect(Collectors.joining(", ", "(", ")")),
+                    false);
+        }
+
         public String render() {
             return lhs + " " + operator + " " + (quoted ? "'" + literal + "'" : literal);
         }

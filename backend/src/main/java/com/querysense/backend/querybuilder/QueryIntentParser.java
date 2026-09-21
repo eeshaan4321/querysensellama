@@ -39,7 +39,7 @@ public class QueryIntentParser {
             "\\b(?:per|for each|grouped by|group by)\\s+([a-z_ ]+?)\\b");
 
     private static final Pattern PREPOSITION_VALUE = Pattern.compile(
-            "\\b(?:from|in|at|located in|living in|based in|residing in)\\s+([a-z]+)\\b");
+            "\\b(?:from|in|at|located in|living in|based in|residing in)\\s+([a-z]+(?:\\s+and\\s+[a-z]+)*)\\b");
 
     private static final Pattern LIMIT = Pattern.compile("\\b(?:top|first|limit)\\s+(\\d+)\\b");
 
@@ -283,37 +283,65 @@ public class QueryIntentParser {
 
         Matcher preposition = PREPOSITION_VALUE.matcher(text);
         while (preposition.find()) {
-            String candidate = preposition.group(1);
-            if (VALUE_STOPWORDS.contains(candidate)
-                    || binder.tableNamed(candidate).isPresent()
-                    || isColumnOfEither(candidate, subject, related)) {
+            List<String> values = new ArrayList<>();
+            String valueColumn = null;
+
+            for (String candidate : preposition.group(1).split("\s+and\s+")) {
+                if (VALUE_STOPWORDS.contains(candidate)
+                        || binder.tableNamed(candidate).isPresent()
+                        || isColumnOfEither(candidate, subject, related)) {
+                    break;
+                }
+                Optional<String> column = columnHolding(subject, candidate);
+                if (column.isEmpty()) {
+                    if (!values.isEmpty()) {
+                        break;
+                    }
+                    return RuleBuildResult.declined(
+                            "No column of " + subject.name() + " contains the value \"" + candidate
+                                    + "\", so this engine cannot tell which field the question means.",
+                            bindings);
+                }
+                if (valueColumn != null && !valueColumn.equals(column.get())) {
+                    return RuleBuildResult.declined(
+                            "\"" + values.get(0) + "\" and \"" + candidate + "\" are values of different "
+                                    + "columns (" + valueColumn + " and " + column.get() + "), so this "
+                                    + "engine cannot tell which one the question filters on.",
+                            bindings);
+                }
+                valueColumn = column.get();
+                values.add(candidate);
+            }
+
+            if (values.isEmpty()) {
                 continue;
             }
-            Optional<String> column = columnHolding(subject, candidate);
-            if (column.isEmpty()) {
-                return RuleBuildResult.declined(
-                        "No column of " + subject.name() + " contains the value \"" + candidate
-                                + "\", so this engine cannot tell which field the question means.",
-                        bindings);
-            }
-            String lhs = joined ? subject.name() + "." + column.get() : column.get();
-            where.add(new QueryIntent.Predicate(lhs, "=", candidate, true));
-            bindings.add(new RuleTrace.Binding(candidate, "FILTER",
-                    subject.name() + "." + column.get()));
+
+            String lhs = joined ? subject.name() + "." + valueColumn : valueColumn;
+            where.add(values.size() == 1
+                    ? new QueryIntent.Predicate(lhs, "=", values.get(0), true)
+                    : QueryIntent.Predicate.in(lhs, values));
+            bindings.add(new RuleTrace.Binding(String.join(" and ", values), "FILTER",
+                    subject.name() + "." + valueColumn));
             break;
         }
 
         Matcher with = WITH_VALUE.matcher(text);
-        if (where.isEmpty() && with.find()) {
+        if (where.isEmpty() && with.find() && !VALUE_STOPWORDS.contains(with.group(1))
+                && !NON_COLUMN_WORDS.contains(with.group(1))) {
             Optional<String> column = binder.bindColumn(subject, with.group(1));
-            if (column.isPresent()) {
-                String value = with.group(2);
-                boolean quoted = numberFrom(value).isEmpty();
-                String lhs = joined ? subject.name() + "." + column.get() : column.get();
-                where.add(new QueryIntent.Predicate(lhs, "=", value, quoted));
-                bindings.add(new RuleTrace.Binding(with.group(1) + " " + value, "FILTER",
-                        subject.name() + "." + column.get()));
+            if (column.isEmpty()) {
+                return RuleBuildResult.declined(
+                        "The question filters on \"" + with.group(1) + "\", which is not a column of "
+                                + subject.name() + ".",
+                        bindings);
             }
+            String value = with.group(2);
+            boolean quoted = numberFrom(value).isEmpty();
+            String lhs = joined ? subject.name() + "." + column.get() : column.get();
+            where.add(new QueryIntent.Predicate(lhs, "=", value, quoted));
+            bindings.add(new RuleTrace.Binding(with.group(1) + " " + value, "FILTER",
+                    subject.name() + "." + column.get()));
         }
 
         if (groupColumn != null) {

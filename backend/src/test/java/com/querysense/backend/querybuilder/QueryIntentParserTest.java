@@ -22,6 +22,7 @@ class QueryIntentParserTest {
 
     private QueryIntentParser parser;
     private ActiveSchemaProvider activeSchema;
+    private SchemaMetadataService metadata;
 
     private static SchemaSnapshot twoNameSchema() {
         return new SchemaSnapshot(
@@ -33,7 +34,7 @@ class QueryIntentParserTest {
 
     @BeforeEach
     void setUp() {
-        SchemaMetadataService metadata = mock(SchemaMetadataService.class);
+        metadata = mock(SchemaMetadataService.class);
         when(metadata.getDistinctValues(anyString(), anyString())).thenReturn(List.of());
         when(metadata.getDistinctValues(eq("customers"), eq("city")))
                 .thenReturn(List.of("Mumbai", "Pune", "Delhi"));
@@ -176,5 +177,70 @@ class QueryIntentParserTest {
 
         assertThat(result.built()).isTrue();
         assertThat(result.sql()).isEqualTo("SELECT * FROM products WHERE price > 100;");
+    }
+
+    @Test
+    @DisplayName("two cities joined by \"and\" both survive, as an IN list")
+    void twoValuesBecomeAnInList() {
+        RuleBuildResult result = parser.parse("customers in mumbai and pune");
+
+        assertThat(result.built()).isTrue();
+        assertThat(result.sql()).contains("WHERE city IN ('mumbai', 'pune')");
+    }
+
+    @Test
+    @DisplayName("a single value still renders as equality, not a one-item IN")
+    void oneValueStaysEquality() {
+        RuleBuildResult result = parser.parse("customers in mumbai");
+
+        assertThat(result.built()).isTrue();
+        assertThat(result.sql()).contains("WHERE city = 'mumbai'");
+    }
+
+    @Test
+    @DisplayName("values belonging to different columns are declined rather than guessed")
+    void valuesFromDifferentColumnsDecline() {
+        when(metadata.getDistinctValues(eq("customers"), eq("name"))).thenReturn(List.of("ravi"));
+
+        RuleBuildResult result = parser.parse("customers in mumbai and ravi");
+
+        assertThat(result.built()).isFalse();
+        assertThat(result.trace().declineReason()).contains("different columns");
+    }
+
+    @Test
+    @DisplayName("a word after \"and\" that is not a value ends the list instead of declining")
+    void trailingNonValueEndsTheList() {
+        RuleBuildResult result = parser.parse("customers in mumbai and ordered by name");
+
+        assertThat(result.built()).isTrue();
+        assertThat(result.sql()).contains("WHERE city = 'mumbai'");
+    }
+
+    @Test
+    @DisplayName("\"with <column> <value>\" naming an unknown column declines instead of dropping the filter")
+    void unknownWithColumnDeclines() {
+        RuleBuildResult result = parser.parse("customers with gender female");
+
+        assertThat(result.built()).isFalse();
+        assertThat(result.trace().declineReason()).contains("gender");
+    }
+
+    @Test
+    @DisplayName("\"with more than\" is comparison phrasing, not a filter on a column called more")
+    void withMoreThanIsNotTreatedAsAColumn() {
+        RuleBuildResult result = parser.parse("customers with more than three orders");
+
+        assertThat(result.built()).isTrue();
+        assertThat(result.sql()).contains("HAVING");
+    }
+
+    @Test
+    @DisplayName("a real \"with <column> <value>\" filter still binds")
+    void withKnownColumnStillBinds() {
+        RuleBuildResult result = parser.parse("customers with city mumbai");
+
+        assertThat(result.built()).isTrue();
+        assertThat(result.sql()).contains("WHERE city = 'mumbai'");
     }
 }
