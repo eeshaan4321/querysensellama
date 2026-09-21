@@ -21,37 +21,7 @@ import java.util.Random;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-/**
- * SchemaSeeder
- *
- * WHY SEEDING IS PART OF THE UPLOAD AND NOT AN OPTIONAL EXTRA:
- * PROJECT.md records the measurement: on an empty table of identical shape
- * MySQL reports rows=1, filtered=100.00, where the populated table reports
- * rows=15, filtered=10.00. Same access path, useless magnitude. An uploaded
- * schema with no rows would let EXPLAIN run and let every module downstream
- * of it produce output that looks fine and means nothing — the worst
- * failure shape this project has, because nothing on screen would say so.
- * Creating the tables is half the feature; filling them is the other half.
- *
- * WHY 500 ROWS BY DEFAULT AND NOT 25:
- * The built-in demo tables hold 5-49 rows, and at that scale every domain
- * suggestion ends with "the estimated row count is low, so the performance
- * impact is likely minor" — the engine can identify a problem but never
- * show one costing anything. At 500 an unindexed scan has a magnitude worth
- * reporting.
- *
- * WHY TOPOLOGICAL ORDER:
- * Foreign keys are real constraints in the provisioned schema, so a child
- * row inserted before its parent is rejected outright. Parents first.
- *
- * WHY A CYCLE IS TOLERATED RATHER THAN REJECTED:
- * employees.manager_id -> employees.id is an ordinary, sensible schema. The
- * self-reference is seeded NULL on the way in and pointed at an earlier row
- * afterwards. A mutual cycle between two tables cannot be resolved that
- * way, so those tables are appended in declaration order and MySQL is left
- * to accept what it can — one sparsely-filled table beats refusing the
- * user's whole schema over a shape their database already runs.
- */
+/** Fills uploaded tables with generated rows. */
 @Component
 public class SchemaSeeder {
 
@@ -65,7 +35,7 @@ public class SchemaSeeder {
 
     public SchemaSeeder(JdbcTemplate jdbcTemplate,
                         @Value("${querysense.schema.upload.catalog:querysense_uploads}") String uploadCatalog,
-                        @Value("${querysense.schema.upload.seed-rows:500}") int seedRows,
+                        @Value("${querysense.schema.upload.seed-rows:100}") int seedRows,
                         @Value("${querysense.schema.upload.seed:20260910}") long seed) {
         this.jdbcTemplate = jdbcTemplate;
         this.uploadCatalog = uploadCatalog;
@@ -73,26 +43,48 @@ public class SchemaSeeder {
         this.seed = seed;
     }
 
-    /** @return rows actually inserted, per table. */
-    public Map<String, Integer> seed(ParsedSchema schema) {
+    public record SeedReport(Map<String, Integer> rowCounts, List<String> warnings) {
+    }
+
+    public SeedReport seed(ParsedSchema schema) {
         Map<String, Integer> rowCounts = new LinkedHashMap<>();
+        List<String> warnings = new ArrayList<>();
         List<ParsedTable> ordered = orderTables(schema);
 
         for (ParsedTable table : ordered) {
-            rowCounts.put(table.name(), insertRows(table));
+            int target = (int) seedableRowsFor(table);
+            TableSeedResult result = insertRows(table, target);
+            rowCounts.put(table.name(), result.inserted());
+
+            if (target < seedRows) {
+                warnings.add("Table '" + table.name() + "' was seeded to " + target
+                        + " rows rather than " + seedRows
+                        + ", because a key or unique column is too narrow to hold more.");
+            }
+            if (result.inserted() < target) {
+                warnings.add("Seeded only " + result.inserted() + " of " + target
+                        + " rows into '" + table.name() + "'"
+                        + (result.failure() == null ? "." : " -- " + result.failure())
+                        + " Row estimates for this table describe what was actually inserted.");
+            }
         }
         ordered.forEach(this::pointSelfReferencesAtEarlierRows);
         ordered.forEach(this::analyse);
 
-        return rowCounts;
+        return new SeedReport(rowCounts, warnings);
     }
 
-    /**
-     * Kahn's algorithm over the foreign-key graph. Self-references are
-     * excluded from the edge set — a table does not have to exist before
-     * itself — and anything still unresolved after the queue drains (a
-     * mutual cycle) is appended in declaration order rather than dropped.
-     */
+    long seedableRowsFor(ParsedTable table) {
+        return table.columns().stream()
+                .filter(c -> c.primaryKey() || c.unique() || c.autoIncrement())
+                .mapToLong(c -> ValueGenerator.maxSeedableRows(c, seedRows))
+                .min()
+                .orElse(seedRows);
+    }
+
+    private record TableSeedResult(int inserted, String failure) {
+    }
+
     List<ParsedTable> orderTables(ParsedSchema schema) {
         Map<String, ParsedTable> byName = schema.tables().stream()
                 .collect(Collectors.toMap(
@@ -139,74 +131,73 @@ public class SchemaSeeder {
         return ordered;
     }
 
-    private int insertRows(ParsedTable table) {
+    private TableSeedResult insertRows(ParsedTable table, int targetRows) {
         List<ParsedColumn> columns = table.columns();
         String columnList = columns.stream().map(c -> "`" + c.name() + "`").collect(Collectors.joining(", "));
         String placeholders = columns.stream().map(c -> "?").collect(Collectors.joining(", "));
         String sql = "INSERT INTO `" + uploadCatalog + "`.`" + table.name() + "` ("
                 + columnList + ") VALUES (" + placeholders + ")";
 
-        // Per-table seeds, so adding a table to an upload does not shift the
-        // data generated for every table after it.
         ValueGenerator generator = new ValueGenerator(seed + table.name().hashCode());
         Random fkPicker = new Random(seed + table.name().hashCode() + 1);
 
         List<Object[]> batch = new ArrayList<>(BATCH_SIZE);
         int inserted = 0;
+        String[] firstFailure = new String[1];
 
-        for (int row = 0; row < seedRows; row++) {
+        for (int row = 0; row < targetRows; row++) {
             Object[] values = new Object[columns.size()];
             for (int i = 0; i < columns.size(); i++) {
-                values[i] = valueForColumn(table, columns.get(i), generator, fkPicker, row);
+                values[i] = valueForColumn(table, columns.get(i), generator, fkPicker, row, targetRows);
             }
             batch.add(values);
 
-            if (batch.size() == BATCH_SIZE || row == seedRows - 1) {
-                inserted += flush(sql, batch, table.name());
+            if (batch.size() == BATCH_SIZE || row == targetRows - 1) {
+                inserted += flush(sql, batch, table.name(), firstFailure);
                 batch.clear();
             }
         }
-        return inserted;
+        return new TableSeedResult(inserted, firstFailure[0]);
     }
 
-    /**
-     * A foreign key column must hold an id that actually exists in the
-     * parent. Parents are seeded first, and ValueGenerator gives every key
-     * column a dense sequential 1..seedRows range, so picking uniformly from
-     * that range is both valid and cheap — no read back from the database is
-     * needed at all.
-     */
     private Object valueForColumn(ParsedTable table, ParsedColumn column,
-                                  ValueGenerator generator, Random fkPicker, int row) {
+                                  ValueGenerator generator, Random fkPicker, int row,
+                                  int targetRows) {
         for (KnownSchema.ForeignKey fk : table.foreignKeys()) {
             if (!fk.fromColumn().equalsIgnoreCase(column.name())) {
                 continue;
             }
-            // Self-reference: NULL now, repaired once the table is full.
             if (fk.toTable().equalsIgnoreCase(table.name())) {
                 return null;
             }
-            return 1 + fkPicker.nextInt(seedRows);
+            long ceiling = Math.min(targetRows, ValueGenerator.maxFor(column));
+            return 1 + fkPicker.nextInt((int) Math.max(1, ceiling));
         }
-        return generator.valueFor(column, row, seedRows);
+        return generator.valueFor(column, row, targetRows);
     }
 
-    private int flush(String sql, List<Object[]> batch, String tableName) {
+    private int flush(String sql, List<Object[]> batch, String tableName, String[] firstFailure) {
         try {
             jdbcTemplate.batchUpdate(sql, List.copyOf(batch));
             return batch.size();
         } catch (DataAccessException e) {
             log.warn("Could not seed a batch into '{}': {}", tableName, e.getMessage());
+            if (firstFailure[0] == null) {
+                firstFailure[0] = rootReason(e);
+            }
             return 0;
         }
     }
 
-    /**
-     * The second pass for self-references. Row N is pointed at a row before
-     * it, so the graph stays acyclic and no row is its own parent — which
-     * MySQL would accept but which makes a nonsense of any hierarchy query
-     * run against the result.
-     */
+    private String rootReason(Throwable e) {
+        Throwable cause = e;
+        while (cause.getCause() != null && cause.getCause() != cause) {
+            cause = cause.getCause();
+        }
+        String message = cause.getMessage();
+        return message == null ? e.getMessage() : message.trim();
+    }
+
     private void pointSelfReferencesAtEarlierRows(ParsedTable table) {
         for (KnownSchema.ForeignKey fk : table.foreignKeys()) {
             if (!fk.toTable().equalsIgnoreCase(table.name())) {
@@ -224,12 +215,6 @@ public class SchemaSeeder {
         }
     }
 
-    /**
-     * Without this, InnoDB's cardinality statistics can still reflect the
-     * empty table, and EXPLAIN's `rows` estimate is then noise — which is
-     * the exact failure this whole class exists to prevent. Seeding without
-     * analysing would look like it worked and wouldn't have.
-     */
     private void analyse(ParsedTable table) {
         try {
             jdbcTemplate.execute("ANALYZE TABLE `" + uploadCatalog + "`.`" + table.name() + "`");

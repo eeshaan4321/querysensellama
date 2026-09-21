@@ -9,7 +9,7 @@ import { useWorkbench } from '../context/WorkbenchContext';
 
 export function WorkbenchPage() {
   const {
-    domain, setDomain, resourceLevel, setResourceLevel, targetDb, setTargetDb,
+    resourceLevel, setResourceLevel, targetDb, setTargetDb,
     nlInput, setNlInput,
     build, setBuild, setAnalysis, setSuggestions, setSchemaAdvice,
   } = useWorkbench();
@@ -23,15 +23,10 @@ export function WorkbenchPage() {
     try {
       const response = await buildQuery({ naturalLanguageQuery, targetDb });
       setBuild({ naturalLanguageQuery, ...response });
-      // A new query invalidates any analysis/suggestions/schema advice from
-      // a previous one — without this, the Analysis page would keep showing
-      // stale results for the query you just replaced.
       setAnalysis(null);
       setSuggestions(null);
       setSchemaAdvice(null);
       report(response.handledBy, response.confidence);
-      // No-op in real mode — the backend saves history automatically as
-      // part of /generate. Only mock mode actually stores this.
       postHistory({
         userInput: naturalLanguageQuery,
         generatedQuery: response.generatedQuery,
@@ -53,8 +48,6 @@ export function WorkbenchPage() {
       />
 
       <QueryForm
-        domain={domain}
-        setDomain={setDomain}
         resourceLevel={resourceLevel}
         setResourceLevel={setResourceLevel}
         targetDb={targetDb}

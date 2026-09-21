@@ -91,11 +91,10 @@ src/
   styles/       design tokens (tokens.css) and global reset (base.css)
 ```
 
-Routes: Workbench (`/`), Analysis, Optimization, Schema advisor, History, About.
+Routes: Workbench (`/`), Analysis, Optimization, Schema advisor, History.
 
 `contracts.js` is the only file that knows a backend field name — it maps
-`targetDb: 'SQL'` → `databaseType: "MySQL"`, `domain` → `domainProfile`, and so
-on. Components only ever see the frontend's own vocabulary.
+`targetDb: 'SQL'` → `databaseType: "MySQL"`, and so on. Components only ever see the frontend's own vocabulary.
 
 ## Design system
 

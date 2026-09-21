@@ -1,7 +1,6 @@
 import { isLlmSource } from '../../api/contracts';
 import './ConfidenceMeter.css';
 
-/** Confidence meter tinted by which engine produced the number — reinforces identity, not just magnitude. */
 export function ConfidenceMeter({ value, handledBy }) {
   const pct = Math.round(value * 100);
   const tone = isLlmSource(handledBy) ? 'llm' : 'rule';

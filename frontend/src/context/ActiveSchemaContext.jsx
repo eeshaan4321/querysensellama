@@ -3,21 +3,6 @@ import { getActiveSchema, resetSchema } from '../api';
 
 const ActiveSchemaContext = createContext(null);
 
-/**
- * Which schema the whole app is currently working against.
- *
- * WHY THIS IS GLOBAL AND FETCHED AT STARTUP:
- * The active schema decides what the rule engine recognises, what the LLM
- * prompt is grounded on, and which database EXPLAIN describes. A user who
- * cannot tell which schema is live cannot trust any screen — so it is
- * fetched once here and shown permanently in the status bar, exactly like
- * the engine indicator beside it.
- *
- * WHY A FAILED FETCH IS NOT FATAL:
- * A backend that is down should not blank the app. The schema stays null,
- * the status bar says "Schema unknown", and every other screen fails
- * per-request the way it already does.
- */
 export function ActiveSchemaProvider({ children }) {
   const [schema, setSchema] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -35,12 +20,6 @@ export function ActiveSchemaProvider({ children }) {
     }
   }, []);
 
-  // The mount fetch is written out rather than calling refresh(), for two
-  // reasons: refresh() would set state synchronously inside the effect
-  // (loading already starts true, so that call is redundant anyway), and a
-  // response arriving after unmount would otherwise set state on a dead
-  // component. State here is only ever touched from an async callback, and
-  // only while still mounted.
   useEffect(() => {
     let cancelled = false;
 

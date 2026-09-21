@@ -10,14 +10,6 @@ const PLACEHOLDER = `CREATE TABLE clients (
   city VARCHAR(60)
 );`;
 
-/**
- * Both ways in: choose a .sql file, or paste DDL.
- *
- * WHY BOTH: a file picker is what someone with a mysqldump wants; a textarea
- * is what someone demoing wants, and pasting four CREATE TABLE statements
- * should not require saving a file first. They hit the same endpoint and the
- * same pipeline.
- */
 export function SchemaSourcePanel() {
   const { schema, applySchema, reset } = useActiveSchema();
   const [ddl, setDdl] = useState('');
@@ -41,10 +33,6 @@ export function SchemaSourcePanel() {
 
   return (
     <div className="schema-source">
-      {/*
-        Uploading drops the previous upload's tables. Said before the user
-        commits to it, not after.
-      */}
       <p className="schema-source__warning">
         {replacesAnUpload
           ? `Uploading replaces “${schema.label}” — that upload's tables are dropped. The built-in demo schema is never touched.`
@@ -60,7 +48,6 @@ export function SchemaSourcePanel() {
           onChange={(event) => {
             const file = event.target.files?.[0];
             if (file) run(() => uploadSchemaFile(file));
-            // Cleared so choosing the same file twice fires onChange again.
             event.target.value = '';
           }}
         />

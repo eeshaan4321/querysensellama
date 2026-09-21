@@ -1,14 +1,5 @@
 import './SchemaTablePreview.css';
 
-/**
- * What the backend actually provisioned — table by table, with the row count
- * it seeded.
- *
- * WHY THIS READS THE RESPONSE RATHER THAN ECHOING THE UPLOADED FILE:
- * If the parser skipped a table, the user finds out here, immediately, in a
- * screen whose whole job is showing their schema — instead of later, as a
- * query that fails for no visible reason.
- */
 export function SchemaTablePreview({ schema }) {
   if (!schema || !schema.tables.length) return null;
 

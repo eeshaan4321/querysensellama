@@ -8,16 +8,10 @@ import './EngineStatusBar.css';
 const COPY = {
   RULE_ENGINE: 'Rule engine handled the last query',
   OLLAMA: 'LLM fallback handled the last query',
-  GEMINI: 'LLM fallback handled the last query', // legacy — see contracts.js
+  GEMINI: 'LLM fallback handled the last query',
   CACHE: 'Served from cache',
 };
 
-/**
- * Persistent header that makes "which path handled this" visible everywhere,
- * not just on the Workbench. The tone (teal/amber) is the same mode-shift
- * signal used on the Workbench result panel, so switching pages never loses
- * that context.
- */
 export function EngineStatusBar() {
   const { status } = useEngineStatus();
   const { schema } = useActiveSchema();
@@ -46,13 +40,6 @@ export function EngineStatusBar() {
         </motion.div>
       </AnimatePresence>
 
-      {/*
-        Which schema is live is the same class of fact as which engine
-        answered: provenance the user needs in order to trust anything on
-        screen. An uploaded schema says "generated data" here because its
-        row estimates are real EXPLAIN output over synthetic rows, and no
-        screen should let that pass for a measurement.
-      */}
       <div
         className={`engine-status-bar__schema engine-status-bar__schema--${uploaded ? 'uploaded' : 'builtin'}`}
         title={

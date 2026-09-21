@@ -18,23 +18,7 @@ import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * DdlSchemaParser
- *
- * Turns uploaded DDL into the structural model the rest of the upload
- * pipeline works from. Reads CREATE TABLE and nothing else.
- *
- * WHY UNPARSEABLE STATEMENTS BECOME WARNINGS RATHER THAN ERRORS:
- * A real schema dump carries plenty this parser has no interest in, and
- * some of it JSqlParser cannot read. Failing the upload because statement
- * 41 of 300 was a LOCK TABLES would make the feature useless on exactly the
- * files people actually have. What was skipped is reported.
- *
- * WHY NOTHING HERE TOUCHES THE DATABASE:
- * Parsing is separated from provisioning so all of it is unit-testable
- * without MySQL, and — more importantly — so validation gets to run on the
- * parsed model BEFORE anything is executed.
- */
+/** Parses CREATE TABLE statements from uploaded DDL. */
 @Component
 public class DdlSchemaParser {
 
@@ -63,12 +47,6 @@ public class DdlSchemaParser {
         return new ParsedSchema(List.copyOf(tables), List.copyOf(warnings));
     }
 
-    /**
-     * Only statements that announce themselves as CREATE TABLE are handed to
-     * JSqlParser. Without this, every INSERT and SET in a dump would be
-     * parsed and then discarded — and any of them that failed to parse would
-     * produce a warning about a statement the user never cared about.
-     */
     private boolean startsCreateTable(String statement) {
         String head = statement.stripLeading().toUpperCase(Locale.ROOT).replaceAll("\\s+", " ");
         return head.startsWith("CREATE TABLE");
@@ -108,24 +86,6 @@ public class DdlSchemaParser {
     private static final Pattern TYPE_WITH_ARGS =
             Pattern.compile("^\\s*([A-Za-z_][A-Za-z_ ]*?)\\s*\\((.*)\\)\\s*$", Pattern.DOTALL);
 
-    /**
-     * WHY THIS READS THE TYPE TWO DIFFERENT WAYS:
-     * JSqlParser 5.3 is not consistent about where a column's type arguments
-     * live, and this was verified against the library rather than assumed:
-     *
-     *   ENUM('NEW','PAID')  -> getDataType()="ENUM",
-     *                          getArgumentsStringList()=['NEW','PAID']
-     *   VARCHAR(120)        -> getDataType()="VARCHAR (120)",
-     *                          getArgumentsStringList()=null
-     *   DECIMAL(10,2)       -> getDataType()="DECIMAL (10, 2)",  args=null
-     *
-     * Trusting only the accessor loses every length and scale; trusting only
-     * the type string loses every ENUM's values. Both matter downstream —
-     * SchemaSeeder sizes VARCHARs, rounds DECIMALs to their declared scale,
-     * and can only pick a legal ENUM value if it knows the members. So the
-     * accessor wins when it has something, and the type string is parsed
-     * otherwise.
-     */
     private List<String> typeArgsOf(ColumnDefinition definition) {
         List<String> declared = definition.getColDataType().getArgumentsStringList();
         if (declared != null && !declared.isEmpty()) {
@@ -150,11 +110,6 @@ public class DdlSchemaParser {
         return m.matches() ? splitArgs(m.group(2)) : List.of();
     }
 
-    /**
-     * Splits on commas that are not inside a quoted literal. ENUM values are
-     * the reason: ENUM('A,B','C') has two members, not three, and a naive
-     * split would invent a third value the column can never hold.
-     */
     private List<String> splitArgs(String args) {
         List<String> out = new ArrayList<>();
         StringBuilder current = new StringBuilder();
@@ -188,13 +143,6 @@ public class DdlSchemaParser {
         }
     }
 
-    /**
-     * `PRIMARY KEY (id)` written as a table-level constraint does not appear
-     * in the column's own spec list, so a column declared that way would
-     * look non-primary — and the seeder would then generate random values
-     * for it instead of unique sequential ones. This walks the table's
-     * indexes and back-fills the flag.
-     */
     private void markPrimaryKeyColumns(CreateTable createTable, List<ParsedColumn> columns) {
         if (createTable.getIndexes() == null) {
             return;
@@ -239,7 +187,6 @@ public class DdlSchemaParser {
         return keys;
     }
 
-    /** Handles {@code customer_id INT REFERENCES customers(id)}. */
     private Optional<KnownSchema.ForeignKey> inlineForeignKey(
             String tableName, String columnName, List<String> specs) {
         for (int i = 0; i < specs.size(); i++) {
@@ -265,7 +212,6 @@ public class DdlSchemaParser {
         return Optional.empty();
     }
 
-    /** Strips backticks, double quotes and any schema qualifier. */
     private String unquote(String identifier) {
         if (identifier == null) {
             return "";

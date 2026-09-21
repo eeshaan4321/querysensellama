@@ -1,4 +1,3 @@
-/** Small LCS-based line diff — sufficient for the short query strings this UI compares. */
 export function diffLines(before, after) {
   const a = before.split('\n');
   const b = after.split('\n');

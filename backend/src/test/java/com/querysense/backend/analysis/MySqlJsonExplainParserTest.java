@@ -10,20 +10,6 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-/**
- * MySqlJsonExplainParserTest
- *
- * WHY THESE TESTS EXIST:
- * The JSON reader has to produce TableAnalysis objects indistinguishable
- * from the tabular reader's, or enabling the format would quietly change
- * what every downstream module sees. The interesting case is the one the
- * tabular format cannot express at all: in JSON, `using_filesort` and
- * `using_temporary_table` sit on the *operation* that owns them, not on
- * the table row, so they have to be inherited downwards. A flat field read
- * would silently drop both.
- *
- * The JSON documents below are the shape MySQL 8 actually emits.
- */
 class MySqlJsonExplainParserTest {
 
     private final MySqlJsonExplainParser parser = new MySqlJsonExplainParser(new ObjectMapper());
@@ -87,8 +73,6 @@ class MySqlJsonExplainParserTest {
     void wrapperOperationFlagsAreInherited() {
         List<TableAnalysis> tables = parser.parse(joinWithGroupingJson());
 
-        // Neither table node carries these flags itself — they sit on
-        // grouping_operation. A flat read would report both as false.
         assertThat(tables).allSatisfy(table -> {
             assertThat(table.isUsesFilesort()).isTrue();
             assertThat(table.isUsesTemporaryTable()).isTrue();

@@ -9,41 +9,11 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * ResourceConsciousService
- *
- * Unlike the Domain-Sensitive Optimization Module, this is a single class
- * rather than one strategy implementation per ResourceLevel — the logic is
- * threshold-based scaling, not fundamentally different rule sets, which
- * matches the capstone's stated design goal of keeping resource-awareness
- * simple and rule-driven rather than a black-box cost model (see "How Good
- * Are Learned Cost Models, Really?" in the literature review).
- *
- * Two responsibilities, used independently by the orchestration layer:
- *
- * 1. evaluate(...) — produces its OWN suggestions, specifically about
- *    memory/resource pressure (e.g. a filesort that will spill to disk
- *    under low available memory), grounded in the Memory-Aware Query
- *    Optimization paper cited in the literature review.
- *
- * 2. adjustSeverity(...) — re-scales the severity of suggestions the
- *    Domain-Sensitive Optimization Module already produced, so the same
- *    domain finding reads as CRITICAL under LOW resources but only INFO
- *    under HIGH resources.
- *
- * QueryGenerationServiceImpl decides how to combine these two outputs —
- * this class doesn't know about DomainOptimizationService at all.
- */
+/** Resource-level suggestions and severity adjustment. */
 @Service
 public class ResourceConsciousService {
 
-    // Above this row count, a filesort/temp-table/full-scan starts to be a
-    // real memory concern rather than a theoretical one.
     private static final long ROW_COUNT_MEMORY_CONCERN_THRESHOLD = 5_000L;
-
-    // ------------------------------------------------------------------
-    // 1. Independent resource-specific suggestions
-    // ------------------------------------------------------------------
 
     public List<OptimizationSuggestion> evaluate(ResourceLevel resourceLevel, QueryAnalysisResult result) {
         if (result == null) {
@@ -67,9 +37,6 @@ public class ResourceConsciousService {
         boolean rowsAreSignificant = result.getEstimatedRows() != null
                 && result.getEstimatedRows() > ROW_COUNT_MEMORY_CONCERN_THRESHOLD;
 
-        // A filesort that fits in memory (sort_buffer_size) is cheap. Under
-        // low available memory, larger sorts are far more likely to spill
-        // to disk, which is dramatically slower than the in-memory case.
         if (result.isUsesFilesort() && rowsAreSignificant) {
             switch (level) {
                 case LOW -> suggestions.add(OptimizationSuggestion.resource(
@@ -88,8 +55,6 @@ public class ResourceConsciousService {
             }
         }
 
-        // Temporary tables (from GROUP BY/DISTINCT/subqueries) consume
-        // working memory directly — same reasoning as filesort above.
         if (result.isUsesTemporaryTable()) {
             switch (level) {
                 case LOW -> suggestions.add(OptimizationSuggestion.resource(
@@ -107,9 +72,6 @@ public class ResourceConsciousService {
             }
         }
 
-        // A large full scan competes for buffer pool space regardless of
-        // domain — flagged here specifically from a memory-pressure angle,
-        // separate from the domain module's own full-scan finding.
         if (result.isHasFullTableScan() && rowsAreSignificant && level == ResourceLevel.LOW) {
             suggestions.add(OptimizationSuggestion.resource(
                     "Full table scan over a significant row count while available memory is low — this "
@@ -121,9 +83,6 @@ public class ResourceConsciousService {
 
     private void evaluateMongo(ResourceLevel level, QueryAnalysisResult result, List<OptimizationSuggestion> suggestions) {
 
-        // An unindexed filter forces a full collection scan, which under
-        // low available memory competes with MongoDB's WiredTiger cache
-        // for the same working set as every other query.
         if (result.isHasUnindexedFilter() && level == ResourceLevel.LOW) {
             suggestions.add(OptimizationSuggestion.resource(
                     "Unindexed filter combined with low available memory — the resulting collection scan "
@@ -133,15 +92,6 @@ public class ResourceConsciousService {
         }
     }
 
-    // ------------------------------------------------------------------
-    // 2. Severity re-scaling for suggestions from the Domain module
-    // ------------------------------------------------------------------
-
-    /**
-     * Returns a new list with each suggestion's severity shifted based on
-     * resource level: escalated under LOW, unchanged under MEDIUM, and
-     * de-escalated under HIGH. Does not mutate the input list.
-     */
     public List<OptimizationSuggestion> adjustSeverity(ResourceLevel resourceLevel, List<OptimizationSuggestion> suggestions) {
         if (suggestions == null) {
             return new ArrayList<>();
@@ -167,7 +117,7 @@ public class ResourceConsciousService {
     }
 
     private SuggestionSeverity shiftSeverity(SuggestionSeverity severity, int shift) {
-        SuggestionSeverity[] values = SuggestionSeverity.values(); // ordinal order: INFO, WARNING, CRITICAL
+        SuggestionSeverity[] values = SuggestionSeverity.values();
         int newOrdinal = Math.max(0, Math.min(values.length - 1, severity.ordinal() + shift));
         return values[newOrdinal];
     }

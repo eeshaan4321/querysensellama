@@ -16,8 +16,6 @@
   margin-bottom: var(--space-5);
 }
 
-/* The real input is hidden; the Button opens it, so the control matches
-   every other button in the app instead of the browser's default file box. */
 .schema-source__file {
   display: none;
 }

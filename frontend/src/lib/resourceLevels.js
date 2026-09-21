@@ -1,9 +1,3 @@
-/**
- * Resource levels are simulated categories, not live system monitoring
- * (see project scope notes) — these figures are illustrative reference
- * points so "low/medium/high" means something concrete in the UI, not
- * measurements read from the actual machine running the query.
- */
 export const RESOURCE_LEVEL_INFO = {
   LOW: {
     label: 'Low',

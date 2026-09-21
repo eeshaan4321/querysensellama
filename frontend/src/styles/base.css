@@ -58,7 +58,6 @@ code, pre, kbd {
   border-radius: var(--radius-sm);
 }
 
-/* thin, quiet scrollbars — dense dev-tool feel */
 * {
   scrollbar-width: thin;
   scrollbar-color: var(--border-strong) transparent;
@@ -81,12 +80,6 @@ code, pre, kbd {
   white-space: nowrap;
 }
 
-/*
-  A short, muted line of prose beneath a page header — used for provenance
-  and status notes ("this plan describes generated data", "reading the
-  active schema…"). Defined once here because more than one screen needs
-  the same treatment and none of them owns it.
-*/
 .page-note {
   margin: var(--space-3) 0 0;
   font-size: var(--text-sm);

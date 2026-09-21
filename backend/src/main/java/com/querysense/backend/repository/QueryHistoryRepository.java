@@ -6,12 +6,10 @@ import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
 
+/** Data access for query history. */
 @Repository
 public interface QueryHistoryRepository extends JpaRepository<QueryHistory, Long> {
 
-    // Scoped by databaseType too — the same natural-language text asked for
-    // MySQL vs. MongoDB must not return the other dialect's cached query.
-    // (findFirstByUserInputIgnoreCase alone was doing exactly that.)
     Optional<QueryHistory> findFirstByUserInputIgnoreCaseAndDatabaseTypeIgnoreCase(
             String userInput, String databaseType);
 }

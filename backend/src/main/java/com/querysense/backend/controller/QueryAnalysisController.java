@@ -13,31 +13,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * QueryAnalysisController
- *
- * WHY A SEPARATE CONTROLLER (not folded into QueryController):
- * QueryController owns generation + history, which are already a
- * cohesive pair. Analysis is a distinct concern with its own service
- * layer (QueryAnalysisService), so keeping it in its own controller
- * mirrors the existing separation and keeps each class focused —
- * same reasoning as why OllamaService and QueryGenerationServiceImpl
- * are separate rather than one giant service class.
- *
- * This endpoint replaces the throwaway ExplainTestController used for
- * manual verification — that class should be deleted once this is confirmed
- * working end-to-end.
- *
- * UPDATED: now also dispatches to DomainOptimizationService and
- * ResourceConsciousService and returns AnalyzeResponse instead of a bare
- * QueryAnalysisResult. Both services and the AnalyzeResponse/
- * OptimizationSuggestion DTOs already existed, but nothing was actually
- * calling them — AnalyzeRequest required domainProfile/resourceLevel on
- * every call without either ever being read. This is the fix: domain
- * suggestions get their severity re-scaled by resource level (per
- * ResourceConsciousService.adjustSeverity's own documented contract) before
- * being combined with resource's own independent suggestions.
- */
+/** REST endpoint for query analysis. */
 @RestController
 @RequestMapping("/api/query")
 public class QueryAnalysisController {
@@ -60,7 +36,7 @@ public class QueryAnalysisController {
                 queryAnalysisService.analyze(request.getQuery(), request.getDatabaseType());
 
         List<OptimizationSuggestion> domainSuggestions =
-                domainOptimizationService.evaluate(request.getDomainProfile(), result);
+                domainOptimizationService.evaluate(result);
         List<OptimizationSuggestion> rescaledDomainSuggestions =
                 resourceConsciousService.adjustSeverity(request.getResourceLevel(), domainSuggestions);
         List<OptimizationSuggestion> resourceSuggestions =

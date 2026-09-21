@@ -1,11 +1,3 @@
-/**
- * Minimal hand-rolled tokenizer for SQL and Mongo-shell-style query strings.
- *
- * Deliberately not a dependency — a tiny regex pass mirrors the project's
- * own "explainable, rule-based first" ethos better than pulling in a
- * generic syntax-highlighting library for a handful of token classes.
- */
-
 const SQL_KEYWORDS = /\b(SELECT|FROM|WHERE|AND|OR|ORDER BY|GROUP BY|LIMIT|JOIN|ON|INSERT INTO|VALUES|UPDATE|SET|DELETE|COUNT|AS|DISTINCT|HAVING|LIKE|IN|NOT|NULL|IS)\b/gi;
 const MONGO_KEYWORDS = /\b(find|aggregate|match|group|sort|limit|regex|gt|gte|lt|lte|ne|in|nin|exists)\b/g;
 

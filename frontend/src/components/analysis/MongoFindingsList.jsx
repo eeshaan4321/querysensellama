@@ -1,11 +1,5 @@
 import './MongoFindingsList.css';
 
-/**
- * Built directly from the two boolean flags the real backend guarantees
- * (hasUnindexedFilter / hasUnanchoredRegex), not from a separate findings
- * array — the real QueryAnalysisResult doesn't have one, just these flags
- * plus a `warnings` list of already-complete sentences.
- */
 export function MongoFindingsList({ analysis }) {
   const findings = [
     analysis.hasUnindexedFilter && {

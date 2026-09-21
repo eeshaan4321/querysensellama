@@ -9,7 +9,7 @@ import { useWorkbench } from '../context/WorkbenchContext';
 import { useActiveSchema } from '../context/ActiveSchemaContext';
 
 export function SchemaAdvisorPage() {
-  const { build, targetDb, domain, resourceLevel, schemaAdvice, setSchemaAdvice } = useWorkbench();
+  const { build, targetDb, resourceLevel, schemaAdvice, setSchemaAdvice } = useWorkbench();
   const { schema } = useActiveSchema();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
@@ -22,7 +22,6 @@ export function SchemaAdvisorPage() {
       const result = await adviseSchema({
         query: build.generatedQuery,
         targetDb: build.targetDb || targetDb,
-        domain,
         resourceLevel,
       });
       setSchemaAdvice(result);

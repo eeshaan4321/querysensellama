@@ -8,38 +8,10 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Random;
 
-/**
- * ValueGenerator
- *
- * Produces a plausible value for one column of one row.
- *
- * WHY THE COLUMN NAME STEERS THE VALUE, NOT JUST THE TYPE:
- * Two reasons, and neither is cosmetic. First,
- * SchemaMetadataService.getDistinctValues is the rule engine's live-data
- * safety net — it reads the actual values in a column to notice when a user
- * names one ("customers in Mumbai"). Fed random hex strings it can never
- * fire, and the engine starts claiming queries it should have deferred.
- * Second, a column called `status` holding 500 distinct values is not what
- * a status column looks like, and EXPLAIN's `filtered` estimate is computed
- * from exactly that distribution.
- *
- * WHY CARDINALITY IS DELIBERATELY SKEWED:
- * Uniform data makes every `filtered` estimate 100.00 and every index
- * equally selective, which teaches EXPLAIN nothing. A status-like column
- * gets a handful of distinct values; an email-like one gets one per row.
- * The analysis modules then have something real to disagree about.
- *
- * WHY A SEEDED Random:
- * A demo that reports different row estimates on every upload of the same
- * file is not one anyone can trust or re-run. Seeding makes the generated
- * data reproducible across machines.
- *
- * HONESTY NOTE: this data is generated. It gives EXPLAIN a realistic
- * MAGNITUDE, which an empty table cannot, but the distribution is invented.
- * The UI labels an uploaded schema's plan accordingly — see PROJECT.md R6.
- */
+/** Generates column values for seeding. */
 public class ValueGenerator {
 
     private static final List<String> FIRST_NAMES = List.of(
@@ -60,7 +32,6 @@ public class ValueGenerator {
             "alpha", "bravo", "delta", "echo", "gamma", "helix", "ionic", "kappa",
             "lumen", "nova", "orbit", "prism", "quartz", "raven", "sigma", "tempo");
 
-    /** Nullable, non-key columns get this share of NULLs so `filtered` varies. */
     private static final double NULL_RATE = 0.10;
 
     private final Random random;
@@ -88,33 +59,49 @@ public class ValueGenerator {
         };
     }
 
-    /**
-     * A key column must never be null, and a NOT NULL column obviously must
-     * not be either. Everything else is fair game — and should be, because
-     * an all-populated column makes MySQL report filtered=100.00.
-     */
     private boolean isNullable(ParsedColumn column) {
         return !column.notNull() && !column.primaryKey() && !column.unique() && !column.autoIncrement();
     }
 
-    /**
-     * Sequential for anything that must be unique, so a primary key is a
-     * dense 1..n range — which is also what makes foreign keys cheap to
-     * generate: SchemaSeeder can pick a parent id uniformly from that range
-     * without reading anything back from the database.
-     */
+    private static final Map<String, Long> SIGNED_MAX = Map.of(
+            "TINYINT", 127L,
+            "SMALLINT", 32_767L,
+            "MEDIUMINT", 8_388_607L,
+            "INT", 2_147_483_647L,
+            "INTEGER", 2_147_483_647L,
+            "BIGINT", Long.MAX_VALUE);
+
+    static long maxFor(ParsedColumn column) {
+        return SIGNED_MAX.getOrDefault(column.normalisedType(), Long.MAX_VALUE);
+    }
+
+    public static long maxSeedableRows(ParsedColumn primaryKey, long desiredRows) {
+        if (primaryKey == null) {
+            return desiredRows;
+        }
+        return Math.min(desiredRows, maxFor(primaryKey));
+    }
+
     private Object integerValue(ParsedColumn column, int rowIndex) {
         if (column.primaryKey() || column.autoIncrement() || column.unique()) {
             return rowIndex + 1;
         }
         String name = column.name().toLowerCase(Locale.ROOT);
         if (name.contains("quantity") || name.contains("qty")) {
-            return 1 + random.nextInt(20);
+            return clampToType(1 + random.nextInt(20), column);
         }
         if (name.contains("year")) {
-            return 2015 + random.nextInt(11);
+            return clampToType(2015 + random.nextInt(11), column);
         }
-        return 1 + random.nextInt(1000);
+        return clampToType(1 + random.nextInt(1000), column);
+    }
+
+    private long clampToType(long value, ParsedColumn column) {
+        long max = maxFor(column);
+        if (value <= max) {
+            return value;
+        }
+        return 1 + Math.floorMod(value - 1, max);
     }
 
     private BigDecimal decimalValue(ParsedColumn column) {
@@ -126,7 +113,6 @@ public class ValueGenerator {
         return BigDecimal.valueOf(raw).setScale(scale, RoundingMode.HALF_UP);
     }
 
-    /** Spread over two years so date-range filters have something to select. */
     private LocalDate dateValue() {
         return LocalDate.now().minusDays(random.nextInt(730));
     }
@@ -139,11 +125,6 @@ public class ValueGenerator {
         return raw.trim().replaceAll("^'|'$", "");
     }
 
-    /**
-     * The name-driven branch. Order matters: `email` is checked before
-     * `name`, because a column called `email_name` is far likelier to hold
-     * an address than a person.
-     */
     private String textValue(ParsedColumn column, int rowIndex) {
         int max = column.typeArgs().isEmpty() ? 255 : column.firstArgOr(255);
         String name = column.name().toLowerCase(Locale.ROOT);
@@ -173,13 +154,6 @@ public class ValueGenerator {
         return value.length() > max ? value.substring(0, max) : value;
     }
 
-    /**
-     * A UNIQUE column must not collide, and truncating to a declared length
-     * can create collisions the generator never intended — two long names
-     * sharing a prefix become the same value at VARCHAR(8). The row index is
-     * appended and the PREFIX is trimmed to make room, so the part that
-     * guarantees uniqueness always survives.
-     */
     private String withUniqueSuffix(String value, int rowIndex, int max) {
         String suffix = "-" + rowIndex;
         if (suffix.length() >= max) {

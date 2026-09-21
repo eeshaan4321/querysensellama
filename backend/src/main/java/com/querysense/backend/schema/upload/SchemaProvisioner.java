@@ -16,45 +16,12 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-/**
- * SchemaProvisioner
- *
- * Creates the uploaded schema's tables in a database of their own.
- *
- * WHY A SEPARATE DATABASE:
- * The built-in demo schema and query_history live in the connected
- * database. If an upload created its tables there, a user uploading their
- * own `customers` would destroy the demo data, and there would be no way
- * back to the demo schema short of re-seeding by hand. A separate catalog
- * keeps the two apart and makes "reset to built-in" a single reference
- * swap with nothing to undo in the database at all.
- *
- * WHY EVERY STATEMENT IS RE-EMITTED FROM THE PARSED MODEL:
- * The uploaded text is never executed. Each CREATE TABLE here is rebuilt
- * from ParsedTable, whose identifiers SchemaUploadValidator has already
- * constrained to [A-Za-z0-9_]. Executing the file as written would run
- * whatever else it happened to contain — this is what makes "only CREATE
- * TABLE runs" a fact about the code rather than a hope about the input.
- *
- * WHY FOREIGN KEYS ARE ADDED LAST:
- * A dump can declare `orders` before `customers`. Creating every table
- * first and adding constraints afterwards makes declaration order in the
- * uploaded file irrelevant.
- *
- * SAFETY INVARIANT: the only database this class may create, drop into, or
- * alter is uploadCatalog. No statement it emits names the connected
- * database — SchemaProvisionerTest asserts that directly.
- */
+/** Creates an uploaded schema's tables in the upload database. */
 @Component
 public class SchemaProvisioner {
 
     private static final Logger log = LoggerFactory.getLogger(SchemaProvisioner.class);
 
-    /**
-     * Types MySQL will not accept without a length. A dump can declare them
-     * bare when the length came from a default this parser did not read, and
-     * `VARCHAR` alone is a syntax error rather than a sensible default.
-     */
     private static final Set<String> NEEDS_LENGTH = Set.of("VARCHAR", "CHAR", "VARBINARY", "BINARY");
 
     private final JdbcTemplate jdbcTemplate;
@@ -81,9 +48,6 @@ public class SchemaProvisioner {
         try {
             jdbcTemplate.execute("CREATE DATABASE IF NOT EXISTS `" + uploadCatalog + "`");
         } catch (DataAccessException e) {
-            // Without the CREATE privilege the whole feature is unavailable,
-            // and a generic 500 would send the user hunting through server
-            // logs for what amounts to a one-line grant. Name the grant.
             throw new SchemaUploadException(
                     "Could not create the database '" + uploadCatalog + "'. The account QuerySense connects "
                             + "with needs the CREATE privilege: "
@@ -96,10 +60,6 @@ public class SchemaProvisioner {
                 "SELECT table_name FROM information_schema.tables WHERE table_schema = ?",
                 String.class, uploadCatalog);
 
-        // Dropping parents before children fails on the foreign keys the
-        // previous upload created, and there is no ordering that always
-        // works. Disabling the check for the drop phase is the standard
-        // answer and is scoped to this session.
         jdbcTemplate.execute("SET FOREIGN_KEY_CHECKS = 0");
         try {
             for (String table : existing) {
@@ -137,9 +97,6 @@ public class SchemaProvisioner {
         if (column.autoIncrement()) {
             clause.append(" AUTO_INCREMENT");
         }
-        // UNIQUE is emitted as a column-level constraint rather than a named
-        // index: MySQL creates the index either way, and nothing here ever
-        // needs to refer to it by name.
         if (column.unique() && !column.primaryKey()) {
             clause.append(" UNIQUE");
         }
@@ -165,11 +122,6 @@ public class SchemaProvisioner {
             try {
                 jdbcTemplate.execute(sql);
             } catch (DataAccessException e) {
-                // A dump can carry a foreign key MySQL will not accept here —
-                // mismatched column types being the usual cause. That costs
-                // the constraint, not the upload: the tables are still
-                // usable, EXPLAIN still runs, and the seeder simply has one
-                // less relationship to respect.
                 log.warn("Skipping foreign key {}.{} -> {}.{}: {}",
                         fk.fromTable(), fk.fromColumn(), fk.toTable(), fk.toColumn(), e.getMessage());
             }

@@ -8,11 +8,6 @@ import { useReducedMotion } from '../../hooks/useReducedMotion';
 import { isLlmSource } from '../../api/contracts';
 import './QueryResultPanel.css';
 
-/**
- * The moment a query falls back to the LLM, this panel's wash briefly shifts
- * teal -> amber (a 420ms color transition, not a flash) so "which path
- * handled this" is felt, not just labeled.
- */
 export function QueryResultPanel({ result, targetDb }) {
   const navigate = useNavigate();
   const reduced = useReducedMotion();

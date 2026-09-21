@@ -1,7 +1,6 @@
 import { tokenize } from '../../lib/highlight';
 import './CodeBlock.css';
 
-/** Mono-font, hand-tokenized query display. Copy button included since these are meant to be lifted straight into a client. */
 export function CodeBlock({ code, dialect = 'SQL', label }) {
   const tokens = tokenize(code, dialect);
 

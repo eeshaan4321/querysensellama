@@ -44,3 +44,29 @@
   color: var(--ink);
   line-height: var(--leading-relaxed);
 }
+
+.recommendation-list__technical {
+  margin: 0 0 var(--space-3);
+}
+
+.recommendation-list__technical-toggle {
+  cursor: pointer;
+  font-size: var(--text-xs);
+  color: var(--ink-muted);
+  user-select: none;
+  width: fit-content;
+}
+
+.recommendation-list__technical-toggle:hover {
+  color: var(--ink-secondary);
+}
+
+.recommendation-list__technical-body {
+  margin: var(--space-2) 0 0;
+  padding-left: var(--space-3);
+  border-left: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: var(--leading-relaxed);
+  color: var(--ink-muted);
+}

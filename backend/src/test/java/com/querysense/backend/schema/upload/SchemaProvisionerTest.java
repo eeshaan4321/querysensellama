@@ -20,14 +20,6 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-/**
- * SchemaProvisionerTest
- *
- * touchesOnlyTheUploadCatalog is the safety test. This class is the only
- * one in the project that issues DDL, and the one mistake it must never
- * make is naming the connected demo database — which holds the built-in
- * nine tables and query_history.
- */
 class SchemaProvisionerTest {
 
     private JdbcTemplate jdbcTemplate;

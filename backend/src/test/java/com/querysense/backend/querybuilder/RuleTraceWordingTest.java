@@ -15,19 +15,6 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-/**
- * RuleTraceWordingTest
- *
- * Tests the COPY, not the logic — the same guard
- * SchemaAdvisorServiceImplTest.jargonFreeSummaries and VerdictServiceTest
- * both carry, and for the reason recorded there: prose drifts back toward
- * the vocabulary of the code around it.
- *
- * These strings are read by someone who has just been told the rule engine
- * would not answer their question. "accessType=ALL" is not an explanation to
- * that person, and a teammate's name has no business in user-facing output
- * at all — a defect this project has already shipped once.
- */
 class RuleTraceWordingTest {
 
     private static final List<String> BANNED = List.of(

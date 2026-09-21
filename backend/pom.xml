@@ -58,16 +58,6 @@
 			<artifactId>mysql-connector-j</artifactId>
 			<scope>runtime</scope>
 		</dependency>
-		<!--
-			H2 is used ONLY by the optional "h2" Spring profile, so query
-			generation (/api/query/generate) can be run and tested on a machine
-			where MySQL isn't set up yet. The default profile is unchanged and
-			still points at MySQL on 3307.
-
-			It is NOT a substitute for MySQL: the Query Analysis Engine reads
-			MySQL's specific EXPLAIN columns (type/key/rows/Extra), which H2
-			does not produce, so /analyze and /schema-advisor cannot run on it.
-		-->
 		<dependency>
 			<groupId>com.h2database</groupId>
 			<artifactId>h2</artifactId>

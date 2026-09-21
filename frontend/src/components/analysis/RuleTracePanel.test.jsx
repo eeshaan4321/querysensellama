@@ -2,12 +2,6 @@ import { render, screen } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
 import { RuleTracePanel } from './RuleTracePanel';
 
-/**
- * The third case is the one worth keeping: a declined query must still
- * render, because "no panel" means "nothing was traced", not "the rules
- * said no". Conflating the two would put the routing decision back out of
- * sight, which is the thing this panel exists to fix.
- */
 describe('RuleTracePanel', () => {
   it('renders nothing when there is no trace', () => {
     const { container } = render(<RuleTracePanel trace={null} handledBy="CACHE" />);

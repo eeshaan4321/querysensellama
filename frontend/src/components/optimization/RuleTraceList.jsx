@@ -1,6 +1,5 @@
 import './RuleTraceList.css';
 
-/** Surfaces the reasoning, not just the result — the literature's core differentiator claim made visible. */
 export function RuleTraceList({ trace }) {
   return (
     <ol className="rule-trace">

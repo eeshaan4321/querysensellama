@@ -8,31 +8,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
 
-/**
- * ActiveSchemaProvider
- *
- * WHY THIS CLASS EXISTS:
- * KnownSchema was static, so every consumer of it was pinned to the
- * built-in nine-table demo schema at compile time. The schema-upload
- * feature needs the same consumers to read an uploaded schema instead.
- * This holds the current SchemaSnapshot and every consumer now injects it.
- *
- * WHY volatile RATHER THAN A LOCK:
- * A snapshot is immutable and swapping is a single reference assignment.
- * volatile gives the visibility guarantee across request threads without
- * putting a lock on a field that is read on the hot path of every
- * generated query.
- *
- * WHY LISTENERS RATHER THAN CALLING SchemaMetadataService DIRECTLY:
- * SchemaMetadataService caches live column and value lookups, and those
- * caches MUST be flushed when the schema changes — otherwise the first
- * upload keeps serving the demo schema's columns to SqlPreflightValidator
- * and the demo's city values to the rule engine, silently, while looking
- * correct. But SchemaMetadataService already depends on this class for
- * findTable, so calling it from here would be a dependency cycle. It
- * registers a flush callback via onSchemaChanged instead, and the arrow
- * points one way.
- */
+/** Holds the schema currently in use, built-in or uploaded. */
 @Component
 public class ActiveSchemaProvider {
 
@@ -49,7 +25,6 @@ public class ActiveSchemaProvider {
         return active.builtIn();
     }
 
-    /** Null means "use the connection's existing catalog" — see SchemaSnapshot. */
     public String catalog() {
         return active.catalog();
     }

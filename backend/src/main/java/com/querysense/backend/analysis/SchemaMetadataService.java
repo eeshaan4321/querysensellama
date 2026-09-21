@@ -11,32 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-/**
- * SchemaMetadataService
- *
- * WHY THIS CLASS EXISTS:
- * Table/column STRUCTURE (which tables exist, which columns they have) is
- * owned centrally by the ACTIVE schema, read through
- * {@link com.querysense.backend.schema.ActiveSchemaProvider} — either the
- * built-in KnownSchema or one the user uploaded. Previously this class and
- * RuleBasedQueryBuilder each hardcoded their own incomplete copy. This
- * class's remaining job is the thing a declared schema genuinely can't
- * express: live facts from the actual running database.
- *
- * - {@link #getColumnNames(String)} is a live safety net for
- *   SqlPreflightValidator — it catches schema DRIFT (a column added/removed
- *   after the schema was last declared) that a declared list can't see, by
- *   double-checking a generated query against what MySQL actually has.
- * - {@link #getDistinctValues(String, String)} looks up real DATA values
- *   (e.g. the actual city names in `customers.city`) — RuleBasedQueryBuilder
- *   uses this to detect when a real, known value is mentioned in a request
- *   but its clause matcher failed to capture it, so it can bail to the LLM fallback
- *   instead of silently dropping the filter (Bugs 8/10).
- *
- * Both read from information_schema / the table itself rather than a
- * hardcoded list, and both are cached since this data is practically static
- * within a running session.
- */
+/** Reads live column names and distinct column values from the database. */
 @Component
 public class SchemaMetadataService {
 
@@ -52,20 +27,6 @@ public class SchemaMetadataService {
         this.activeSchema = activeSchema;
     }
 
-    /**
-     * WHY THE CACHES MUST BE FLUSHED WHEN THE SCHEMA CHANGES:
-     * Both caches are keyed by bare table name and never evict - fine while
-     * the schema was static and compiled in. Once it can be replaced at
-     * runtime, a stale entry means this service keeps answering with the
-     * PREVIOUS schema's columns and values, and every caller downstream
-     * (SqlPreflightValidator, the rule engine's known-city safety net)
-     * looks correct while being wrong.
-     *
-     * Registered as a listener rather than called from ActiveSchemaProvider
-     * because this class already depends on that one; the reverse edge
-     * would be a cycle.
-     */
-    
     void registerSchemaChangeListener() {
         activeSchema.onSchemaChanged(this::clearCaches);
     }
@@ -75,13 +36,6 @@ public class SchemaMetadataService {
         distinctValueCache.clear();
     }
 
-    /**
-     * Returns the real column names for a table, or an empty list if the
-     * table doesn't exist or the lookup fails. Callers must treat an empty
-     * list as "unknown" rather than "this table has no columns" and degrade
-     * gracefully instead of blocking on it — same pattern as every other
-     * analyzer in this package.
-     */
     public List<String> getColumnNames(String tableName) {
         if (tableName == null || tableName.isBlank()) {
             return List.of();
@@ -89,16 +43,6 @@ public class SchemaMetadataService {
         return columnCache.computeIfAbsent(tableName.toLowerCase(), this::loadColumnNames);
     }
 
-    /**
-     * WHY THIS GOES THROUGH ExplainExecutor:
-     * The filter is `table_schema = DATABASE()`, which resolves to whatever
-     * catalog the CONNECTION is on. Left on the pool's default connection
-     * it would report the demo database's columns even while an uploaded
-     * schema is active — and SqlPreflightValidator would then reject the
-     * user's own columns as hallucinated. The executor puts the lookup on a
-     * connection pointing at the active schema's catalog, and is a no-op
-     * when the built-in schema is active.
-     */
     private List<String> loadColumnNames(String tableName) {
         try {
             return explainExecutor.withActiveCatalog(jdbc -> jdbc.queryForList(
@@ -111,20 +55,6 @@ public class SchemaMetadataService {
         }
     }
 
-    /**
-     * Real distinct values of one column (e.g. every city actually in
-     * `customers.city`: "Mumbai", "Pune", "Delhi", ...). Used as a
-     * data-driven safety net — see class doc — never as a substitute for
-     * real query filtering.
-     *
-     * WHY tableName/columnName are validated against the active schema before
-     * being concatenated into SQL: JDBC placeholders parameterize VALUES,
-     * not identifiers, so a table/column name can't go through a
-     * PreparedStatement parameter. Every caller in this codebase only ever
-     * passes its own hardcoded literals (never raw user input) — this check
-     * is a defense-in-depth guard against that assumption quietly breaking
-     * in the future, not a response to any current injection path.
-     */
     public List<String> getDistinctValues(String tableName, String columnName) {
         if (tableName == null || columnName == null) {
             return List.of();
@@ -144,10 +74,6 @@ public class SchemaMetadataService {
         try {
             String sql = "SELECT DISTINCT " + columnName + " FROM " + tableName
                     + " WHERE " + columnName + " IS NOT NULL LIMIT 500";
-            // Unqualified table name, so this reads whichever catalog the
-            // connection is on — the same reason loadColumnNames needs the
-            // executor. Without it the rule engine's known-value safety net
-            // would check the demo data against an uploaded schema.
             return explainExecutor.withActiveCatalog(jdbc -> jdbc.queryForList(sql, String.class));
         } catch (Exception e) {
             log.warn("Could not load distinct values for {}.{}: {}", tableName, columnName, e.getMessage(), e);

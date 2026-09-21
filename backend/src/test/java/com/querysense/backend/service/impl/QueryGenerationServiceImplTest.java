@@ -21,13 +21,6 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-/**
- * QueryGenerationServiceImplTest
- *
- * The orchestrator had no test of its own. These cover the one thing that
- * changed about it: the rule engine's reasoning now travels onto the
- * response, including when the rule engine is not what answered.
- */
 class QueryGenerationServiceImplTest {
 
     private RuleBasedQueryBuilder rules;
@@ -105,9 +98,6 @@ class QueryGenerationServiceImplTest {
 
         service.generateQuery("Show all customers", "MySQL");
 
-        // QueryHistory has no column for it, deliberately: PROJECT.md §5
-        // records "history stores no run context" and this work does not
-        // change that. Asserted so a later change has to be deliberate.
         assertThat(QueryHistory.class.getDeclaredFields())
                 .noneSatisfy(f -> assertThat(f.getName()).containsIgnoringCase("trace"));
     }

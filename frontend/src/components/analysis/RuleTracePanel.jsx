@@ -1,30 +1,5 @@
 import './RuleTracePanel.css';
 
-/**
- * How the rule engine built this query — or why it declined and handed the
- * question on.
- *
- * WHY THIS IS ON THE ANALYSIS SCREEN AND NOT THE WORKBENCH:
- * the Workbench answers "is this the right query?". This answers "why is it
- * shaped this way?", which is the question a reader already has once they
- * are looking at the plan. It arrives via WorkbenchContext's `build`, so
- * /api/query/analyze is untouched and no extra request is made — the
- * pipeline stays at four calls.
- *
- * WHY DECLINES RENDER TOO:
- * `handledBy` says WHICH layer answered, never why the previous one passed.
- * The rule engine runs first on every request, so it has a reason either
- * way, and showing it is what makes the routing decision auditable rather
- * than asserted. This is the one part of the project's central claim that
- * was previously not demonstrable.
- *
- * WHY joinEdge.origin IS RENDERED VERBATIM:
- * "read from your schema's declared foreign key, not inferred" is the claim
- * a reviewer is most likely to doubt, and naming the exact columns lets them
- * check it against their own DDL in seconds. It is the one thing about a
- * generated join the language-model path cannot offer.
- */
-
 const LAYER_NAME = {
   OLLAMA: 'the local language model',
   CACHE: 'a cached answer from an earlier identical question',
@@ -32,10 +7,6 @@ const LAYER_NAME = {
 };
 
 export function RuleTracePanel({ trace, handledBy }) {
-  // Absent means there is no traced generation behind this analysis — a
-  // history replay, or a query that did not come from the Workbench. It
-  // does NOT mean the rules declined: that is outcome === 'DECLINED', and
-  // it renders. Empty box avoided the same way VerdictBanner avoids it.
   if (!trace) return null;
 
   const declined = trace.outcome === 'DECLINED';

@@ -5,19 +5,7 @@ package com.querysense.backend.dto;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * AnalyzeResponse
- *
- * The response body for /api/query/analyze. Wraps Anant's
- * QueryAnalysisResult together with the merged suggestions from the
- * Domain-Sensitive Optimization Module and the Resource-Conscious Decision
- * System, so the frontend gets the raw analysis and the actionable advice
- * in a single response instead of two round trips.
- *
- * There was no response DTO for this endpoint before this class —
- * QueryResponse only carries generatedQuery, which belongs to
- * /api/query/generate, not /analyze.
- */
+/** Response body for query analysis: the analysis and its optimisation suggestions. */
 public class AnalyzeResponse {
 
     private QueryAnalysisResult analysis;

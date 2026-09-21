@@ -18,26 +18,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
-/**
- * SqlPreflightValidator
- *
- * WHY THIS CLASS EXISTS:
- * Two failure modes used to reach EXPLAIN and die there with a raw JDBC
- * error the user can't act on: a GROUP BY that violates MySQL's default
- * ONLY_FULL_GROUP_BY strict mode, and a column the LLM hallucinated (the
- * fallback's prompt is schema-grounded in OllamaService, but this is the
- * safety net for when the model ignores that grounding). Both are
- * detectable from the SQL text alone, before ever touching the database —
- * catching them here means the
- * pipeline fails fast with a specific, actionable message instead of a
- * generic EXPLAIN crash. MySqlExplainAnalyzer keeps its own catch-all for
- * anything this class doesn't cover.
- *
- * SCOPE: like SqlStructureParser, this is a best-effort MVP check, not a
- * full SQL semantics validator — it only looks at simple SELECT/WHERE/
- * GROUP BY shapes and never throws; an unparseable or unusual query just
- * skips these checks and is left for MySqlExplainAnalyzer to report.
- */
+/** Catches GROUP BY violations and unknown columns before a query reaches EXPLAIN. */
 @Component
 public class SqlPreflightValidator {
 
@@ -47,10 +28,6 @@ public class SqlPreflightValidator {
         this.schemaMetadataService = schemaMetadataService;
     }
 
-    /**
-     * @return a human-readable failure reason if the query should be blocked
-     *         from ever reaching EXPLAIN, or empty if it looks safe to try.
-     */
     public Optional<String> validate(String sqlQuery, String tableName) {
         try {
             Statement statement = CCJSqlParserUtil.parse(stripTrailingSemicolon(sqlQuery));
@@ -66,17 +43,10 @@ public class SqlPreflightValidator {
             return checkKnownColumns(plainSelect, tableName);
 
         } catch (JSQLParserException e) {
-            // SqlStructureParser already surfaces parse failures of its own;
-            // nothing extra for this class to add.
             return Optional.empty();
         }
     }
 
-    /**
-     * Flags any non-aggregated, non-grouped column in the SELECT list —
-     * exactly what MySQL's ONLY_FULL_GROUP_BY mode (the default since 5.7)
-     * rejects with error 1055.
-     */
     private Optional<String> checkOnlyFullGroupBy(PlainSelect plainSelect) {
         if (plainSelect.getGroupBy() == null) {
             return Optional.empty();
@@ -90,7 +60,7 @@ public class SqlPreflightValidator {
         for (SelectItem<?> item : plainSelect.getSelectItems()) {
             Expression expr = item.getExpression();
             if (expr instanceof Function) {
-                continue; // aggregate (or other function) call — exempt from ONLY_FULL_GROUP_BY
+                continue;
             }
             if (expr instanceof Column && !groupedColumns.contains(normalize(expr.toString()))) {
                 return Optional.of("This query selects '" + expr + "' without grouping or aggregating it — "
@@ -101,14 +71,10 @@ public class SqlPreflightValidator {
         return Optional.empty();
     }
 
-    /**
-     * Flags a SELECT/WHERE column that doesn't exist in the real schema —
-     * what MySQL would reject with error 1054 ("Unknown column").
-     */
     private Optional<String> checkKnownColumns(PlainSelect plainSelect, String tableName) {
         List<String> realColumns = schemaMetadataService.getColumnNames(tableName);
         if (realColumns.isEmpty()) {
-            return Optional.empty(); // metadata lookup unavailable — don't block on it
+            return Optional.empty();
         }
         Set<String> realColumnsLower = new HashSet<>();
         for (String col : realColumns) {

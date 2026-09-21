@@ -1,61 +1,24 @@
 package com.querysense.backend.dto;
 
-/**
- * TableAnalysis
- *
- * WHY THIS CLASS EXISTS:
- * MySQL's EXPLAIN emits one row per table it touches. The original analyzer
- * folded every row into a single flat QueryAnalysisResult, so a two-table
- * JOIN lost the very fact that makes it worth analyzing: WHICH table was
- * scanned and which one used an index. The second row simply overwrote the
- * first row's accessType/keyUsed.
- *
- * This class is one EXPLAIN row, kept whole. QueryAnalysisResult now carries
- * a list of these alongside its existing query-level summary fields, so
- *
- *     customers -> ALL -> no index
- *     orders    -> ref -> idx_customer_id
- *
- * stays two distinct findings instead of collapsing into one.
- *
- * FIELD NOTES:
- * - tableName comes from EXPLAIN's own `table` column, not from
- *   SqlStructureParser. For a derived table or a UNION result MySQL puts a
- *   placeholder such as "&lt;derived2&gt;" there; that is reported verbatim
- *   rather than guessed at.
- * - possibleKeys / ref are MySQL comma-separated lists, kept as the raw
- *   string. They are informational: they tell the reader which indexes were
- *   *candidates*, which is what distinguishes "no index exists" from "an
- *   index exists but the optimiser did not choose it".
- * - estimatedRows is nullable. EXPLAIN reports NULL for rows on plans such as
- *   "Impossible WHERE" or "Select tables optimized away", and 0 is a
- *   different claim from "not reported".
- * - extra is EXPLAIN's `Extra` column verbatim; usesFilesort and
- *   usesTemporaryTable are the parsed form of the two flags this project
- *   acts on. Keeping both means a future rule can read a flag we don't
- *   parse yet without another schema change.
- */
+/** EXPLAIN results for one table in a query plan. */
 public class TableAnalysis {
 
     private String tableName;
-    private String accessType;      // ALL, ref, eq_ref, range, index, const...
-    private String possibleKeys;    // indexes MySQL considered; null if none
-    private String keyUsed;         // index MySQL actually chose; null if none
-    private String keyLength;       // key_len, as reported (a string in EXPLAIN)
-    private String ref;             // what the index was compared against
-    private Long estimatedRows;     // nullable — see class doc
-    private String extra;           // EXPLAIN's Extra column, verbatim
+    private String accessType;
+    private String possibleKeys;
+    private String keyUsed;
+    private String keyLength;
+    private String ref;
+    private Long estimatedRows;
+    private Double filtered;
+    private String extra;
 
-    private boolean fullTableScan;      // accessType == ALL
-    private boolean usesIndex;          // keyUsed != null
-    private boolean usesFilesort;       // Extra contains "Using filesort"
-    private boolean usesTemporaryTable; // Extra contains "Using temporary"
+    private boolean fullTableScan;
+    private boolean usesIndex;
+    private boolean usesFilesort;
+    private boolean usesTemporaryTable;
 
     public TableAnalysis() {}
-
-    // -----------------------------------------------------------------
-    // Getters and setters
-    // -----------------------------------------------------------------
 
     public String getTableName() { return tableName; }
     public void setTableName(String tableName) { this.tableName = tableName; }
@@ -77,6 +40,27 @@ public class TableAnalysis {
 
     public Long getEstimatedRows() { return estimatedRows; }
     public void setEstimatedRows(Long estimatedRows) { this.estimatedRows = estimatedRows; }
+
+    public Double getFiltered() { return filtered; }
+    public void setFiltered(Double filtered) { this.filtered = filtered; }
+
+    public Long getEstimatedRowsReturned() {
+        if (estimatedRows == null || filtered == null) {
+            return null;
+        }
+        return Math.round(estimatedRows * filtered / 100.0);
+    }
+
+    public Double getReadAmplification() {
+        Long returned = getEstimatedRowsReturned();
+        if (estimatedRows == null || returned == null) {
+            return null;
+        }
+        if (returned == 0L) {
+            return estimatedRows.doubleValue();
+        }
+        return estimatedRows.doubleValue() / returned.doubleValue();
+    }
 
     public String getExtra() { return extra; }
     public void setExtra(String extra) { this.extra = extra; }

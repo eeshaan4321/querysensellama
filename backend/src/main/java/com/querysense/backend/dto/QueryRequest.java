@@ -3,20 +3,7 @@ package com.querysense.backend.dto;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
-/**
- * QueryRequest — UPDATED with validation
- *
- * WHY VALIDATION ANNOTATIONS?
- * Never trust user input. If someone sends an empty query or a 10,000
- * character string, your rule engine and LLM prompt will behave badly.
- * These annotations enforce constraints BEFORE the request reaches the service.
- *
- * @NotBlank  — rejects null, empty string "", and whitespace-only "   "
- * @Size      — enforces min/max character length
- *
- * These only activate when @Valid is added to @RequestBody in the controller.
- * Without @Valid, these annotations are ignored — both are needed together.
- */
+/** Request body for query generation. */
 public class QueryRequest {
 
     @NotBlank(message = "Query must not be blank")

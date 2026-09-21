@@ -1,12 +1,5 @@
 import './CostDeltaChart.css';
 
-/**
- * Two-bar before/after comparison. Colored by state (danger -> good), not
- * by arbitrary series hue — this is a status encoding, always paired with
- * a direct value label so color is never the only signal. Framed with an
- * explicit "estimate" caveat per the literature (Kim et al. 2022): never
- * present a cost estimate as a guaranteed result.
- */
 export function CostDeltaChart({ before, after }) {
   const max = Math.max(before, after, 1);
   const rows = [

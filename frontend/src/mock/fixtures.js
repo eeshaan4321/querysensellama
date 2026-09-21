@@ -1,13 +1,3 @@
-/**
- * Mock fixtures for every endpoint in src/api/contracts.js.
- *
- * Shapes here match the REAL backend responses exactly (verified by
- * running it live), not just the synopsis — so a component never needs to
- * know whether it's rendering mock or real data. Where the real backend
- * has no equivalent at all (the Comparison Engine), this is the only
- * source of that data, mock mode or not.
- */
-
 const COMPLEXITY_SIGNALS = [
   /\bjoin\b/i,
   /\bgroup\b/i,
@@ -22,13 +12,6 @@ function scoreComplexity(nlQuery) {
   return COMPLEXITY_SIGNALS.reduce((n, re) => (re.test(nlQuery) ? n + 1 : n), 0);
 }
 
-// Matches the real schema exactly (customers, orders — plus the internal
-// query_history table, which is never a target for NL query generation).
-// An earlier version of this list included tables ('products', 'users',
-// 'payments', 'inventory') that don't actually exist in the backend —
-// harmless while mock mode guesses freely, but worth keeping honest since
-// the real rule engine and Gemini prompt are both grounded in this exact
-// same two-table schema (see backend KnownSchema.java).
 function guessTable(nlQuery) {
   const known = ['customers', 'orders'];
   const hit = known.find((t) => nlQuery.toLowerCase().includes(t.slice(0, -1)));
@@ -52,9 +35,6 @@ export function mockBuildQuery({ naturalLanguageQuery, targetDb }) {
     ? `db.${table}.find({ ${column}: "${lastWord}" }).limit(20)`
     : `SELECT *\nFROM ${table}\nWHERE ${column} = '${lastWord}'\nORDER BY ${column}\nLIMIT 20;`;
 
-  // Mock mode has to carry a trace too, or the Analysis screen renders
-  // differently with and without a backend — exactly the divergence that
-  // makes mock mode the project's most misleading failure mode.
   const ruleTrace = handledBy === 'RULE_ENGINE'
     ? {
         outcome: 'BUILT',
@@ -81,17 +61,9 @@ export function mockBuildQuery({ naturalLanguageQuery, targetDb }) {
   return { generatedQuery, targetDb, handledBy, confidence, ruleTrace };
 }
 
-/**
- * Every column that's actually indexed in the real dev DB, across both
- * real tables — `customers`(id, name, city, email) once schema-advisor
- * work landed, and `orders`(order_id PK, customer_id FK; order_date/
- * amount/status are NOT indexed) now that orders exists. A genuine
- * full-scan in the mock only shows up when asked about a column outside
- * this set.
- */
 const KNOWN_INDEXED_COLUMNS = ['id', 'name', 'city', 'email', 'order_id', 'customer_id'];
 
-export function mockAnalyzeQuery({ query, targetDb, domain, resourceLevel }) {
+export function mockAnalyzeQuery({ query, targetDb, resourceLevel }) {
   const table = guessTable(query);
 
   if (targetDb === 'MONGODB') {
@@ -111,7 +83,7 @@ export function mockAnalyzeQuery({ query, targetDb, domain, resourceLevel }) {
       hasUnanchoredRegex,
       filteredColumn,
       orderByColumn: null,
-      explainFailed: false, // MySQL-only concept — not applicable to a Mongo result
+      explainFailed: false,
       warnings: [
         hasUnindexedFilter && `Filtering on '${filteredColumn}' with no known index — this may cause a full collection scan.`,
         hasUnanchoredRegex && "Unanchored $regex pattern detected — prefix with '^' to allow index usage, if an index exists on this field.",
@@ -140,12 +112,7 @@ export function mockAnalyzeQuery({ query, targetDb, domain, resourceLevel }) {
   const orderByMatch = query.match(/order by\s+([a-z_]+)/i);
   const orderByColumn = orderByMatch ? orderByMatch[1].toLowerCase() : null;
   const columnIsKnownIndexed = KNOWN_INDEXED_COLUMNS.includes(column);
-  // The rule-based builder always emits SELECT * with no projection — same
-  // signal the real EXPLAIN test in CLAUDE.md showed as accessType ALL.
   const hasFullTableScan = /select\s+\*/i.test(query) && !columnIsKnownIndexed;
-  // Honest finding from the real verification: MySQL can only use one index
-  // per table access, so filtering on one indexed column while ordering by a
-  // different one still triggers filesort even when both are individually indexed.
   const usesFilesort = Boolean(orderByColumn) && orderByColumn !== column && columnIsKnownIndexed;
   const usesTemporaryTable = /group by/i.test(query) && !columnIsKnownIndexed;
   const estimatedRows = hasFullTableScan ? 303 : 4;
@@ -165,26 +132,10 @@ export function mockAnalyzeQuery({ query, targetDb, domain, resourceLevel }) {
     hasUnanchoredRegex: false,
     filteredColumn: column,
     orderByColumn,
-    // Mock queries are always well-formed by construction, so EXPLAIN never
-    // "fails" here — this just keeps the shape identical to the real
-    // AnalyzeResponse so ExplainPlanView doesn't need to special-case mock
-    // mode.
     explainFailed: false,
-    // `filtered` is MySQL's estimate of the percentage of read rows that
-    // survive the WHERE clause; the returned count and the wasted-work ratio
-    // on the page are both derived from it. The scan case discards most of
-    // what it reads, which is the whole reason a scan is worth reporting.
     filtered: hasFullTableScan ? 12.5 : 100,
     estimatedRowsReturned: hasFullTableScan ? 38 : 4,
-    // Unitless, and only comparable against another plan for the same query
-    // — see QUERY_COST_CAVEAT. Mock values are illustrative, like every
-    // other number in this file.
     queryCost: hasFullTableScan ? 31.45 : 1.2,
-    // Mirrors VerdictService's ladder for the two cases this mock produces.
-    // 303 rows is below the real large-table threshold (1000), so a full
-    // scan here is correctly graded as normal rather than as a problem —
-    // the same answer the backend gives, and a useful reminder that mock
-    // mode cannot demonstrate the CRITICAL verdict.
     verdict: hasFullTableScan
       ? {
           severity: 'INFO',
@@ -233,8 +184,6 @@ export function mockAnalyzeQuery({ query, targetDb, domain, resourceLevel }) {
     });
   }
 
-  // Resource-level severity rescaling, mirroring ResourceConsciousService.adjustSeverity:
-  // escalate under LOW, unchanged under MEDIUM, de-escalate under HIGH.
   const severityOrder = ['INFO', 'WARNING', 'CRITICAL'];
   const shift = resourceLevel === 'LOW' ? 1 : resourceLevel === 'HIGH' ? -1 : 0;
   const rescaled = suggestions.map((s) => ({
@@ -255,8 +204,8 @@ export function mockAnalyzeQuery({ query, targetDb, domain, resourceLevel }) {
   return { analysis, suggestions: rescaled };
 }
 
-export function mockSchemaAdvise({ query, targetDb, domain, resourceLevel }) {
-  const { analysis } = mockAnalyzeQuery({ query, targetDb, domain, resourceLevel });
+export function mockSchemaAdvise({ query, targetDb, resourceLevel }) {
+  const { analysis } = mockAnalyzeQuery({ query, targetDb, resourceLevel });
   const recommendations = [];
 
   if (analysis.hasFullTableScan && !analysis.usesIndex) {
@@ -321,20 +270,6 @@ export function mockCompare({ originalAnalysis, optimizedAnalysis, changes = [] 
   return {
     estimatedCostDelta: after - before,
     isEstimate: true,
-    // Every line the before/after diff can show (column pruning, LIMIT) has a
-    // matching entry here — `changes` carries whatever structural edits
-    // mockSimulateOptimizedQuery actually made, so nothing appears in the
-    // diff without a citation explaining it.
-    //
-    // WHAT WAS REMOVED HERE AND WHY: this array used to open with a fixed
-    // 'SCHEMA-01 — Schema Advisor recommended an index on the filtered
-    // column', printed whether or not the advisor had run and whether or not
-    // it had recommended anything. The Optimization page now renders the
-    // advisor's real output directly above this block, so a fabricated claim
-    // of advisor provenance would sit inches from the genuine one. The two
-    // EXPLAIN lines that framed it asserted a scan and a post-index lookup
-    // just as unconditionally; they are now gated on the analysis actually
-    // passed in, and say nothing when it doesn't support them.
     ruleTrace: [
       ...(originalAnalysis?.hasFullTableScan
         ? [{ ruleId: 'EXPLAIN-01', explanation: `EXPLAIN reported accessType ${originalAnalysis.accessType ?? 'ALL'} with no key in use — full table scan.` }]
@@ -345,35 +280,15 @@ export function mockCompare({ originalAnalysis, optimizedAnalysis, changes = [] 
   };
 }
 
-/** Used only by the Optimization page's simulated Comparison Engine preview — no real backend equivalent exists yet. */
-const DOMAIN_RULES = {
-  ECOMMERCE: [
-    { ruleId: 'ECOM-01', description: 'Limit result set for product listing pages to avoid loading full catalogs.' },
-    { ruleId: 'ECOM-04', description: 'Prefer covering index on (category, price) for filtered catalog browsing.' },
-  ],
-  ANALYTICAL: [
-    { ruleId: 'ANLY-02', description: 'Push aggregation down before joins to reduce intermediate row counts.' },
-    { ruleId: 'ANLY-05', description: 'Materialize repeated subqueries used across the same report.' },
-  ],
-  TRANSACTIONAL: [
-    { ruleId: 'TXN-01', description: 'Avoid SELECT * on hot transactional tables — project only required columns.' },
-    { ruleId: 'TXN-03', description: 'Ensure WHERE clause hits the primary key or a unique index for point lookups.' },
-  ],
-  OTHER: [
-    { ruleId: 'GEN-01', description: 'Project only the columns actually needed instead of SELECT *.' },
-    { ruleId: 'GEN-02', description: 'Cap unbounded result sets with a LIMIT clause.' },
-  ],
-};
+const REWRITE_RULES = [
+  { ruleId: 'GEN-01', description: 'Project only the columns actually needed instead of SELECT *.' },
+  { ruleId: 'GEN-02', description: 'Cap unbounded result sets with a LIMIT clause.' },
+];
 
-export function mockSimulateOptimizedQuery({ generatedQuery, tableName, domain }) {
-  const rulesApplied = DOMAIN_RULES[domain] || DOMAIN_RULES.OTHER;
+export function mockSimulateOptimizedQuery({ generatedQuery, tableName }) {
+  const rulesApplied = REWRITE_RULES;
   const table = tableName || 'customers';
 
-  // Every value here is derived from the REAL query being analyzed, never
-  // hardcoded — a previous version of this mock hardcoded WHERE city =
-  // 'Mumbai' regardless of input, which silently changed the filter value's
-  // case (a semantic change, not an optimization) whenever the original
-  // query used different casing.
   const whereMatch = generatedQuery.match(/where\s+([a-z_]+)\s*=\s*('[^']*'|"[^"]*"|[\w.]+)/i);
   const whereClause = whereMatch ? `${whereMatch[1]} = ${whereMatch[2]}` : null;
   const filteredColumn = whereMatch ? whereMatch[1].toLowerCase() : null;
@@ -381,13 +296,8 @@ export function mockSimulateOptimizedQuery({ generatedQuery, tableName, domain }
   const hasSelectStar = /select\s+\*/i.test(generatedQuery);
   const hasExistingLimit = /\blimit\s+\d+/i.test(generatedQuery);
 
-  // Only prune/cap the query when a rule actually IN rulesApplied justifies
-  // that specific change, and only ever prune to a column the original
-  // query itself references (the filtered column) — never invented ones.
-  // This keeps every line in the before/after diff traceable to something
-  // named in "Why it would change" (wired below via `changes`).
-  const projectionRule = rulesApplied.find((r) => r.ruleId === 'TXN-01' || r.ruleId === 'GEN-01');
-  const limitRule = rulesApplied.find((r) => r.ruleId === 'ECOM-01' || r.ruleId === 'GEN-02');
+  const projectionRule = rulesApplied.find((r) => r.ruleId === 'GEN-01');
+  const limitRule = rulesApplied.find((r) => r.ruleId === 'GEN-02');
 
   const changes = [];
   let selectClause = '*';
@@ -408,13 +318,11 @@ export function mockSimulateOptimizedQuery({ generatedQuery, tableName, domain }
     });
   }
 
-  // If we couldn't confidently identify a WHERE clause to preserve, don't
-  // guess at a rewrite — leave the query unchanged rather than fabricate one.
   const optimizedQuery = whereClause
     ? `SELECT ${selectClause}\nFROM ${table}\nWHERE ${whereClause}${limitClause};`
     : generatedQuery;
 
-  return { optimizedQuery, rulesApplied, domain, changes };
+  return { optimizedQuery, rulesApplied, changes };
 }
 
 let historyIdCounter = 1000;
@@ -434,8 +342,6 @@ let historyStore = [
     generatedQuery: 'SELECT ... /* LLM-generated, comparison + time expression */',
     optimizedQuery: null,
     databaseType: 'MySQL',
-    // Deliberately left as the pre-rename value: real /history still serves
-    // GEMINI rows, so mock mode exercises that legacy branch too.
     source: 'GEMINI',
     createdAt: new Date(Date.now() - 1000 * 60 * 60 * 5).toISOString(),
   },
@@ -460,14 +366,6 @@ export function mockPostHistory(entry) {
   return record;
 }
 
-// ---------------------------------------------------------------------------
-// Schema source (GET /api/schema/active, POST /upload, POST /reset)
-// ---------------------------------------------------------------------------
-
-// The built-in schema, matching the backend's KnownSchema table for table.
-// rowCount is 0 because the real GET /active reports 0 for the demo tables —
-// nothing measures them at startup. Inventing a number here would make mock
-// mode disagree with the backend on a field the UI renders.
 const BUILT_IN_TABLES = [
   { name: 'categories', columns: ['id', 'name'], rowCount: 0 },
   { name: 'customers', columns: ['id', 'name', 'email', 'city', 'phone'], rowCount: 0 },
@@ -505,9 +403,6 @@ function builtInSnapshot() {
   };
 }
 
-// Mock mode keeps its own idea of which schema is active, so uploading and
-// resetting behave like the real thing across navigations instead of
-// snapping back to built-in on every read.
 let mockActive = builtInSnapshot();
 
 export function mockActiveSchema() {
@@ -519,12 +414,6 @@ export function mockResetSchema() {
   return mockActive;
 }
 
-/**
- * A deliberately shallow CREATE TABLE reader — enough that the preview
- * reflects what the user actually pasted rather than a canned example. The
- * real parsing is JSqlParser's, on the backend; this exists so mock mode
- * isn't a lie about the one screen whose whole job is showing your schema.
- */
 export function mockSchemaUpload({ ddl, label }) {
   const tables = [];
   const pattern = /create\s+table\s+`?(\w+)`?\s*\(([\s\S]*?)\)\s*(?:engine|;|$)/gi;

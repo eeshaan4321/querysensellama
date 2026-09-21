@@ -169,23 +169,23 @@ raw material the schema advisor exists to act on.
 
 **Row counts are small** — 5 to 49 per table (`order_items` 49, `orders` 25,
 `payments` 21, `products` 20, `customers` 15, the rest 5-10). Consequence worth
-knowing before demoing: every domain suggestion appends "the estimated row count
-is low, so the performance impact is likely minor," because that branch reads
+knowing before demoing: the optimisation rules report a full scan as `WARNING`
+and only escalate it to `CRITICAL` above 100 rows, because that branch reads
 `estimatedRows`. At this scale the optimisation modules can identify a problem
 but never show one costing anything.
 
 **Row counts gate how much the optimisation modules can say.** The
-thresholds are `TRANSACTIONAL` 100, `ECOMMERCE` 1000,
-`ResourceConsciousService` 5000 and `ANALYTICAL` 10000, all exclusive, and
-the built-in tables clear none of them.
+thresholds are the optimisation rules' 100 and `ResourceConsciousService`'s
+5000, both exclusive, and the built-in tables clear neither. (There used to be
+four; the e-commerce and analytical sets went with the domain picker, §9.7.)
 
 **Uploading a schema no longer changes that by default.** `seed-rows` was
 12000 — chosen to clear all four, and verified live doing so (§7) — and was
 lowered to **100 on 2026-09-10** at the user's direction, because a sample
 database should not leave twelve thousand rows per table sitting in MySQL.
-At 100 an upload clears no threshold either, so every domain suggestion
-reads "the estimated row count is low, so the performance impact is likely
-minor" and `ResourceConsciousService` emits nothing of its own.
+At 100 an upload clears no threshold either — the optimisation rules need
+*more than* 100 — so a full scan stays at `WARNING` and
+`ResourceConsciousService` emits nothing of its own.
 
 **To demo the optimisation modules saying something substantial, raise the
 property** — no code change, no rebuild:
@@ -285,18 +285,22 @@ recorded, not as documented elsewhere.
 ### `POST /api/query/analyze`
 
 ```jsonc
-// request — all four fields required
+// request — all three fields required
 { "query": "SELECT * FROM customers WHERE city = 'mumbai';",
-  "databaseType": "MySQL", "domainProfile": "ECOMMERCE", "resourceLevel": "LOW" }
+  "databaseType": "MySQL", "resourceLevel": "LOW" }
 
 // response
 { "analysis": { /* flat QueryAnalysisResult, see below */ },
   "suggestions": [ { "message": "...", "severity": "CRITICAL", "source": "DOMAIN" } ] }
 ```
 
-`domainProfile` ∈ `ECOMMERCE | ANALYTICAL | TRANSACTIONAL`,
 `resourceLevel` ∈ `LOW | MEDIUM | HIGH`, `severity` ∈ `INFO | WARNING | CRITICAL`,
 `source` ∈ `DOMAIN | RESOURCE`.
+
+**`domainProfile` was removed on 2026-09-11**, with the Workbench's domain
+picker (§9.7). A client that still sends it is not rejected — Jackson ignores
+unknown fields by default — but the value does nothing. `source: "DOMAIN"` kept
+its name; it now tags the single optimisation rule set.
 
 `analysis` is **flat**, not a plan tree:
 
@@ -314,12 +318,12 @@ fields are a whole-query summary and merge rows describing *different* tables,
 so a join must be read from `tables[]`, not from them. `ExplainPlanView`
 renders `tables[]` separately whenever there is more than one.
 
-This one endpoint carries three modules: the analysis itself, the domain rules,
-and the resource policy. The last two appear only as tagged entries in
+This one endpoint carries three modules: the analysis itself, the optimisation
+rules, and the resource policy. The last two appear only as tagged entries in
 `suggestions`.
 
-**Resource level genuinely changes the output.** `LOW` shifts every domain
-suggestion up one severity step, `HIGH` shifts it down, `MEDIUM` leaves it
+**Resource level genuinely changes the output.** `LOW` shifts every
+`DOMAIN`-tagged suggestion up one severity step, `HIGH` shifts it down, `MEDIUM` leaves it
 alone — and the resource module writes different text per level for the same
 finding.
 
@@ -449,8 +453,6 @@ in the frontend that knows a backend field name.
 | `naturalLanguageQuery` | `query` |
 | `targetDb: 'SQL'` | `databaseType: "MySQL"` |
 | `targetDb: 'MONGODB'` | `databaseType: "MongoDB"` |
-| `domain` | `domainProfile` |
-| `domain: 'OTHER'` | `domainProfile: "TRANSACTIONAL"` (no `OTHER` in the enum) |
 
 The one value the frontend does **not** rename is `handledBy` — it renders the
 backend's `RULE_ENGINE` / `CACHE` / `OLLAMA` as-is, because history rows are an
@@ -465,15 +467,15 @@ future provider change is one edit.
 
 ### The pipeline is four requests, not seven
 
-The UI shows seven screens. It makes four HTTP calls, and one of them runs
+The UI shows six screens. It makes four HTTP calls, and one of them runs
 once at startup rather than per query:
 
 ```
 0. GET  /api/schema/active           → which schema is live (once, at app start)
 1. POST /api/query/generate          → Build query
 2. POST /api/query/analyze           → Analyse
-                                       ├── Domain rules      (no request)
-                                       └── Resource policy   (no request)
+                                       ├── Optimisation rules (no request)
+                                       └── Resource policy    (no request)
 3. POST /api/query/schema-advisor    → Schema advice
    (reuses step 3)                   → Optimization, real half
    (no request)                      → Optimization, simulated half
@@ -508,7 +510,7 @@ frontend/src/
 ├── context/             ← EngineStatusContext (last engine used), ActiveSchemaContext
 │                          (which schema is live), WorkbenchContext
 ├── pages/               ← Workbench, SchemaSource, Analysis, Optimization, SchemaAdvisor,
-│                          History, About
+│                          History
 ├── components/          ← shell/, common/, then one folder per feature area
 ├── mock/fixtures.js     ← every generator behind VITE_USE_MOCK
 ├── lib/                 ← query highlighter, line diff, resource levels,
@@ -575,7 +577,7 @@ shown identically. It is now also the evidence a reader can check the
 verdict's "an index was available" finding against.
 
 These flags are MySQL's own report rather than anything inferred, and every
-rule downstream — domain, resource and schema advisor alike — fires on
+rule downstream — optimisation, resource and schema advisor alike — fires on
 exactly them, so this section remains the evidence the rest of the app
 reasons from.
 
@@ -594,23 +596,23 @@ Schema advisor is the prescription for the same finding.** "Unindexed scan
 on `gender`" versus "`CREATE INDEX idx_user_details_gender`". If a demo is
 short on time, the advisor is the more useful of the two.
 
-**Section 2, `SuggestionsList` — domain and resource advice.** This is the
-part with no equivalent anywhere else in the app, and the project's most
-defensible novelty claim: identical `EXPLAIN` facts, read differently
-according to declared context. Same query, same plan, three domains:
+**Section 2, `SuggestionsList` — optimisation and resource advice.** One
+fixed rule set, the transactional one (§9.7), read against the plan, with
+its severities shifted by the resource level. Each entry is tagged
+"Optimization" or "Resource".
 
-| Domain | Reading |
-|---|---|
-| E-commerce | filesort framed as a product-listing "sort by" |
-| Analytical | full scan "often acceptable for analytical queries" — **and no filesort complaint at all** |
-| Transactional | "should be simple key lookups" — escalated to `CRITICAL` |
-
-The analytical profile actively *withholds* a warning the others raise,
-which is the clearest demonstration that these are separate rule sets and
-not one rule set with different wording.
+**The domain picker was removed on 2026-09-11.** This section used to read
+the same `EXPLAIN` facts differently per declared workload — e-commerce,
+analytical or transactional, chosen from a dropdown on the Workbench.
+Schemas are now uploaded directly, so no workload is ever declared; the
+dropdown went, and the e-commerce and analytical rule sets went with it.
+Transactional was already what a missing profile or "Other" fell back to,
+so a run that never picked a domain behaves exactly as before. Its messages
+still say "transactional" — they were written for that profile and have not
+been reworded.
 
 **Do not confuse this section with the Optimization screen's "Simulated
-domain rules" list.** They look alike and are framed alike. This one is
+rewrite rules" list.** They look alike and are framed alike. This one is
 `/api/query/analyze`; that one is `fixtures.js`.
 
 ### Two things the shell shows permanently
@@ -675,7 +677,7 @@ block is Copy.
 | Endpoint | Status | What is needed |
 |---|---|---|
 | `POST /api/query/compare` | **Nothing exists.** No controller, no service, no DTO. The frontend simulates it in the browser instead of hiding the screen. | A comparison engine returning a cost/row delta and a per-rule trace. It also needs the item below to exist first — there is no "after" query to compare a "before" against. |
-| `POST /api/history` | **No write endpoint.** | Only needed if the frontend should store per-run metadata the backend does not currently see (domain, resource level, confidence, cost delta). Today the backend writes history itself and those fields are not persisted at all. |
+| `POST /api/history` | **No write endpoint.** | Only needed if the frontend should store per-run metadata the backend does not currently see (resource level, confidence, cost delta). Today the backend writes history itself and those fields are not persisted at all. |
 
 ### Missing capabilities behind endpoints that do exist
 
@@ -730,7 +732,7 @@ block is Copy.
    the whole analysis. Accepted at this scale; worth revisiting if the analysis
    gets expensive.
 
-7. **History stores no run context.** No domain, resource level, confidence or
+7. **History stores no run context.** No resource level, confidence or
    timing is persisted — only input, query, database type, source and timestamp.
    Adding columns to `QueryHistory` is the prerequisite for any analytics over
    past runs.
@@ -1063,6 +1065,11 @@ schema-conformance check before a result is returned or cached) and #3
 - **The comparison screen is always simulated**, mock mode or not. See §4.
 - **No backend health check.** Nothing calls `/test`; a dead backend shows up as
   a per-request error, not a banner.
+- **The Architecture screen was removed 2026-09-11.** It was a pipeline diagram
+  for reviewers, not something an end user needs. Its nav item, the `/about`
+  route, `pages/AboutPage.jsx` and `components/architecture/` are gone; nothing
+  else referenced them. `/about` now matches no route and renders an empty
+  shell.
 - 3 oxlint warnings are outstanding (two react-refresh, one unused parameter in
   the fixtures). No errors; `npm run build` is clean.
 
@@ -1131,6 +1138,12 @@ schema-conformance check before a result is returned or cached) and #3
   block is always safe to paste whole. The per-recommendation card above it
   still shows the raw text with its own Copy button, exactly as the Schema
   advisor screen does.
+- **`domainProfile: domainProfile must not be null` on Run analysis** means
+  the backend was started before 2026-09-11, when the field was removed
+  (§9.7). The source is correct; the running JVM is not. Devtools did not
+  reload it. Stop the backend and start it with `./mvnw clean
+  spring-boot:run` — `clean` also clears the compiled copies of the deleted
+  rule classes still sitting in `target/`. Hit live on 2026-09-11.
 - **Generated SQL naming a table you do not have** (`transactions`, `buyer_id`)
   is the schema-grounding gap, not a model quirk: if the question does not
   literally contain `customer(s)`/`order(s)`, the LLM prompt carries no schema
@@ -1836,14 +1849,55 @@ a new one — but it is the first time it has been **visible in a response**
 rather than inferred, because the decline reason and the cache hit now travel
 together. That contradiction is precisely what the trace was built to expose.
 
+### Session of 2026-09-11 — the domain picker is removed
+
+Schemas are now uploaded directly, so no workload is ever declared, and the
+Workbench's Domain dropdown was removed at the user's direction. What went
+with it:
+
+| Layer | Change |
+|---|---|
+| Frontend | Dropdown, `domain` state, `Domain`/`DOMAIN_TO_BACKEND_PROFILE` in `contracts.js`, the `domainProfile` field on `/analyze` and `/schema-advisor` calls, and domain-keyed rule lists in `fixtures.js` |
+| Backend | `AnalyzeRequest.domainProfile`, the `DomainProfile` enum, `EcommerceOptimizationRules`, `AnalyticalOptimizationRules`. `DomainOptimizationService.evaluate` now takes only the result |
+| Wording | Suggestion chip "Domain" → "Optimization"; Analysis headings and the Optimization page's "Simulated domain rules" no longer mention domains |
+
+Every analysis now runs `TransactionalOptimizationRules` — the set a missing
+profile or "Other" already fell back to, so a run that never picked a domain
+behaves as before. Rule count 70 → 59 (§9). The `source: "DOMAIN"` tag kept
+its name, and the transactional messages still say "transactional".
+
+#### Verified
+
+- `vite build` clean.
+- Backend sources compiled with `javac` into a scratch directory, exit 0 —
+  **not** `./mvnw test`, because a backend was running against `target/`
+  (§6 on why that races). No test referenced the removed classes.
+- Grep for `domainProfile`, `DomainProfile` and the deleted classes across
+  `backend/src` and `frontend/src`: none left.
+
+#### Hit live, and fixed
+
+The first Run analysis afterwards failed with *"domainProfile: domainProfile
+must not be null"*. The backend then running had been started at 19:57 from
+a class compiled at 12:06; the source edit landed at 20:12, and devtools never
+picked it up. Stopped (the Maven launcher and its child JVM) and restarted
+with `./mvnw clean spring-boot:run` — *"Started BackendApplication in 4.724
+seconds"*. §6 now carries this as a gotcha.
+
+#### Not verified
+
+- No `/analyze` call was made after the restart; the user is testing it.
+- `./mvnw test` and `npm test` were not run for this change.
+
 ### Not verified
 
 - ~~**No screen of the current frontend has been exercised against the live
   backend in a browser.**~~ **Partially retired 2026-09-10** — see the schema
   upload session above, and the Optimization session after it. Workbench,
   Analysis, Schema source and **Optimization** have now been driven in a real
-  browser against the live backend, with a console check. **Schema advisor,
-  History and Architecture still have not been** — note that Optimization
+  browser against the live backend, with a console check. **Schema advisor
+  and History still have not been** (Architecture was removed 2026-09-11,
+  see §5 Frontend housekeeping) — note that Optimization
   renders the advisor's output through the same `RecommendationList` the
   Schema advisor screen uses, so that component is now verified on screen
   even though its own page is not. The per-table plan blocks in
@@ -2046,3 +2100,215 @@ query rewrite and its before/after numbers.
 Every figure the Analysis screen shows is an optimiser **estimate**. The
 analyzer runs `EXPLAIN` and never executes the query — a decision reaffirmed
 on 2026-09-10 when `EXPLAIN ANALYZE` was considered and declined (§8 item 3).
+
+---
+
+## 9. Every rule, and how many there are
+
+Checked 2026-09-11 by reading `backend/src/main`. Nothing here was run. It
+lists every rule the backend applies, in the order it applies them.
+
+| Module | Rules | Where |
+|---|---|---|
+| **Rule engine** (natural language → SQL) | **22** (18 of them can decline) | `querybuilder/` |
+| Routing between the three layers | 3 | `QueryGenerationServiceImpl`, `GeneratedQueryValidator` |
+| Pre-EXPLAIN checks | 2 | `analysis/SqlPreflightValidator` |
+| EXPLAIN warnings | 4 | `analysis/MySqlExplainAnalyzer` |
+| MongoDB checks | 2 | `analysis/MongoSimpleAnalyzer` |
+| Analysis verdict | 9 | `analysis/VerdictService` |
+| Domain optimisation | 7 (transactional — the only set left) | `optimization/TransactionalOptimizationRules` |
+| Resource optimisation | 5 | `optimization/ResourceConsciousService` |
+| Schema advisor | 5 | `service/impl/SchemaAdvisorServiceImpl` |
+| **Total** | **59** | |
+
+Only the first row is the rule engine in the strict sense: layer 1 of query
+generation (§2). The rest are the other rule-based modules. They are
+listed too, because none of them uses a model either.
+
+### 9.1 The rule engine — 22 rules
+
+The entry point is `RuleBasedQueryBuilder`. The parsing is done by `QueryIntentParser`, tables
+and columns are matched by `SchemaBinder` and `JoinPathResolver`, and SQL is
+written by `SqlEmitter`. The rules run top to bottom, and the first decline
+stops the build. **Every decline carries a plain-English reason**, which the
+UI shows in the rule trace and which appears nowhere else.
+
+**What counts as a match.** Every "binds" below means matched against the
+**active** schema, whether that's the built-in one or an upload. That dependency is
+the whole 2026-09-11 redesign (§2). Nothing is matched against a fixed
+English word list except the date check (rule 3).
+
+#### Gates
+
+| # | Rule | What it does | Declines when |
+|---|---|---|---|
+| 1 | Empty question | — | the question is blank |
+| 2 | SQL only | — | the target is MongoDB. Everything downstream writes SQL syntax, so claiming a Mongo request would return the wrong dialect at confidence 0.95 |
+| 3 | No date arithmetic | Looks for a date *expression*: `last/this/next/past` + a unit, `today/yesterday/tomorrow/recently`, a preposition + a month name, `before/after/since/until` + a year, `date range`, `last N days` | any of those appears. It declines on the expression, not on a single word, so the word `may` no longer counts as a month |
+
+#### Binding the question to the schema
+
+| # | Rule | What it does | Declines when |
+|---|---|---|---|
+| 4 | Table binding | Finds every table named in the question. Underscores and spaces are treated as the same, so `order items` matches `order_items`. The plural is tried before the singular. A match sitting inside a longer match is dropped, so `orders` cannot win on the word "order" inside "order items". Tables keep sentence order, and **the first one named is the subject** | no table matches, or **more than two** do |
+| 5 | Column binding (used by rules 9–15 and 19) | Tries an exact match (spaces read as underscores), then the singular (trailing `s` removed), then a suffix match (`order date` → `order_date`), but only if exactly one column ends that way | — itself; a phrase that matches nothing, or matches two columns equally well, comes back empty and the rule that asked for it declines |
+| 6 | Join from a declared foreign key | With two tables, finds the foreign keys that link them. The `ON` clause is read from that key, never guessed from a name like `client_id`. Self-referencing keys (`employees.manager_id`) are ignored | the schema declares **no** key between the two tables, or **more than one** (for example, billing and shipping addresses). The trace names the columns involved |
+
+#### Reading what is being asked
+
+| # | Rule | What it does | Declines when |
+|---|---|---|---|
+| 7 | Verb | `delete` or `remove` anywhere in the question means `DELETE`; anything else means `SELECT` | a delete would span two joined tables |
+| 8 | Count | `count`, `how many`, `total number`, `number of` produce `COUNT(*)` | — |
+| 9 | Explicit projection | `only X` / `just X` / `X of <table>`. The last one isn't used if the question also asks for an average, sum, max or min. The phrase is split on commas and `and`, filler words are dropped (`show`, `the`, `all` …), and each piece is bound; a multi-word piece that fails whole is tried again on its last word | any requested field is not a column of the subject table. It never falls back to `SELECT *` and quietly drops what was asked for |
+| 10 | Implicit projection | `customer city`, `customer first name`: a column phrase directly after the table noun. It only runs when rules 8 and 9 didn't, and only if the phrase runs to the end of the sentence, is at most three words, and contains no preposition, verb or table name. Those limits keep `customers in pune` a filter rather than a failed projection | the phrase looks like a column but matches none, or matches two equally well |
+| 11 | Aggregate | `average/avg/mean`, `sum`, `maximum/max/highest`, `minimum/min/lowest` + a column produce `AVG` / `SUM` / `MAX` / `MIN`. Skipped when rule 9 or 10 already chose columns. `total` is deliberately not read as `SUM`, because it's a common column name | the column isn't one of the subject table's |
+| 12 | Grouping | `per`, `for each`, `grouped by`, `group by` + a column. The column goes into the projection, so `GROUP BY` covers it | the column isn't one of the subject table's |
+| 13 | Comparison | `<column> more / greater / larger / higher than, above, over N` → `>`; the less-than forms, `below` and `under` → `<`. `N` can be a digit or a word from one to ten. If the column binds, this becomes a `WHERE` condition. If it doesn't bind but a join exists, it becomes `HAVING COUNT(<related table's first column>)`: "customers who placed more than three orders" | `N` isn't a number, or there's no join and the column doesn't bind |
+| 14 | Filter from the data itself | A word after `from`, `in`, `at`, `located in`, `living in`, `based in`, `residing in`. Stopwords, table names and column names are skipped. Otherwise the engine looks for the subject-table column whose **actual distinct values** contain the word (ignoring case) and writes `<column> = '<word>'`. Only the first such word is used | no column of the subject table holds the value |
+| 15 | `with <column> <value>` | An explicit column/value pair. It only runs when rules 13 and 14 produced no `WHERE`. Numbers are left unquoted | never. If the column doesn't bind, the phrase is **ignored**, not declined (see 9.10) |
+| 16 | Building the column list | Picked in this order: the grouping column first; then the aggregate; else the key + `name`/`title`/`label` column + `COUNT` for rule 13's `HAVING`; else `COUNT(*)`; else the chosen columns; else `*`. With a join, every column is prefixed with its table name | — |
+
+#### Safety checks
+
+| # | Rule | What it does | Declines when |
+|---|---|---|---|
+| 17 | No unconditional delete | — | a `DELETE` would have no `WHERE` |
+| 18 | Columns must exist right now | Checks every matched column against the live database's column list. If that list can't be fetched, the check is skipped rather than treated as a failure | a column is in the active schema but not in the database |
+
+#### Ordering and output
+
+| # | Rule | What it does | Declines when |
+|---|---|---|---|
+| 19 | Order by | `order by / ordered by / sort by / sorted by <column>`, plus optionally `asc`/`ascending`/`desc`/`descending`; the default is `ASC` | the sort column isn't one of the subject table's |
+| 20 | Limit | `top N`, `first N`, `limit N` (digits only) | — |
+| 21 | Writing the SQL | Fixed clause order: `SELECT` / `DELETE` → `FROM` → `JOIN … ON` → `WHERE` (conditions joined by `AND`) → `GROUP BY` → `HAVING` → `ORDER BY` → `LIMIT` → `;`. **`GROUP BY` isn't matched from the question; it's derived** as every column in the SELECT list that isn't aggregated. That always satisfies MySQL's `ONLY_FULL_GROUP_BY`. So a bare `COUNT(*)` gets no `GROUP BY` at all | — |
+| 22 | Rule trace | Every result, built or declined, carries what each phrase matched, the query shape (`SELECT + JOIN + GROUP BY + HAVING`), the foreign key used, the checks it passed, or the decline reason | — |
+
+**The 18 ways to decline,** grouped: 3 gates (rules 1–3), 4 about tables and
+joins (none, too many, no key, two keys), 1 delete across a join, 7 where a
+named thing doesn't match a column (explicit projection, implicit projection, aggregate,
+grouping, comparison, filter value, sort), 1 comparison against something
+that isn't a number, and 2 safety checks (unconditional delete, a column missing from the database).
+
+### 9.2 Routing between the three layers — 3 rules
+
+| # | Rule | What it does |
+|---|---|---|
+| 1 | Layer order | Rule engine → cache → local LLM, tried in that order. Confidence is a fixed label per layer: **0.95 / 1.00 / 0.65**, or **0.40** when rule 3 fires |
+| 2 | Cache match | Matches on the question **and** the target database, ignoring case, so the same sentence asked for MySQL and for MongoDB can't pick up each other's cached answer |
+| 3 | LLM incompleteness check (MySQL only) | Two signals. (a) The question names more than one table and the SQL doesn't reference them all. (b) The question has a second-condition word (`with`, `who have/placed/has`, `and`) **and** a number or comparison, but the SQL has no `JOIN`, `HAVING`, `GROUP BY` or `AND`. Either one lowers the confidence to 0.40. The query is still returned |
+
+### 9.3 Pre-EXPLAIN checks — 2 rules (`SqlPreflightValidator`)
+
+Both run on the SQL text before MySQL sees it. Either one stops the query
+with a specific message.
+
+| # | Rule | Blocks when |
+|---|---|---|
+| 1 | Strict GROUP BY | a query with `GROUP BY` selects a column that is neither grouped nor inside a function (what MySQL would reject as error 1055) |
+| 2 | Column exists | a `SELECT` or simple `WHERE` column isn't on the table (error 1054). Skipped when the column list can't be fetched |
+
+### 9.4 EXPLAIN warnings — 4 rules (`MySqlExplainAnalyzer`)
+
+Applied to each table in the plan. The same table never gets the same warning twice.
+They report what MySQL chose; they don't claim it was wrong.
+
+| # | Fires when | Says |
+|---|---|---|
+| 1 | the table was scanned in full | full scan on this table; check for an index if the query is slow |
+| 2 | no index was used, but it wasn't a full scan | no index used, with the access type and which indexes MySQL considered |
+| 3 | `Using temporary` | a temporary table was built for GROUP BY / DISTINCT |
+| 4 | `Using filesort` | results were sorted after reading; an index matching ORDER BY may help |
+
+### 9.5 MongoDB checks — 2 rules (`MongoSimpleAnalyzer`)
+
+| # | Fires when |
+|---|---|
+| 1 | the first filter field that isn't a `$` operator is missing from the **placeholder** index list (`_id`, `email`, `userId`) |
+| 2 | a `$regex` value doesn't start with `^`, so no index can serve it |
+
+### 9.6 Analysis verdict — 9 rules (`VerdictService`)
+
+The rules are tried in order and the first match becomes the headline. "Large" means at least
+`querysense.verdict.large-table-rows` rows (default **1000**). "Discarded"
+comes from MySQL's `filtered`: under 50% kept means most of what was read was thrown away.
+
+| # | Condition | Grade |
+|---|---|---|
+| 1 | EXPLAIN never ran | `UNKNOWN` — never shown as a pass |
+| 2 | the plan reads no table | `INFO` |
+| 3 | large full scan, most rows discarded | `CRITICAL` |
+| 4 | large full scan, `filtered` not reported | `WARNING` |
+| 5 | MySQL listed a usable index and used none | `WARNING` |
+| 6 | filesort or temporary table over a large row count | `WARNING` |
+| 7 | large full scan that returns most of what it reads | `INFO` — the scan is the right plan here |
+| 8 | small full scan | `INFO` |
+| 9 | anything else (the rows were found through an index) | `INFO` |
+
+### 9.7 Domain optimisation — 7 rules
+
+One rule set, the transactional one, run on every analysis. A row count has
+to be **above** 100 to count as large.
+
+**Removed 2026-09-11: the domain picker.** The Workbench used to offer a
+Domain dropdown choosing between three sets — e-commerce (6 rules, threshold
+1,000), analytical (5 rules, threshold 10,000) and transactional. Schemas are
+now uploaded directly, so no workload is declared. The dropdown, the
+`domainProfile` request field, the `DomainProfile` enum and the two sets only
+the dropdown could reach were deleted. Transactional was already the fallback
+for no profile or `Other`, so it is what remains. The deleted classes are in
+git history.
+
+**Transactional — 7 rules (threshold 100):**
+
+| # | Fires when | Severity |
+|---|---|---|
+| 1 | full table scan | `CRITICAL` if above 100 rows, else `WARNING`. There's no "small table" exception |
+| 2 | filesort | `CRITICAL` |
+| 3 | temporary table | `CRITICAL` — may not belong on a transactional path |
+| 4 | no index used, and not a full scan | `WARNING` |
+| 5 | `const` or `ref` access through an index | `INFO` — the ideal shape for this workload |
+| 6 | Mongo: unindexed filter | `CRITICAL` |
+| 7 | Mongo: unanchored regex | `CRITICAL` |
+
+### 9.8 Resource optimisation — 5 rules (`ResourceConsciousService`)
+
+The resource setting defaults to **medium** when none is given. The threshold is **5,000** rows, and a count has to be above it.
+
+| # | Rule | Effect |
+|---|---|---|
+| 1 | filesort above 5,000 rows | low `CRITICAL` (likely spills to disk) · medium `WARNING` · high `INFO` |
+| 2 | temporary table (any size) | low `CRITICAL` · medium `WARNING` · high `INFO` |
+| 3 | full scan above 5,000 rows, low resources | `WARNING` (pressure on the buffer pool) |
+| 4 | Mongo: unindexed filter, low resources | `CRITICAL` |
+| 5 | Severity shift | every **domain** suggestion moves one step: up under low, unchanged under medium, down under high, capped between `INFO` and `CRITICAL`. The resource module's own suggestions aren't shifted |
+
+### 9.9 Schema advisor — 5 rules (`SchemaAdvisorServiceImpl`)
+
+A recommendation only appears when the specific problem it fixes is present.
+The advisor never executes its own DDL (§5).
+
+| # | Fires when | Recommends |
+|---|---|---|
+| 1 | full table scan **and** no index used | `INDEX`: `CREATE INDEX idx_<table>_<column>` on the filtered column |
+| 2 | filesort | `INDEX` on the ORDER BY column. If the query also filters on another column, it says that a composite `(filter, sort)` index may be needed, and to check again with EXPLAIN |
+| 3 | temporary table | `STRUCTURAL`: review the GROUP BY / DISTINCT. There's deliberately no ready-made statement, because no single index reliably fixes this |
+| 4 | Mongo: unindexed filter | `INDEX`: `db.<collection>.createIndex({ <field>: 1 })` |
+| 5 | Mongo: unanchored regex | `STRUCTURAL`: anchor with `^`, or use a text index |
+
+### 9.10 What reading the rules turned up
+
+Both of these come from reading the code; neither has been run.
+
+- **Only the first filter value is kept, and the rest is dropped without a
+  word.** Rule 14 captures one word after the preposition and stops, so
+  `customers in mumbai and pune` should build `WHERE city = 'mumbai'` at
+  confidence 0.95 and lose `pune`. Section 15 of `backend/CLAUDE.md` records a fix for exactly this
+  (`city IN (...)`, Bug 10) in the engine this one replaced. That behaviour
+  didn't carry over. For the same reason, a multi-word value like `new delhi`
+  can't be matched either.
+- **`with <column> <value>` is the only phrase that fails silently.** Every
+  other rule that can't match what it read declines. Rule 15 just skips it,
+  so a question like `customers with gender female` on a schema without a
+  `gender` column should come back as all customers, labelled `RULE_ENGINE`.

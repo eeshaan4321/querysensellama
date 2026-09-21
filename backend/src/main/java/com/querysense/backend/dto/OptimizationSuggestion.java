@@ -2,24 +2,7 @@ package com.querysense.backend.dto;
 
 import com.querysense.backend.enums.SuggestionSeverity;
 
-/**
- * OptimizationSuggestion
- *
- * The common output unit produced by both the Domain-Sensitive Optimization
- * Module and the Resource-Conscious Decision System. Both modules consume
- * the same QueryAnalysisResult (Anant's contract) and each produce a
- * List<OptimizationSuggestion>; QueryGenerationServiceImpl merges the
- * two lists before returning an AnalyzeResponse.
- *
- * FIELD NOTES:
- * - message should be a complete, human-readable sentence (same convention
- *   as QueryAnalysisResult.warnings) — the frontend may render this
- *   directly, with no further formatting.
- * - source records which module produced the suggestion, so the frontend
- *   and the eventual Comparison Engine can distinguish "this changed
- *   because of the domain profile" from "this changed because of resource
- *   level" without parsing the message text.
- */
+/** A suggestion from the domain or resource optimisation module. */
 public class OptimizationSuggestion {
 
     public enum Source {
@@ -39,7 +22,6 @@ public class OptimizationSuggestion {
         this.source = source;
     }
 
-    // Convenience factories so rule classes don't repeat "Source.DOMAIN" / "Source.RESOURCE" everywhere
     public static OptimizationSuggestion domain(String message, SuggestionSeverity severity) {
         return new OptimizationSuggestion(message, severity, Source.DOMAIN);
     }

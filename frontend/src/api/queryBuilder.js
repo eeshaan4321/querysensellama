@@ -2,13 +2,6 @@ import { apiClient, USE_MOCK, mockDelay } from './client';
 import { mockBuildQuery } from '../mock/fixtures';
 import { TARGET_DB_TO_BACKEND } from './contracts';
 
-/**
- * POST /api/query/generate — REAL, verified against the running backend.
- * Note the real request has no `domain` field — the rule engine and Gemini
- * fallback don't take one; domain only matters once you get to /analyze.
- * @param {{naturalLanguageQuery: string, targetDb: 'SQL'|'MONGODB'}} payload
- * @returns {Promise<import('./contracts').QueryBuildResponse>}
- */
 export async function buildQuery({ naturalLanguageQuery, targetDb }) {
   if (USE_MOCK) {
     await mockDelay();
@@ -23,9 +16,6 @@ export async function buildQuery({ naturalLanguageQuery, targetDb }) {
     targetDb,
     handledBy: data.handledBy,
     confidence: data.confidence,
-    // Rendered on the Analysis screen, not here — it answers "why is the
-    // query shaped this way?", which is the question a reader has once
-    // they are looking at the plan, not while checking the SQL itself.
     ruleTrace: data.ruleTrace ?? null,
   };
 }

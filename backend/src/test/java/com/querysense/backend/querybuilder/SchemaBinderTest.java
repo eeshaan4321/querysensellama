@@ -8,14 +8,6 @@ import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/**
- * SchemaBinderTest
- *
- * The first two cases are the PROJECT.md §5 defect: "show all order items"
- * used to resolve to `orders` — the wrong table, the wrong row count, and a
- * column set that cannot answer the question — and returned it as
- * RULE_ENGINE at confidence 0.95.
- */
 class SchemaBinderTest {
 
     private SchemaBinder binder;

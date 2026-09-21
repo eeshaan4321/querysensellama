@@ -21,9 +21,6 @@ const ICONS = {
   history: (
     <path d="M12 6v6l4 2M21 12a9 9 0 11-3-6.7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" fill="none" />
   ),
-  about: (
-    <path d="M9 9a3 3 0 116 0c0 2-3 2.5-3 5M12 17.5v.01M4 12a8 8 0 1116 0 8 8 0 01-16 0z" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" fill="none" />
-  ),
 };
 
 const ITEMS = [
@@ -33,7 +30,6 @@ const ITEMS = [
   { to: '/optimization', label: 'Optimization', icon: 'optimization' },
   { to: '/schema', label: 'Schema advisor', icon: 'schema' },
   { to: '/history', label: 'History', icon: 'history' },
-  { to: '/about', label: 'Architecture', icon: 'about' },
 ];
 
 export function NavRail() {

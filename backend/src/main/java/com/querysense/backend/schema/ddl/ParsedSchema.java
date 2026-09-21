@@ -5,14 +5,7 @@ import com.querysense.backend.schema.KnownSchema;
 import java.util.List;
 import java.util.Optional;
 
-/**
- * A whole uploaded file, parsed.
- *
- * `warnings` carries statements that could not be parsed and were skipped.
- * They are reported to the user rather than swallowed: a table silently
- * missing from an upload is discovered later, as a query that fails for no
- * visible reason.
- */
+/** The tables parsed from an uploaded file, with any skipped statements. */
 public record ParsedSchema(List<ParsedTable> tables, List<String> warnings) {
 
     public Optional<ParsedTable> table(String name) {

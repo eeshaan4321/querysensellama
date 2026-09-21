@@ -8,6 +8,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.util.List;
@@ -17,17 +18,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
-/**
- * SchemaSeederTest
- *
- * The ordering tests exist because foreign keys are real constraints in the
- * provisioned schema: a child row inserted before its parent is rejected by
- * MySQL, and the table ends up empty — which puts EXPLAIN right back to
- * reporting rows=1 for it, the exact condition seeding exists to prevent.
- */
 class SchemaSeederTest {
 
     private JdbcTemplate jdbcTemplate;
@@ -82,9 +76,77 @@ class SchemaSeederTest {
     @Test
     @DisplayName("reports how many rows it inserted per table")
     void reportsRowCounts() {
-        Map<String, Integer> counts = seeder.seed(customersAndOrders());
+        Map<String, Integer> counts = seeder.seed(customersAndOrders()).rowCounts();
 
         assertThat(counts).containsEntry("customers", 50).containsEntry("orders", 50);
+    }
+
+    @Test
+    @DisplayName("a rejected batch is reported as a warning, not swallowed")
+    void reportsRejectedBatchesAsWarnings() {
+        doThrow(new DataIntegrityViolationException(
+                "Data truncation: Out of range value for column 'status' at row 1"))
+                .when(jdbcTemplate).batchUpdate(anyString(), any(List.class));
+
+        SchemaSeeder.SeedReport report = seeder.seed(customersAndOrders());
+
+        assertThat(report.rowCounts()).containsEntry("customers", 0);
+        assertThat(report.warnings())
+                .anyMatch(w -> w.contains("customers") && w.contains("Seeded only 0"));
+        assertThat(report.warnings())
+                .anyMatch(w -> w.contains("Out of range value for column 'status'"));
+    }
+
+    @Test
+    @DisplayName("a fully successful seed produces no warnings")
+    void quietWhenEverythingSeeds() {
+        assertThat(seeder.seed(customersAndOrders()).warnings()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("a TINYINT primary key caps the table at 127 and warns about it")
+    void narrowPrimaryKeyCapsRowsAndWarns() {
+        SchemaSeeder production = new SchemaSeeder(jdbcTemplate, "querysense_uploads", 12000, 7L);
+        ParsedTable narrow = new ParsedTable(
+                "flags",
+                List.of(new ParsedColumn("id", "TINYINT", List.of(), true, false, false, true),
+                        col("label", "VARCHAR")),
+                List.of());
+
+        assertThat(production.seedableRowsFor(narrow)).isEqualTo(127L);
+
+        SchemaSeeder.SeedReport report = production.seed(new ParsedSchema(List.of(narrow), List.of()));
+
+        assertThat(report.rowCounts()).containsEntry("flags", 127);
+        assertThat(report.warnings())
+                .anyMatch(w -> w.contains("flags") && w.contains("127") && w.contains("12000"));
+    }
+
+    @Test
+    @DisplayName("seedableRowsFor stops at the narrowest key column of several")
+    void seedableRowsStopsAtNarrowestKey() {
+        SchemaSeeder production = new SchemaSeeder(jdbcTemplate, "querysense_uploads", 12000, 7L);
+        ParsedTable mixed = new ParsedTable(
+                "mixed",
+                List.of(new ParsedColumn("id", "INT", List.of(), true, false, false, true),
+                        new ParsedColumn("slot", "SMALLINT", List.of(), true, false, true, false),
+                        new ParsedColumn("tag", "TINYINT", List.of(), true, false, true, false)),
+                List.of());
+
+        assertThat(production.seedableRowsFor(mixed)).isEqualTo(127L);
+    }
+
+    @Test
+    @DisplayName("a wide key does not cap the table at all")
+    void wideKeyDoesNotCap() {
+        SchemaSeeder production = new SchemaSeeder(jdbcTemplate, "querysense_uploads", 12000, 7L);
+        ParsedTable wide = new ParsedTable(
+                "wide",
+                List.of(new ParsedColumn("id", "INT", List.of(), true, false, false, true)),
+                List.of());
+
+        assertThat(production.seedableRowsFor(wide)).isEqualTo(12000L);
+        assertThat(production.seed(new ParsedSchema(List.of(wide), List.of())).warnings()).isEmpty();
     }
 
     @Test
@@ -120,10 +182,6 @@ class SchemaSeederTest {
         ArgumentCaptor<List<Object[]>> batches = ArgumentCaptor.forClass(List.class);
         verify(jdbcTemplate, atLeastOnce()).batchUpdate(anyString(), batches.capture());
 
-        // orders is (id INT pk, customer_id INT fk). Its rows are the only
-        // two-column ones whose second value is an Integer, and every one of
-        // those must name a customer id that customers was actually seeded
-        // with — otherwise MySQL would have rejected the insert outright.
         List<Object[]> foreignKeyRows = batches.getAllValues().stream()
                 .flatMap(List::stream)
                 .filter(row -> row.length == 2 && row[1] instanceof Integer)

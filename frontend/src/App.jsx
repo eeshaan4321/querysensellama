@@ -9,11 +9,7 @@ import { AnalysisPage } from './pages/AnalysisPage';
 import { OptimizationPage } from './pages/OptimizationPage';
 import { SchemaAdvisorPage } from './pages/SchemaAdvisorPage';
 import { HistoryPage } from './pages/HistoryPage';
-import { AboutPage } from './pages/AboutPage';
 
-// ActiveSchemaProvider sits outside WorkbenchProvider because the active
-// schema is what a built query is built *against* — it has to be readable by
-// anything the workbench produces, and by the shell header above both.
 function App() {
   return (
     <EngineStatusProvider>
@@ -28,7 +24,6 @@ function App() {
                 <Route path="optimization" element={<OptimizationPage />} />
                 <Route path="schema" element={<SchemaAdvisorPage />} />
                 <Route path="history" element={<HistoryPage />} />
-                <Route path="about" element={<AboutPage />} />
               </Route>
             </Routes>
           </BrowserRouter>

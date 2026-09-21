@@ -9,6 +9,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.env.MockEnvironment;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -20,15 +21,6 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-/**
- * SchemaUploadServiceTest
- *
- * The refusal tests matter as much as the happy path. Both of them assert
- * that nothing was provisioned and the active schema did not change — a
- * rejected upload that had already created half a catalog, or worse had
- * already swapped the active schema, would leave the app pointing at
- * tables that do not exist.
- */
 class SchemaUploadServiceTest {
 
     private static final String DDL = """
@@ -47,7 +39,8 @@ class SchemaUploadServiceTest {
         provisioner = mock(SchemaProvisioner.class);
         when(provisioner.uploadCatalog()).thenReturn("querysense_uploads");
         seeder = mock(SchemaSeeder.class);
-        when(seeder.seed(any())).thenReturn(Map.of("customers", 500, "orders", 500));
+        when(seeder.seed(any())).thenReturn(new SchemaSeeder.SeedReport(
+                Map.of("customers", 500, "orders", 500), List.of()));
         activeSchema = new ActiveSchemaProvider();
         environment = new MockEnvironment();
     }

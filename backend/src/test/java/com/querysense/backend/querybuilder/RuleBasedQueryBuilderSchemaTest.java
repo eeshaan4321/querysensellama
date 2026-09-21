@@ -17,25 +17,11 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-/**
- * RuleBasedQueryBuilderSchemaTest
- *
- * Proves the rule engine reads whichever schema is active — and, just as
- * importantly, that it still answers the documented sample prompts exactly
- * as before while the built-in schema is active. The second guarantee is
- * the one a refactor is most likely to break quietly.
- */
 class RuleBasedQueryBuilderSchemaTest {
 
     private ActiveSchemaProvider activeSchema;
     private RuleBasedQueryBuilder builder;
 
-    // WIRING ONLY. Every assertion below is byte-identical to the version
-    // that guarded the pre-binder engine — this block changed because
-    // RuleBasedQueryBuilder now takes its collaborators rather than
-    // constructing them, and for no other reason. If an assertion ever needs
-    // to change to keep this file green, that is a regression, not a
-    // refactor.
     @BeforeEach
     void setUp() {
         SchemaMetadataService metadata = mock(SchemaMetadataService.class);

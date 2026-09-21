@@ -11,14 +11,6 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/**
- * ActiveSchemaProviderTest
- *
- * The first test is the one that matters most: with no upload performed the
- * provider must resolve to the built-in schema and hand back exactly what
- * KnownSchema's statics hand back. Every consumer switching from static
- * calls to this bean depends on that being true.
- */
 class ActiveSchemaProviderTest {
 
     private ActiveSchemaProvider provider;

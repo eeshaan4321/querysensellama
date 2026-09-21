@@ -23,9 +23,6 @@ export function HistoryPage() {
           ? r.userInput.toLowerCase().includes(query.toLowerCase()) ||
             r.generatedQuery.toLowerCase().includes(query.toLowerCase())
           : true;
-        // "LLM" is one user-facing choice covering both the current OLLAMA
-        // source and GEMINI rows written before the provider rename, so the
-        // filter doesn't silently hide half the fallback history.
         const matchesEngine =
           engineFilter === 'ALL' ||
           (engineFilter === 'LLM' ? isLlmSource(r.source) : r.source === engineFilter);

@@ -7,14 +7,6 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/**
- * SqlEmitterTest
- *
- * Every case here asserts the emitted text exactly. There is not a sentence
- * of English anywhere in this file — that is the point of splitting the
- * emitter out of the parser: what comes out can be pinned character for
- * character, without a phrasing in the way.
- */
 class SqlEmitterTest {
 
     private final SqlEmitter emitter = new SqlEmitter();

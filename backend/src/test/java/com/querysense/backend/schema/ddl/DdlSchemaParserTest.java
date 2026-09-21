@@ -6,14 +6,6 @@ import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/**
- * DdlSchemaParserTest
- *
- * The mysqldump case at the bottom is the one that matters most: it is the
- * artefact a user actually has, and it is full of statements this parser
- * has no interest in. Everything else here pins one detail the seeder or
- * the provisioner later depends on.
- */
 class DdlSchemaParserTest {
 
     private DdlSchemaParser parser;

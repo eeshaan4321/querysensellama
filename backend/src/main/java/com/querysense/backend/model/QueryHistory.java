@@ -5,6 +5,7 @@ import lombok.*;
 
 import java.time.LocalDateTime;
 
+/** A stored record of a generated query. */
 @Entity
 @Table(name = "query_history")
 @Getter
@@ -27,10 +28,6 @@ public class QueryHistory {
 
     private String databaseType;
 
-    // RULE_ENGINE | CACHE | OLLAMA — which layer produced generatedQuery.
-    // Was computed in QueryGenerationServiceImpl but previously discarded
-    // instead of being persisted here; now saved so /api/query/history can
-    // show it too, not just the immediate /api/query/generate response.
     private String source;
 
     private LocalDateTime createdAt;

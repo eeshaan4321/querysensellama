@@ -11,28 +11,13 @@ import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-/**
- * SchemaUploadService
- *
- * The pipeline, in the only order that is safe: parse, validate, provision,
- * seed, publish. Nothing reaches the database until validation has passed,
- * and nothing becomes the active schema until its tables exist and hold
- * rows. A failure at any step leaves the previously active schema in place.
- *
- * WHY THE H2 CHECK COMES FIRST, BEFORE EVEN PARSING:
- * H2 has no equivalent of MySQL's CREATE DATABASE and catalog semantics, so
- * an upload under that profile would provision partially and then leave the
- * app pointed at a schema whose tables do not exist. PROJECT.md already
- * records the h2 profile as the most confusing failure mode in this project
- * — it boots fine and makes analysis fail with a message that blames the
- * user's query. Refusing outright, with a message that names the cause, is
- * the whole mitigation.
- */
+/** Parses, validates, provisions, seeds and activates an uploaded schema. */
 @Service
 public class SchemaUploadService {
 
@@ -74,7 +59,14 @@ public class SchemaUploadService {
         this.lastWarnings = parsed.warnings();
 
         provisioner.provision(parsed);
-        Map<String, Integer> rowCounts = seeder.seed(parsed);
+
+        SchemaSeeder.SeedReport seeded = seeder.seed(parsed);
+        Map<String, Integer> rowCounts = seeded.rowCounts();
+        if (!seeded.warnings().isEmpty()) {
+            List<String> combined = new ArrayList<>(this.lastWarnings);
+            combined.addAll(seeded.warnings());
+            this.lastWarnings = List.copyOf(combined);
+        }
 
         SchemaSnapshot snapshot = new SchemaSnapshot(
                 "upload-" + UUID.randomUUID().toString().substring(0, 8),
@@ -97,7 +89,6 @@ public class SchemaUploadService {
         return activeSchema.resetToBuiltIn();
     }
 
-    /** Statements the parser skipped during the most recent upload. */
     public List<String> lastWarnings() {
         return lastWarnings;
     }

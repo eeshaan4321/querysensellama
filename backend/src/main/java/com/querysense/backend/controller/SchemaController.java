@@ -19,26 +19,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
-/**
- * SchemaController
- *
- * Three endpoints, deliberately separate from QueryController: uploading a
- * schema is not a query operation and the two share no request shape.
- *
- * CORS is not annotated here. AppConfig's global WebMvcConfigurer already
- * maps /** — a per-controller @CrossOrigin was the cause of a real bug
- * where /analyze and /schema-advisor worked in curl and were blocked in a
- * browser, so this deliberately does not reintroduce the pattern.
- *
- * WHY BOTH A MULTIPART AND A JSON FORM:
- * A file picker is what someone with a mysqldump wants; a textarea is what
- * someone demoing wants, and pasting four CREATE TABLE statements should
- * not require saving a file first. Both funnel into the same service call.
- *
- * WHY THE SIZE CAP IS CHECKED HERE AND NOT IN THE PARSER:
- * Rejecting a 200MB file should not require reading it into a String and
- * splitting it into statements first.
- */
+/** REST endpoints for uploading, viewing and resetting the active schema. */
 @RestController
 @RequestMapping("/api/schema")
 public class SchemaController {

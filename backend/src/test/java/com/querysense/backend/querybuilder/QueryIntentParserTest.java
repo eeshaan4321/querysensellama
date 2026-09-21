@@ -23,11 +23,6 @@ class QueryIntentParserTest {
     private QueryIntentParser parser;
     private ActiveSchemaProvider activeSchema;
 
-    /**
-     * A schema where "name" is genuinely ambiguous — modelled on the
-     * movie_rentals upload that exposed this, where `customers` has
-     * first_name and last_name and no `name` at all.
-     */
     private static SchemaSnapshot twoNameSchema() {
         return new SchemaSnapshot(
                 "upload-names", "movie_rentals.sql", "querysense_uploads",
@@ -153,9 +148,6 @@ class QueryIntentParserTest {
     void ambiguousCompoundDeclines() {
         activeSchema.publish(twoNameSchema());
 
-        // `name` could be first_name or last_name. Silently choosing one is
-        // the confident-wrong-answer failure; SELECT * is the silently
-        // incomplete one. Neither is acceptable, so it defers.
         RuleBuildResult result = parser.parse("customer name");
 
         assertThat(result.built()).isFalse();
@@ -165,9 +157,6 @@ class QueryIntentParserTest {
     @Test
     @DisplayName("a prepositional tail is not a projection attempt")
     void prepositionalTailIsNotAProjection() {
-        // "customers in pune" must keep its WHERE and stay SELECT * — the
-        // old engine's own note: most sentences legitimately have a
-        // non-column word after the table noun.
         assertThat(parser.parse("customers in pune").sql())
                 .isEqualTo("SELECT * FROM customers WHERE city = 'pune';");
         assertThat(parser.parse("show all customers").sql())

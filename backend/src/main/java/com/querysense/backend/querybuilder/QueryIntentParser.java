@@ -14,47 +14,12 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * QueryIntentParser
- *
- * Replaces RuleBasedQueryBuilder.hasAnyComplexity.
- *
- * WHY THE OLD GATE HAD TO GO:
- * it asked "does this text contain a scary word?" and declined on a
- * hardcoded English list — `who`, `which`, `more than`, `average`, month
- * names. None of those has anything to do with the schema, so uploading one
- * changed the engine's vocabulary but never what it was willing to claim.
- * That is why an upload appeared to change nothing: the nouns followed, the
- * grammar did not.
- *
- * This asks instead: can every noun be bound to something real in the ACTIVE
- * schema? Unbound or ambiguous means decline. The decline decision now
- * depends on the uploaded schema, which is the whole point of the exercise.
- *
- * NOTE ON THE ONE SURVIVING WORD LIST (temporal): date arithmetic has no
- * correct rule-based answer here, so temporal EXPRESSIONS still decline. It
- * is a binder that declines, not a veto on tokens — and the difference is
- * not cosmetic. The old month regex contained `may`, so ANY sentence
- * containing the word "may" was declined; "customers who may have churned"
- * went to the language model because of a modal verb.
- *
- * EVERY DECLINE RETURNS A REASON. See RuleTrace: `handledBy` records which
- * layer answered but never why the previous one passed, and the reasons have
- * to exist as logic here anyway.
- */
+/** Parses a natural-language question into a QueryIntent. */
 @Component
 public class QueryIntentParser {
 
     static final String JOIN_ORIGIN = "declared foreign key";
 
-    // ---------------------------------------------------------------------
-    // PATTERNS
-    // ---------------------------------------------------------------------
-
-    /**
-     * Temporal EXPRESSIONS, not temporal tokens — see the class doc on `may`.
-     * A bare month name is not enough; it must follow a preposition.
-     */
     private static final Pattern TEMPORAL = Pattern.compile(
             "\\b(?:last|this|next|past)\\s+(?:month|week|year|day|quarter|decade)\\b"
                     + "|\\b(?:today|yesterday|tomorrow|recently)\\b"
@@ -64,17 +29,12 @@ public class QueryIntentParser {
                     + "|\\b(?:before|after|since|until)\\s+\\d{4}\\b"
                     + "|\\b(?:date range|last \\d+ days)\\b");
 
-    /** A comparison with the column named immediately before it. */
     private static final Pattern COMPARISON = Pattern.compile(
             "\\b([a-z_]+)\\s+(?:is\\s+)?"
                     + "(more than|greater than|larger than|higher than"
                     + "|less than|fewer than|lower than|smaller than"
                     + "|above|over|below|under)\\s+([a-z0-9_]+)\\b");
 
-    /**
-     * `by` is deliberately absent: "order by status" would match it, and the
-     * ORDER BY clause is a different thing entirely.
-     */
     private static final Pattern PER_GROUP = Pattern.compile(
             "\\b(?:per|for each|grouped by|group by)\\s+([a-z_ ]+?)\\b");
 
@@ -98,20 +58,10 @@ public class QueryIntentParser {
 
     private static final Pattern WITH_VALUE = Pattern.compile("\\bwith\\s+([a-z_]+)\\s+([a-z0-9_]+)\\b");
 
-    // ---------------------------------------------------------------------
-    // VOCABULARY
-    // ---------------------------------------------------------------------
-
     private static final Map<String, Integer> NUMBER_WORDS = Map.of(
             "one", 1, "two", 2, "three", 3, "four", 4, "five", 5,
             "six", 6, "seven", 7, "eight", 8, "nine", 9, "ten", 10);
 
-    /**
-     * `total` is deliberately NOT here. It is far too common as a column
-     * name — RuleBasedQueryBuilderSchemaTest projects an uploaded
-     * `invoices.total` — and reading it as SUM would turn a projection into
-     * an aggregate behind the user's back.
-     */
     private static final Map<String, String> AGGREGATE_FUNCTIONS = Map.of(
             "average", "AVG", "avg", "AVG", "mean", "AVG",
             "sum", "SUM",
@@ -121,11 +71,6 @@ public class QueryIntentParser {
     private static final Set<String> COMPARISON_GREATER = Set.of(
             "more than", "greater than", "larger than", "higher than", "above", "over");
 
-    /**
-     * Words a preposition can be followed by without naming a value. These
-     * are skipped rather than declined — "customers in the city" is not a
-     * failed filter, it just has no literal in it.
-     */
     private static final Set<String> VALUE_STOPWORDS = Set.of(
             "the", "a", "an", "all", "any", "each", "every", "this", "that",
             "their", "there", "them", "it", "which", "who", "what", "order",
@@ -138,13 +83,6 @@ public class QueryIntentParser {
     private static final Set<String> COUNT_WORDS = Set.of(
             "count", "how many", "total number", "number of");
 
-    /**
-     * Words that disqualify a trailing phrase from being read as a column
-     * reference. See {@link #extractTrailingColumnPhrase} — the weak
-     * projection signal has to tell "customer city" (a column) apart from
-     * "customers in pune" (a filter), and the discriminator is that a
-     * projection phrase contains no preposition, copula or clause word.
-     */
     private static final Set<String> NON_COLUMN_WORDS = Set.of(
             "in", "at", "from", "with", "to", "for", "on", "of", "by", "as",
             "is", "are", "was", "were", "be", "been", "has", "have", "had",
@@ -155,10 +93,6 @@ public class QueryIntentParser {
             "sorted", "ordered", "grouped", "group", "order", "sort",
             "ascending", "descending", "asc", "desc", "limit", "top",
             "show", "get", "list", "give", "me", "display", "find");
-    // NOTE: "first" is deliberately absent. It is a LIMIT keyword only when
-    // followed by a digit, and it is a legitimate column word in
-    // "customer first name" — which is exactly the phrasing that exposed
-    // this whole gap.
 
     private final SchemaBinder binder;
     private final JoinPathResolver joins;
@@ -172,10 +106,6 @@ public class QueryIntentParser {
         this.metadata = metadata;
         this.emitter = emitter;
     }
-
-    // ---------------------------------------------------------------------
-    // ENTRY POINT
-    // ---------------------------------------------------------------------
 
     public RuleBuildResult parse(String rawInput) {
         String text = SchemaBinder.normalize(rawInput);
@@ -201,8 +131,6 @@ public class QueryIntentParser {
         }
         tables.forEach(t -> bindings.add(new RuleTrace.Binding(t.name(), "TABLE", t.name())));
 
-        // The first table mentioned is the subject of the question; the
-        // other, when present, is what it is related to.
         KnownSchema.Table subject = tables.get(0);
         KnownSchema.Table related = tables.size() == 2 ? tables.get(1) : null;
 
@@ -247,12 +175,6 @@ public class QueryIntentParser {
         List<QueryIntent.Predicate> where = new ArrayList<>();
         List<QueryIntent.Predicate> having = new ArrayList<>();
 
-        // -----------------------------------------------------------------
-        // PROJECTION — the strong "only X" / "X of Y" signals first. An
-        // explicit ask that cannot be resolved is ambiguous: decline rather
-        // than silently fall back to SELECT * and drop what was asked for
-        // (the Bug 7 rule, kept).
-        // -----------------------------------------------------------------
         boolean countRequested = COUNT_WORDS.stream().anyMatch(text::contains);
 
         Optional<String> strongPhrase = extractStrongProjectionPhrase(text);
@@ -271,19 +193,6 @@ public class QueryIntentParser {
                     new RuleTrace.Binding(c, "COLUMN", subject.name() + "." + c)));
         }
 
-        // The WEAK projection signal: a bare "<table noun> <column phrase>"
-        // compound with no "only"/"of" to announce it — "customer city",
-        // "customer first name". The previous engine had this and the first
-        // version of this parser dropped it, so "customer name" silently
-        // returned SELECT * instead of the column that was asked for.
-        //
-        // It differs from the strong signal in what it will claim, not in
-        // what it declines: it only fires when the tail reads as a column
-        // reference at all (see extractTrailingColumnPhrase), but once it
-        // does, an unresolvable phrase declines rather than degrading to
-        // SELECT *. On a schema where "name" is both first_name and
-        // last_name, picking one is a confident wrong answer and SELECT * is
-        // a silently incomplete one — neither is worth returning at 0.95.
         if (!projectionRequested && !countRequested) {
             Optional<String> tail = extractTrailingColumnPhrase(text, subject);
             if (tail.isPresent()) {
@@ -302,10 +211,6 @@ public class QueryIntentParser {
             }
         }
 
-        // -----------------------------------------------------------------
-        // AGGREGATE. Skipped entirely when an explicit projection was asked
-        // for — "only the total and status" is a projection, not a SUM.
-        // -----------------------------------------------------------------
         String aggregateFunction = null;
         String aggregateColumn = null;
 
@@ -326,10 +231,6 @@ public class QueryIntentParser {
             }
         }
 
-        // -----------------------------------------------------------------
-        // GROUPING — "per <column>". Previously dropped without a word,
-        // which answered a question nobody asked (PROJECT.md §8).
-        // -----------------------------------------------------------------
         String groupColumn = null;
         Matcher per = PER_GROUP.matcher(text);
         if (per.find()) {
@@ -345,10 +246,6 @@ public class QueryIntentParser {
                     subject.name() + "." + groupColumn));
         }
 
-        // -----------------------------------------------------------------
-        // COMPARISON. Target an aggregate and it becomes HAVING; target a
-        // plain column and it becomes WHERE. One rule, both clauses.
-        // -----------------------------------------------------------------
         Matcher comparison = COMPARISON.matcher(text);
         String countTargetColumn = null;
         if (comparison.find()) {
@@ -369,9 +266,6 @@ public class QueryIntentParser {
                         comparison.group(1) + " " + comparison.group(2) + " " + comparison.group(3),
                         "COMPARISON", lhs + " " + operator + " " + literal.get()));
             } else if (joined) {
-                // "more than three orders" — the only thing a count of the
-                // related table can mean. Its own column could not bind
-                // ("placed" is a verb), and that is the signal.
                 countTargetColumn = related.columns().get(0);
                 String rendered = "COUNT(" + related.name() + "." + countTargetColumn + ")";
                 having.add(new QueryIntent.Predicate(rendered, operator,
@@ -387,17 +281,6 @@ public class QueryIntentParser {
             }
         }
 
-        // -----------------------------------------------------------------
-        // VALUE-GROUNDED FILTER. This replaces the old isSafeLocationCondition,
-        // which hardcoded `city = ...` and then checked the result against
-        // customers.city — a column and a table that need not exist in an
-        // uploaded schema, where the check went silently inert and the
-        // emitted column was simply wrong.
-        //
-        // Inverted here: find the column whose DATA actually contains the
-        // value. If no column does, the value is not something this schema
-        // can answer about, so decline.
-        // -----------------------------------------------------------------
         Matcher preposition = PREPOSITION_VALUE.matcher(text);
         while (preposition.find()) {
             String candidate = preposition.group(1);
@@ -420,7 +303,6 @@ public class QueryIntentParser {
             break;
         }
 
-        // "with <column> <value>" — an explicit field/value pair.
         Matcher with = WITH_VALUE.matcher(text);
         if (where.isEmpty() && with.find()) {
             Optional<String> column = binder.bindColumn(subject, with.group(1));
@@ -434,9 +316,6 @@ public class QueryIntentParser {
             }
         }
 
-        // -----------------------------------------------------------------
-        // ASSEMBLE THE PROJECTION
-        // -----------------------------------------------------------------
         if (groupColumn != null) {
             selectItems.add(new QueryIntent.SelectItem(qualify(groupColumn, subject, joined), null));
         }
@@ -444,8 +323,6 @@ public class QueryIntentParser {
             selectItems.add(new QueryIntent.SelectItem(
                     qualify(aggregateColumn, subject, joined), aggregateFunction));
         } else if (countTargetColumn != null) {
-            // A HAVING over a count needs that count in the projection, and
-            // the group needs something to identify it by.
             for (String col : identifyingColumns(subject)) {
                 selectItems.add(0, new QueryIntent.SelectItem(subject.name() + "." + col, null));
             }
@@ -463,18 +340,11 @@ public class QueryIntentParser {
         if (verb == QueryIntent.Verb.DELETE) {
             selectItems.clear();
             if (where.isEmpty()) {
-                // Never build a DELETE without a WHERE — kept from the
-                // previous engine, and for the same reason.
                 return RuleBuildResult.declined(
                         "The question asks to delete rows without saying which ones.", bindings);
             }
         }
 
-        // -----------------------------------------------------------------
-        // LIVE-DRIFT CHECK. An empty column list means "unknown", not "this
-        // table has no columns" — every analyzer in that package treats it
-        // that way, so an unavailable lookup must not block a valid query.
-        // -----------------------------------------------------------------
         for (KnownSchema.Table table : tables) {
             List<String> live = metadata.getColumnNames(table.name());
             if (live.isEmpty()) {
@@ -491,9 +361,6 @@ public class QueryIntentParser {
             }
         }
 
-        // -----------------------------------------------------------------
-        // ORDER BY / LIMIT
-        // -----------------------------------------------------------------
         List<String> orderBy = new ArrayList<>();
         Matcher order = ORDER_BY.matcher(text);
         if (order.find()) {
@@ -529,10 +396,6 @@ public class QueryIntentParser {
         return RuleBuildResult.built(sql, trace);
     }
 
-    // ---------------------------------------------------------------------
-    // HELPERS
-    // ---------------------------------------------------------------------
-
     private QueryIntent.JoinSpec joinSpecFor(KnownSchema.ForeignKey edge,
                                              KnownSchema.Table subject,
                                              KnownSchema.Table related) {
@@ -552,11 +415,6 @@ public class QueryIntentParser {
         return joined ? table.name() + "." + column : column;
     }
 
-    /**
-     * What to show for each group when the question implies one: the table's
-     * first column (its key, by every convention this project's schemas
-     * follow) plus a human-readable label when the table has one.
-     */
     private List<String> identifyingColumns(KnownSchema.Table table) {
         List<String> chosen = new ArrayList<>();
         if (!table.columns().isEmpty()) {
@@ -575,7 +433,6 @@ public class QueryIntentParser {
                 || (b != null && binder.bindColumn(b, token).isPresent());
     }
 
-    /** Which column of this table actually holds this value, if any. */
     private Optional<String> columnHolding(KnownSchema.Table table, String value) {
         for (String column : table.columns()) {
             List<String> values = metadata.getDistinctValues(table.name(), column);
@@ -608,7 +465,6 @@ public class QueryIntentParser {
         return names;
     }
 
-    /** Strips a qualifier and skips anything that is not a plain column of this table. */
     private Optional<String> bareColumnFor(KnownSchema.Table table, String rendered) {
         if (rendered == null || "*".equals(rendered) || rendered.contains("(")) {
             return Optional.empty();
@@ -638,26 +494,6 @@ public class QueryIntentParser {
         }
     }
 
-    /**
-     * The weak projection signal: a column phrase sitting directly after the
-     * table noun and running to the end of the question — "customer city",
-     * "customer first name".
-     *
-     * WHY IT IS GATED SO TIGHTLY:
-     * the previous engine's own note on this branch was that "most sentences
-     * legitimately have some other (non-column) word after the table noun",
-     * and "customers living in mumbai" must not be read as a failed
-     * projection. Three gates keep those apart:
-     *
-     *   1. the phrase must run to the END of the question — a tail, not a
-     *      fragment with a clause after it;
-     *   2. at most three words, so a verb phrase like "placed more than
-     *      three orders" cannot qualify;
-     *   3. no prepositions, copulas, clause words or table names in it.
-     *
-     * Anything that fails a gate returns empty and is simply ignored, which
-     * is what keeps "customers in pune" a filter rather than a decline.
-     */
     private Optional<String> extractTrailingColumnPhrase(String text, KnownSchema.Table table) {
         Pattern pattern = Pattern.compile(
                 "\\b(?:" + Pattern.quote(SchemaBinder.normalize(table.name()))
@@ -697,7 +533,6 @@ public class QueryIntentParser {
         return Optional.empty();
     }
 
-    /** @return null when a real (non-filler) noun matched no column — "ambiguous". */
     private List<String> resolveChunks(String rawPhrase, KnownSchema.Table table) {
         List<String> resolved = new ArrayList<>();
         for (String chunk : rawPhrase.split("\\s*(?:,|\\band\\b)\\s*")) {
@@ -708,7 +543,7 @@ public class QueryIntentParser {
                 }
             }
             if (words.isEmpty()) {
-                continue; // pure filler — not a failure
+                continue;
             }
             Optional<String> match = binder.bindColumn(table, String.join(" ", words));
             if (match.isEmpty() && words.size() > 1) {

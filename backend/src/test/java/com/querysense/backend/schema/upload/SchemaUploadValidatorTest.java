@@ -16,14 +16,6 @@ import java.util.stream.IntStream;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-/**
- * SchemaUploadValidatorTest
- *
- * Every assertion checks the message as well as the type. These messages
- * are the whole of what the user sees when an upload is refused — a
- * rejection that doesn't name the offending table or column leaves them
- * with a file and no idea which line to fix.
- */
 class SchemaUploadValidatorTest {
 
     private SchemaUploadValidator validator;

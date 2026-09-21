@@ -33,43 +33,11 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-/**
- * MySqlExplainAnalyzerTest
- *
- * WHY THESE TESTS EXIST:
- * The defect this class was rewritten to fix is invisible on a single-table
- * query and only appears on a JOIN — the second EXPLAIN row overwriting the
- * first one's accessType and keyUsed. That is precisely the case a live
- * manual check is least likely to catch, because the response still looks
- * plausible: one table, one access type, no error. So the JOIN cases here
- * are the point of the file, and the single-table cases exist to prove the
- * rewrite didn't cost anything that already worked.
- *
- * WHY JdbcTemplate IS MOCKED RATHER THAN POINTED AT A DATABASE:
- * These need to run on a machine with no MySQL configured — which, per this
- * project's own notes, is a real state for at least one team machine. But
- * the mock deliberately stops short of stubbing out the mapping itself: it
- * captures the real RowMapper and feeds it a fake ResultSet, so the column
- * reads (`possible_keys`, `key_len`, `ref`, NULL `rows`) are genuinely
- * exercised. Stubbing the mapper away would test only the code that was
- * never broken.
- */
 class MySqlExplainAnalyzerTest {
 
     private JdbcTemplate jdbcTemplate;
     private MySqlExplainAnalyzer analyzer;
 
-    /**
-     * An ExplainExecutor that hands the work straight to this test's mock
-     * JdbcTemplate instead of borrowing a real connection.
-     *
-     * WHY: every assertion in this class verifies the SQL string passed to
-     * jdbcTemplate. Routing through the real executor would need a mock
-     * Connection as well, and would re-test catalog switching that
-     * ExplainExecutorTest already covers directly — including the guarantee
-     * that the built-in schema never switches catalog at all. This keeps
-     * the analyzer's own tests about the analyzer.
-     */
     private static ExplainExecutor passThrough(JdbcTemplate jdbcTemplate) {
         return new ExplainExecutor(jdbcTemplate, new ActiveSchemaProvider()) {
             @Override
@@ -85,10 +53,6 @@ class MySqlExplainAnalyzerTest {
         analyzer = new MySqlExplainAnalyzer(
                 passThrough(jdbcTemplate), new MySqlJsonExplainParser(new ObjectMapper()), "TABULAR");
     }
-
-    // -----------------------------------------------------------------
-    // 1. Single table
-    // -----------------------------------------------------------------
 
     @Test
     @DisplayName("single-table query produces one TableAnalysis and fills the flat contract")
@@ -120,7 +84,6 @@ class MySqlExplainAnalyzerTest {
         assertThat(customers.isFullTableScan()).isFalse();
         assertThat(customers.isUsesIndex()).isTrue();
 
-        // The flat fields five downstream modules read must still be right.
         assertThat(result.getTableName()).isEqualTo("customers");
         assertThat(result.getAccessType()).isEqualTo("ref");
         assertThat(result.getKeyUsed()).isEqualTo("idx_city");
@@ -128,10 +91,6 @@ class MySqlExplainAnalyzerTest {
         assertThat(result.isUsesIndex()).isTrue();
         assertThat(result.isHasFullTableScan()).isFalse();
     }
-
-    // -----------------------------------------------------------------
-    // 2 + 3 + 11. JOINs — the cases the old implementation got wrong
-    // -----------------------------------------------------------------
 
     @Test
     @DisplayName("JOIN over two tables keeps both, and neither overwrites the other")
@@ -151,7 +110,6 @@ class MySqlExplainAnalyzerTest {
         TableAnalysis first = result.getTables().get(0);
         TableAnalysis second = result.getTables().get(1);
 
-        // The exact regression: `first` used to end up holding `second`'s values.
         assertThat(first.getTableName()).isEqualTo("c");
         assertThat(first.getAccessType()).isEqualTo("ALL");
         assertThat(first.getKeyUsed()).isNull();
@@ -179,26 +137,17 @@ class MySqlExplainAnalyzerTest {
 
         QueryAnalysisResult result = analyzer.analyze("SELECT ...", "customers");
 
-        // Old behaviour: last row won, so accessType was "ref" and the full
-        // scan on customers vanished from the query-level view.
         assertThat(result.getAccessType()).isEqualTo("ALL");
         assertThat(result.isHasFullTableScan()).isTrue();
-        assertThat(result.isUsesIndex()).isTrue();      // orders did use one
+        assertThat(result.isUsesIndex()).isTrue();
         assertThat(result.getKeyUsed()).isEqualTo("idx_customer_id");
-        assertThat(result.getEstimatedRows()).isEqualTo(303L);   // largest, not last
+        assertThat(result.getEstimatedRows()).isEqualTo(303L);
         assertThat(result.getFullScanTables()).containsExactly("customers");
 
-        // The scan warning names the table that was actually scanned...
         assertThat(result.getWarnings())
                 .anyMatch(w -> w.contains("Full table scan detected on 'customers'"));
-        // ...and no warning claims the query as a whole used no index, which
-        // was the old query-wide message and is false here.
         assertThat(result.getWarnings()).noneMatch(w -> w.contains("orders") && w.contains("No index"));
     }
-
-    // -----------------------------------------------------------------
-    // 4 + 5. Using temporary / Using filesort
-    // -----------------------------------------------------------------
 
     @Test
     @DisplayName("'Using temporary' is attributed to the table EXPLAIN reported it on")
@@ -228,9 +177,6 @@ class MySqlExplainAnalyzerTest {
                 .filter(w -> w.startsWith("Filesort used for 'orders'."))
                 .findFirst()
                 .orElseThrow();
-        // This project has verified live that an ORDER BY index often does NOT
-        // remove a filesort, so the sentence must say "check whether", never
-        // "add an index to fix this".
         assertThat(warning).contains("check whether");
         assertThat(warning).doesNotContain("will fix");
     }
@@ -253,10 +199,6 @@ class MySqlExplainAnalyzerTest {
                 .filter(w -> w.startsWith("Filesort used for 'orders'"))
                 .count()).isEqualTo(1);
     }
-
-    // -----------------------------------------------------------------
-    // 6 + 7. Index used / no index used
-    // -----------------------------------------------------------------
 
     @Test
     @DisplayName("a query using an index produces no 'no index' warning")
@@ -284,7 +226,6 @@ class MySqlExplainAnalyzerTest {
                 .orElseThrow();
         assertThat(warning).contains("MySQL selected a full scan");
         assertThat(warning).contains("check whether an index");
-        // The old wording — "consider adding an index" — asserted the fix.
         assertThat(warning).doesNotContain("consider adding an index");
     }
 
@@ -301,10 +242,6 @@ class MySqlExplainAnalyzerTest {
                 .anyMatch(w -> w.startsWith("No index was used for 'orders'")
                         && w.contains("idx_status"));
     }
-
-    // -----------------------------------------------------------------
-    // Column mapping details
-    // -----------------------------------------------------------------
 
     @Test
     @DisplayName("a NULL rows estimate stays null rather than becoming 0")
@@ -325,7 +262,6 @@ class MySqlExplainAnalyzerTest {
         givenExplainRows(row("table", "customers", "type", "ALL", "possible_keys", null, "key", null,
                 "key_len", null, "ref", null, "rows", 303L, "Extra", null));
 
-        // SqlStructureParser hands over the raw FROM item, alias included.
         QueryAnalysisResult result = analyzer.analyze("SELECT ...", "customers c");
 
         assertThat(result.getTableName()).isEqualTo("customers");
@@ -341,10 +277,6 @@ class MySqlExplainAnalyzerTest {
 
         assertThat(result.getTableName()).isEqualTo("customers");
     }
-
-    // -----------------------------------------------------------------
-    // 8 + 9 + 10. Failure modes
-    // -----------------------------------------------------------------
 
     @Test
     @DisplayName("an unknown column (MySQL 1054) is reported as a column problem")
@@ -407,13 +339,8 @@ class MySqlExplainAnalyzerTest {
 
         assertThat(result.isExplainFailed()).isTrue();
         assertThat(result.getWarnings()).anyMatch(w -> w.contains("problem in QuerySense"));
-        // The whole point: this must NOT read like the user's SQL is at fault.
         assertThat(result.getWarnings()).noneMatch(w -> w.contains("check that it references valid"));
     }
-
-    // -----------------------------------------------------------------
-    // Safety
-    // -----------------------------------------------------------------
 
     @Test
     @DisplayName("only an EXPLAIN is ever sent — the query itself is never executed")
@@ -438,24 +365,10 @@ class MySqlExplainAnalyzerTest {
 
         analyzer.analyze("SELECT * FROM customers WHERE city = 'mumbai';", "customers");
 
-        // WHY THIS IS ASSERTED ON THE SQL STRING RATHER THAN ON A RESULT:
-        // MySQL 9.0 changed the default value of the explain_format system
-        // variable from TRADITIONAL to TREE. A bare "EXPLAIN <query>" therefore
-        // returns one column named `EXPLAIN` holding a tree diagram on a 9.x
-        // server, and the row mapper — which needs `table`, `type`, `key`,
-        // `rows` and `Extra` — cannot read it. The failure surfaces as
-        // explainFailed=true carrying a warning that blames the user's SQL, so
-        // no assertion about the returned object can distinguish it from an
-        // actually-invalid query. The request itself is the only place the
-        // regression is visible, which is why the format is pinned here.
         ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
         verify(jdbcTemplate).query(sql.capture(), ArgumentMatchers.<RowMapper<TableAnalysis>>any());
         assertThat(sql.getValue()).startsWith("EXPLAIN FORMAT=TRADITIONAL ");
     }
-
-    // -----------------------------------------------------------------
-    // EXPLAIN FORMAT=JSON (opt-in)
-    // -----------------------------------------------------------------
 
     @Test
     @DisplayName("JSON mode reads the plan from EXPLAIN FORMAT=JSON and skips the tabular call")
@@ -512,14 +425,6 @@ class MySqlExplainAnalyzerTest {
                 passThrough(jdbcTemplate), new MySqlJsonExplainParser(new ObjectMapper()), "JSON");
     }
 
-    // -----------------------------------------------------------------
-    // Helpers
-    // -----------------------------------------------------------------
-
-    /**
-     * Stubs JdbcTemplate to hand the analyzer's OWN RowMapper a fake
-     * ResultSet per row, so the column reads under test are the real ones.
-     */
     @SafeVarargs
     private void givenExplainRows(Map<String, Object>... rows) {
         when(jdbcTemplate.query(anyString(), ArgumentMatchers.<RowMapper<TableAnalysis>>any()))
@@ -534,7 +439,6 @@ class MySqlExplainAnalyzerTest {
                 });
     }
 
-    /** LinkedHashMap rather than Map.of, because EXPLAIN columns are genuinely null sometimes. */
     private static Map<String, Object> row(Object... keyValuePairs) {
         Map<String, Object> row = new LinkedHashMap<>();
         for (int i = 0; i < keyValuePairs.length; i += 2) {
@@ -543,7 +447,6 @@ class MySqlExplainAnalyzerTest {
         return row;
     }
 
-    /** A ResultSet over one row, answering by column label the way JDBC does. */
     private static ResultSet resultSetOf(Map<String, Object> values) throws SQLException {
         List<String> labels = new ArrayList<>(values.keySet());
 

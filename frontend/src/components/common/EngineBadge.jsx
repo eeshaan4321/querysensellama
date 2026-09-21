@@ -4,15 +4,12 @@ import './EngineBadge.css';
 const LABEL = {
   RULE_ENGINE: 'Rule engine',
   OLLAMA: 'LLM fallback',
-  GEMINI: 'LLM fallback', // legacy history rows — see contracts.js
+  GEMINI: 'LLM fallback',
   CACHE: 'Cache',
 };
 
-/** Reusable "which path handled this" pill. Same visual language wherever it appears. */
 export function EngineBadge({ handledBy, size = 'md' }) {
   if (!handledBy) return null;
-  // Both LLM values share one modifier so the amber treatment survives the
-  // provider rename and applies to old GEMINI rows too.
   const key = isLlmSource(handledBy) ? 'llm' : handledBy.toLowerCase().replace('_', '-');
   return (
     <span className={`engine-badge engine-badge--${key} engine-badge--${size}`}>

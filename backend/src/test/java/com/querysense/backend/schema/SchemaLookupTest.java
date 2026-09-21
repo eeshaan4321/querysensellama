@@ -7,15 +7,6 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/**
- * SchemaLookupTest
- *
- * SchemaLookup is the matching logic lifted out of KnownSchema's static
- * methods so it can run against an uploaded schema as well as the built-in
- * one. These tests pin it to the behaviour KnownSchema had before the lift,
- * because the whole point of extracting it was that nothing observable
- * changes.
- */
 class SchemaLookupTest {
 
     private static final KnownSchema.Table CUSTOMERS =

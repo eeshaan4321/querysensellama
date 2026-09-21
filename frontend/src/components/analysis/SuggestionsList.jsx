@@ -1,12 +1,11 @@
 import './SuggestionsList.css';
 
 const SEVERITY_TONE = { INFO: 'info', WARNING: 'warning', CRITICAL: 'critical' };
-const SOURCE_LABEL = { DOMAIN: 'Domain', RESOURCE: 'Resource' };
+const SOURCE_LABEL = { DOMAIN: 'Optimization', RESOURCE: 'Resource' };
 
-/** Renders the real Domain-Sensitive Optimization + Resource-Conscious Decision suggestions returned by /analyze. */
 export function SuggestionsList({ suggestions }) {
   if (!suggestions?.length) {
-    return <p className="suggestions-list__clear">No domain or resource suggestions for this query.</p>;
+    return <p className="suggestions-list__clear">No optimization or resource suggestions for this query.</p>;
   }
 
   return (

@@ -23,19 +23,6 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-/**
- * ExplainExecutorTest
- *
- * The first test here is the regression guard for the whole schema-upload
- * feature. EXPLAIN worked before this feature existed, and the one way the
- * feature could break it is by switching the catalog on a pooled connection
- * when it had no business doing so — which would hand the next borrower a
- * connection pointing at the wrong database, and produce a wrong-but-
- * plausible plan rather than an error.
- *
- * builtInSchemaNeverSwitchesCatalog pins the guarantee: on the built-in
- * schema, not one call to setCatalog.
- */
 class ExplainExecutorTest {
 
     private JdbcTemplate jdbcTemplate;
@@ -50,9 +37,6 @@ class ExplainExecutorTest {
         connection = mock(Connection.class);
         when(connection.getCatalog()).thenReturn("querysense");
 
-        // Make jdbcTemplate.execute(ConnectionCallback) actually invoke the
-        // callback against our mock connection — the catalog handling inside
-        // that callback is the thing under test.
         when(jdbcTemplate.execute(any(ConnectionCallback.class))).thenAnswer(inv -> {
             ConnectionCallback<Object> cb = inv.getArgument(0);
             return cb.doInConnection(connection);

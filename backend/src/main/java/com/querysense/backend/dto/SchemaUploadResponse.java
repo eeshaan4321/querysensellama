@@ -6,15 +6,7 @@ import com.querysense.backend.schema.SchemaSnapshot;
 import java.time.Instant;
 import java.util.List;
 
-/**
- * What the frontend needs to describe the active schema: which one it is,
- * where its tables live, what they hold, and anything the parser skipped.
- *
- * `catalog` is null for the built-in schema. That is deliberate rather than
- * missing — the demo schema lives in whatever database spring.datasource.url
- * resolves to, which varies per machine, so naming it here would be a
- * guess. The frontend renders null as "the connected database".
- */
+/** Description of the active schema returned by the schema endpoints. */
 public record SchemaUploadResponse(
         String schemaId,
         String label,

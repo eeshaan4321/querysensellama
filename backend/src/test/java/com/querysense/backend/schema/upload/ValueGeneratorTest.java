@@ -12,14 +12,6 @@ import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/**
- * ValueGeneratorTest
- *
- * skewsCardinality is the test that matters for the feature's purpose.
- * Uniformly random data makes MySQL report filtered=100.00 for everything
- * and every index equally selective — EXPLAIN would run and teach nothing,
- * which is the exact failure seeding exists to prevent.
- */
 class ValueGeneratorTest {
 
     private ValueGenerator generator;
@@ -130,13 +122,77 @@ class ValueGeneratorTest {
         assertThat(first).isEqualTo(second);
     }
 
-    /**
-     * NOT NULL on purpose. These tests are about how a TYPE is generated,
-     * and a nullable column legitimately produces NULLs ~10% of the time —
-     * which is behaviour nullsOnlyWhereAllowed covers deliberately. Left
-     * nullable here, every type assertion would fail intermittently for a
-     * reason that has nothing to do with the type.
-     */
+    @Test
+    @DisplayName("a TINYINT value never exceeds the signed TINYINT maximum")
+    void respectsTinyintRange() {
+        ParsedColumn column = col("status", "TINYINT", List.of());
+        for (int i = 0; i < 500; i++) {
+            Number value = (Number) generator.valueFor(column, i, 12000);
+            assertThat(value.longValue()).isBetween(1L, 127L);
+        }
+    }
+
+    @Test
+    @DisplayName("a SMALLINT value never exceeds the signed SMALLINT maximum")
+    void respectsSmallintRange() {
+        ParsedColumn column = col("score", "SMALLINT", List.of());
+        for (int i = 0; i < 500; i++) {
+            Number value = (Number) generator.valueFor(column, i, 12000);
+            assertThat(value.longValue()).isBetween(1L, 32767L);
+        }
+    }
+
+    @Test
+    @DisplayName("a MEDIUMINT value never exceeds the signed MEDIUMINT maximum")
+    void respectsMediumintRange() {
+        ParsedColumn column = col("hits", "MEDIUMINT", List.of());
+        for (int i = 0; i < 200; i++) {
+            Number value = (Number) generator.valueFor(column, i, 12000);
+            assertThat(value.longValue()).isBetween(1L, 8388607L);
+        }
+    }
+
+    @Test
+    @DisplayName("the year heuristic still respects a narrow declared type")
+    void yearHeuristicRespectsNarrowType() {
+        ParsedColumn column = col("year", "TINYINT", List.of());
+        for (int i = 0; i < 200; i++) {
+            Number value = (Number) generator.valueFor(column, i, 12000);
+            assertThat(value.longValue()).isBetween(1L, 127L);
+        }
+    }
+
+    @Test
+    @DisplayName("a wide INT column keeps its existing range")
+    void wideIntegersAreUnchanged() {
+        ParsedColumn column = col("amount", "INT", List.of());
+        for (int i = 0; i < 200; i++) {
+            Number value = (Number) generator.valueFor(column, i, 12000);
+            assertThat(value.longValue()).isBetween(1L, 1000L);
+        }
+    }
+
+    @Test
+    @DisplayName("a TINYINT primary key caps how many rows the table can hold")
+    void tinyintPrimaryKeyCapsRowCount() {
+        ParsedColumn pk = new ParsedColumn("id", "TINYINT", List.of(), true, false, false, true);
+        assertThat(ValueGenerator.maxSeedableRows(pk, 12000)).isEqualTo(127);
+    }
+
+    @Test
+    @DisplayName("a wide primary key does not cap the row count")
+    void widePrimaryKeyDoesNotCap() {
+        ParsedColumn pk = new ParsedColumn("id", "INT", List.of(), true, false, false, true);
+        assertThat(ValueGenerator.maxSeedableRows(pk, 12000)).isEqualTo(12000);
+    }
+
+    @Test
+    @DisplayName("a non-integer primary key does not cap the row count")
+    void textPrimaryKeyDoesNotCap() {
+        ParsedColumn pk = new ParsedColumn("code", "VARCHAR", List.of("32"), true, false, false, true);
+        assertThat(ValueGenerator.maxSeedableRows(pk, 12000)).isEqualTo(12000);
+    }
+
     private static ParsedColumn col(String name, String type, List<String> args) {
         return new ParsedColumn(name, type, args, true, false, false, false);
     }

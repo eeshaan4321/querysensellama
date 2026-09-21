@@ -13,29 +13,7 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.regex.Pattern;
 
-/**
- * SchemaUploadValidator
- *
- * The gate between parsing and touching the database. Everything downstream
- * builds DDL by string concatenation — JDBC placeholders parameterise
- * VALUES, never identifiers, so a table or column name cannot go through a
- * PreparedStatement. This is where an identifier is proven safe, once,
- * before any of it runs.
- *
- * WHY THE IDENTIFIER RULE IS STRICTER THAN MySQL's OWN:
- * MySQL permits far more inside backticks than [A-Za-z0-9_] — including
- * backticks themselves, if doubled. Accepting all of it would mean every
- * downstream concatenation had to quote and escape correctly, forever, with
- * one missed spot being a schema-drop. The narrow rule costs a user with an
- * exotic name one clear error message; the broad rule is a permanent
- * injection surface. This is a deliberate trade in favour of the narrow one.
- *
- * WHY FOREIGN KEYS ARE RESOLVED HERE RATHER THAN LEFT TO MySQL:
- * An unresolvable FK would fail at ALTER TABLE, after the tables were
- * created and possibly after some were seeded — leaving a half-provisioned
- * catalog and an error message about constraint syntax. Checking first
- * means the upload is refused before anything is written.
- */
+/** Validates an uploaded schema before anything touches the database. */
 @Component
 public class SchemaUploadValidator {
 

@@ -14,21 +14,6 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-/**
- * DeclineBoundaryTest
- *
- * The line the rule engine must not cross.
- *
- * Every other test in this package widens what the engine claims. This one
- * holds the boundary, and it guards the single failure PROJECT.md §5 names
- * as the one the project's central claim cannot survive: a wrong answer
- * returned as RULE_ENGINE at confidence 0.95, with nothing on screen to give
- * the user a reason to doubt it.
- *
- * A deferral to the language model is always an acceptable outcome here. A
- * confident wrong answer never is. When a case in this file starts failing
- * because the engine got cleverer, that is not a reason to delete the case.
- */
 class DeclineBoundaryTest {
 
     private RuleBasedQueryBuilder builder;

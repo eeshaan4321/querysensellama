@@ -20,3 +20,7 @@
   max-width: 32rem;
   line-height: var(--leading-relaxed);
 }
+
+.empty-state__action {
+  margin-top: var(--space-2);
+}

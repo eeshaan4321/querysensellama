@@ -476,7 +476,6 @@ POST /api/query/analyze
 Body: {
   "query": "<sql or mongo query text>",
   "databaseType": "MySQL" | "MongoDB",
-  "domainProfile": "ECOMMERCE" | "ANALYTICAL" | "TRANSACTIONAL",
   "resourceLevel": "LOW" | "MEDIUM" | "HIGH"
 }
 Response: AnalyzeResponse — { "analysis": QueryAnalysisResult, "suggestions": OptimizationSuggestion[] }
@@ -488,6 +487,11 @@ not a bare `QueryAnalysisResult` — see Section 7's Eeshaan subsection and
 Section 14 for why. `POST /api/query/schema-advisor` takes the identical
 request shape (it re-runs analysis internally) but still returns a raw
 `SchemaRecommendation[]`, unchanged.
+
+**Updated 2026-09-11:** `domainProfile` is gone, along with the frontend's
+domain picker — schemas are uploaded directly, so no workload is declared.
+`DomainProfile` and the e-commerce/analytical rule sets were deleted; every
+analysis runs `TransactionalOptimizationRules`. See PROJECT.md §9.7.
 
 MySQL-specific fields default/false for Mongo results and vice versa —
 always check `databaseType` before reading dialect-specific fields.

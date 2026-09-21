@@ -14,7 +14,7 @@ import { TargetDb } from '../api/contracts';
 import { useWorkbench } from '../context/WorkbenchContext';
 
 export function AnalysisPage() {
-  const { build, targetDb, domain, resourceLevel, analysis, suggestions, setAnalysis, setSuggestions } = useWorkbench();
+  const { build, targetDb, resourceLevel, analysis, suggestions, setAnalysis, setSuggestions } = useWorkbench();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -26,7 +26,6 @@ export function AnalysisPage() {
       const result = await analyzeQuery({
         query: build.generatedQuery,
         targetDb: build.targetDb || targetDb,
-        domain,
         resourceLevel,
       });
       setAnalysis(result.analysis);
@@ -51,7 +50,7 @@ export function AnalysisPage() {
     <div>
       <PageHeader
         title="Analysis"
-        description="Runs MySQL EXPLAIN against the real query plan, or MongoDB's lightweight structural checks, plus the domain- and resource-aware suggestions those findings trigger."
+        description="Runs MySQL EXPLAIN against the real query plan, or MongoDB's lightweight structural checks, plus the optimization and resource-aware suggestions those findings trigger."
         action={!analysis && <Button onClick={runAnalysis} loading={loading}>Run analysis</Button>}
       />
 
@@ -67,21 +66,8 @@ export function AnalysisPage() {
 
       {analysis && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-6)' }}>
-          {/*
-            The plain-English answer comes first, before any EXPLAIN
-            vocabulary. Everything below it is the evidence for it: the
-            warnings say what was found, the metrics say how much, and the
-            per-table plan says where. Absent for MongoDB, which renders
-            nothing here and falls through to MongoFindingsList as before.
-          */}
           <VerdictBanner verdict={analysis.verdict} />
 
-          {/*
-            Below the verdict, above the evidence. The verdict says whether
-            the query is any good; this says why it is shaped the way it is;
-            the warnings, metrics and plan below are what both are drawn
-            from. Comes from `build`, not `analysis` — no extra request.
-          */}
           <RuleTracePanel trace={build.ruleTrace} handledBy={build.handledBy} />
 
           {analysis.warnings?.length > 0 && (
@@ -102,7 +88,7 @@ export function AnalysisPage() {
 
           <section>
             <h3 style={{ fontSize: 'var(--text-sm)', color: 'var(--ink-secondary)', marginBottom: 'var(--space-3)' }}>
-              Domain &amp; resource suggestions
+              Optimization &amp; resource suggestions
             </h3>
             <SuggestionsList suggestions={suggestions} />
           </section>

@@ -7,27 +7,6 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/**
- * KnownSchemaTest
- *
- * WHY THIS TEST EXISTS:
- * KnownSchema is a hand-maintained mirror of the real `querysense` database.
- * When the two drift, the failure is silent and downstream: the rule engine
- * happily builds a query naming a column MySQL doesn't have, and the first
- * thing to notice is EXPLAIN, which dies with error 1054 and surfaces to the
- * user as the uninformative "Unavailable — EXPLAIN failed".
- *
- * That is exactly what happened: this class declared `orders` as
- * (order_id, customer_id, order_date, amount, status) while the real table is
- * (id, customer_id, employee_id, order_date, status). `order_id` and `amount`
- * live on `order_items` and `payments` respectively — they had been folded
- * into `orders` by mistake.
- *
- * These assertions are transcribed from information_schema on the live
- * database. They are deliberately exact rather than "contains", so that the
- * next drift fails here — cheaply, at build time — instead of downstream in
- * an EXPLAIN error a user has to interpret.
- */
 class KnownSchemaTest {
 
     @Test

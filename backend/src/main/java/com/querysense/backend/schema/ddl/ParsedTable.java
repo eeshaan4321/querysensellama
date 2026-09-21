@@ -5,7 +5,7 @@ import com.querysense.backend.schema.KnownSchema;
 import java.util.List;
 import java.util.Optional;
 
-/** One CREATE TABLE, reduced to what the upload pipeline needs. */
+/** A table declared in uploaded DDL. */
 public record ParsedTable(
         String name,
         List<ParsedColumn> columns,
@@ -19,12 +19,6 @@ public record ParsedTable(
         return columns.stream().map(ParsedColumn::name).toList();
     }
 
-    /**
-     * The shape the rest of the app already understands. KnownSchema.Table
-     * carries only name and column names, which is all the rule engine and
-     * the LLM prompt ever needed; the richer type information stays here,
-     * where provisioning and seeding use it.
-     */
     public KnownSchema.Table toKnownTable() {
         return new KnownSchema.Table(name, columnNames());
     }

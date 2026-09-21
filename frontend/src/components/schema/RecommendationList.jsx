@@ -7,12 +7,14 @@ const TYPE_META = {
   STRUCTURAL: { label: 'Structural', tone: 'data' },
 };
 
-/** Rows with a left color bar per recommendation type — deliberately not a grid of identical rounded cards. */
 export function RecommendationList({ recommendations }) {
   return (
     <ul className="recommendation-list">
       {recommendations.map((r, i) => {
         const meta = TYPE_META[r.type] || TYPE_META.STRUCTURAL;
+        const lead = r.summary || r.reason;
+        const hasDetail = Boolean(r.summary && r.reason && r.reason !== r.summary);
+
         return (
           <li key={i} className={`recommendation-list__item recommendation-list__item--${meta.tone}`}>
             <div className="recommendation-list__head">
@@ -24,7 +26,16 @@ export function RecommendationList({ recommendations }) {
                 </span>
               )}
             </div>
-            <p className="recommendation-list__detail">{r.reason}</p>
+
+            <p className="recommendation-list__detail">{lead}</p>
+
+            {hasDetail && (
+              <details className="recommendation-list__technical">
+                <summary className="recommendation-list__technical-toggle">Technical detail</summary>
+                <p className="recommendation-list__technical-body">{r.reason}</p>
+              </details>
+            )}
+
             {r.suggestedAction && (
               <CodeBlock code={r.suggestedAction} dialect={r.suggestedAction.startsWith('db.') ? 'MONGODB' : 'SQL'} />
             )}

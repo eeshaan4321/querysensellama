@@ -7,13 +7,6 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/**
- * SqlStatementSplitterTest
- *
- * The cases here are drawn from what a real mysqldump file actually
- * contains, not from what a tidy hand-written schema looks like. Every one
- * of them is a way a naive split(";") gets the wrong answer.
- */
 class SqlStatementSplitterTest {
 
     @Test
