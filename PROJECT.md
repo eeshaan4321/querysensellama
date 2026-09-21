@@ -1894,9 +1894,14 @@ picked it up. Stopped (the Maven launcher and its child JVM) and restarted
 with `./mvnw clean spring-boot:run` — *"Started BackendApplication in 4.724
 seconds"*. §6 now carries this as a gotcha.
 
-#### Session of 2026-09-21 — the four open defects in §5 and §9.10
+#### Not verified
 
-All four were fixed test-first. 255 backend tests and 19 frontend tests pass;
+- No `/analyze` call was made after the restart; the user is testing it.
+- `./mvnw test` and `npm test` were not run for this change.
+
+### Session of 2026-09-21 — five defects from §5, §9.10 and `RULES.md`
+
+All five were fixed test-first. 260 backend tests and 19 frontend tests pass;
 the frontend build is clean. **None of it has been exercised against a running
 backend or in a browser** — see Not verified below.
 
@@ -1919,16 +1924,20 @@ declines on an unknown column instead of dropping the filter silently.
 filesort on the same table become one composite `CREATE INDEX` rather than two
 single-column statements MySQL cannot both use.
 
-**Worth knowing:** `SqlPreflightValidator` looked like the tool for the first
-one and was not. Its column check opens by reading the table's columns and
+**The delete verb no longer hides inside other words.** Rule 7 tested
+`text.contains("delete") || text.contains("remove")`, so `show removed
+customers in mumbai` built `DELETE FROM customers WHERE city = 'mumbai';` at
+0.95, and `show deleted customers` was declined as a delete with no `WHERE` —
+a read rejected as a malformed write. The verb must now be a whole word opening
+the question, optionally after `please`; standing anywhere else it declines,
+naming the word it found. This one came from `RULES.md`'s own gap list, whose
+three entries are now all closed.
+
+**Worth knowing:** `SqlPreflightValidator` looked like the tool for the cache
+defect and was not. Its column check opens by reading the table's columns and
 returns clean when that list is empty — an invented table passes it — and it
 takes the table name as an argument rather than reading it from the SQL. It is
 right for `/analyze`, where the table is known to exist, and useless here.
-
-### Not verified
-
-- No `/analyze` call was made after the restart; the user is testing it.
-- `./mvnw test` and `npm test` were not run for this change.
 
 ### Not verified
 
@@ -1950,6 +1959,12 @@ right for `/analyze`, where the table is known to exist, and useless here.
   a backend on real MySQL, since H2 cannot produce `EXPLAIN` output.
 - The `OLLAMA` rename fix is exactly what an end-to-end fallback run would
   confirm, and is the first thing to check.
+- **Nothing from the 2026-09-21 session has met a live backend.** The schema
+  conformance guard, the `IN` filter list, the two new decline paths and the
+  advisor's composite index are covered by unit tests and nothing else. The
+  fastest live check is the §8 reproduction: ask the same off-schema question
+  twice against an upload and confirm the second call no longer comes back as
+  `CACHE` at 1.00. `SchemaWarning` has never been rendered in a browser.
 
 ### Behavioural shift worth watching
 
