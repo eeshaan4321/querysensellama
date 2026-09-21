@@ -697,10 +697,14 @@ block is Copy.
    alone. Only the first has a backend behind it. See §7 for what the split
    removed.
 
-2. **No consistency checking in the schema advisor.**
-   `SchemaAdvisorServiceImpl` emits each recommendation independently from a
-   single `EXPLAIN` signal. Two proposals can overlap or conflict. The screen
-   says so instead of showing a green "internally consistent" badge.
+2. **Limited consistency checking in the schema advisor.** Each rule still
+   reads one `EXPLAIN` signal and cannot see what the others emitted. **Since
+   2026-09-21 one pair is reconciled:** a full scan and a filesort on the same
+   table now collapse into a single composite `CREATE INDEX`, filtered column
+   first, instead of two single-column statements that cannot both apply. That
+   was the demonstrable contradiction — the `(gender, status)` case. Other
+   overlaps remain possible, and the screen still says so rather than showing a
+   green "internally consistent" badge.
 
 3. **Per-table, but still not a plan tree.** `MySqlExplainAnalyzer` keeps every
    `EXPLAIN` row in `tables[]` alongside the collapsed summary, and
@@ -903,12 +907,18 @@ Mongo accuracy as its own figure; folding it into a blended number hides this.
    words. It was included there rather than deferred because the feature's
    main use case is asking about *your own* schema in *your own* vocabulary,
    which is exactly the path that was ungrounded.
-2. **Still open.** Add a schema-conformance check over generated identifiers
-   before the result is returned *or* cached, so a query naming an unknown
-   table/column is never written to history. Until this exists, a
-   hallucinated query is still cached and still served back at confidence
-   1.0 — and note that an uploaded schema widens the surface, since
-   `SqlPreflightValidator` now validates against whatever schema is live.
+2. ~~Add a schema-conformance check over generated identifiers before the
+   result is returned *or* cached.~~ **Implemented 2026-09-21.**
+   `GeneratedQueryValidator.namesUnknownIdentifiers` parses the generated SQL,
+   resolves every table in `FROM`/`JOIN` against the active schema and checks
+   each referenced column against the tables that resolved, following aliases.
+   A query that fails is returned at confidence **0.2** with the reason in a
+   new `schemaWarning` field, and `saveToHistory` is skipped — so it cannot
+   come back from the cache at 1.0. `SqlPreflightValidator` was the obvious
+   candidate and turned out to be the wrong tool: its column check returns
+   clean when the table has no columns, which is exactly the invented-table
+   case, and it takes the table name as an argument rather than reading it
+   from the SQL.
 3. **Still open.** Decide explicitly what MongoDB grounding should look like,
    rather than leaving it as an inherited no-op. Schema upload does not help
    here; see §5.5.
@@ -1884,7 +1894,38 @@ picked it up. Stopped (the Maven launcher and its child JVM) and restarted
 with `./mvnw clean spring-boot:run` — *"Started BackendApplication in 4.724
 seconds"*. §6 now carries this as a gotcha.
 
-#### Not verified
+#### Session of 2026-09-21 — the four open defects in §5 and §9.10
+
+All four were fixed test-first. 255 backend tests and 19 frontend tests pass;
+the frontend build is clean. **None of it has been exercised against a running
+backend or in a browser** — see Not verified below.
+
+**The cache no longer promotes a hallucination.** `/api/query/generate` had no
+schema guard at all. `GeneratedQueryValidator.namesUnknownIdentifiers` now
+parses the LLM's SQL and resolves its tables and columns against the active
+schema; a mismatch returns the query at confidence 0.2 with the reason in a new
+`schemaWarning` field and skips `saveToHistory`. The unsaved half is the half
+that mattered — it is what stops `transactions` coming back later as `CACHE`
+1.0. `SELECT *`, unparseable SQL, MongoDB and an empty active schema all pass:
+none is evidence of a mismatch. The Workbench renders the reason under the
+query and says the query was not saved.
+
+**The filter rules stopped over-claiming.** Multiple values now survive as an
+`IN` list; a trailing word that is not a value ends the list rather than
+declining; values from different columns decline. `with <column> <value>`
+declines on an unknown column instead of dropping the filter silently.
+
+**The advisor reconciles its one contradictory pair.** A full scan and a
+filesort on the same table become one composite `CREATE INDEX` rather than two
+single-column statements MySQL cannot both use.
+
+**Worth knowing:** `SqlPreflightValidator` looked like the tool for the first
+one and was not. Its column check opens by reading the table's columns and
+returns clean when that list is empty — an invented table passes it — and it
+takes the table name as an argument rather than reading it from the SQL. It is
+right for `/analyze`, where the table is known to exist, and useless here.
+
+### Not verified
 
 - No `/analyze` call was made after the restart; the user is testing it.
 - `./mvnw test` and `npm test` were not run for this change.
@@ -2073,9 +2114,14 @@ SELECT * FROM user_details WHERE status = 'active'
 first_name, last_name, gender, password, status`. This is the hallucination
 defect of §5 occurring on an *uploaded* schema, and the second call returned
 the same broken SQL labelled `CACHE` at **confidence 1.00**, the highest tier
-the system reports. Demoing the LLM and the cache with one question shows
-both tiers working and one wrong answer being promoted from 0.65 to 1.00.
-Pick the demo question deliberately.
+the system reports.
+
+**Guarded 2026-09-21.** SQL naming a column the active schema does not have is
+now returned at 0.2 with the mismatch named, and is never written to history,
+so the second call cannot serve it back at 1.00. The observation above stands
+as the reason the guard exists. It has not been re-run against the live backend
+since — the guard is covered by unit tests only, and this exact reproduction is
+the first thing worth trying.
 
 **The rule engine silently drops a grouping. — FIXED 2026-09-11.** `per
 <column>` is now bound like any other phrase: it becomes a real `GROUP BY`
@@ -2165,8 +2211,8 @@ English word list except the date check (rule 3).
 | 11 | Aggregate | `average/avg/mean`, `sum`, `maximum/max/highest`, `minimum/min/lowest` + a column produce `AVG` / `SUM` / `MAX` / `MIN`. Skipped when rule 9 or 10 already chose columns. `total` is deliberately not read as `SUM`, because it's a common column name | the column isn't one of the subject table's |
 | 12 | Grouping | `per`, `for each`, `grouped by`, `group by` + a column. The column goes into the projection, so `GROUP BY` covers it | the column isn't one of the subject table's |
 | 13 | Comparison | `<column> more / greater / larger / higher than, above, over N` → `>`; the less-than forms, `below` and `under` → `<`. `N` can be a digit or a word from one to ten. If the column binds, this becomes a `WHERE` condition. If it doesn't bind but a join exists, it becomes `HAVING COUNT(<related table's first column>)`: "customers who placed more than three orders" | `N` isn't a number, or there's no join and the column doesn't bind |
-| 14 | Filter from the data itself | A word after `from`, `in`, `at`, `located in`, `living in`, `based in`, `residing in`. Stopwords, table names and column names are skipped. Otherwise the engine looks for the subject-table column whose **actual distinct values** contain the word (ignoring case) and writes `<column> = '<word>'`. Only the first such word is used | no column of the subject table holds the value |
-| 15 | `with <column> <value>` | An explicit column/value pair. It only runs when rules 13 and 14 produced no `WHERE`. Numbers are left unquoted | never. If the column doesn't bind, the phrase is **ignored**, not declined (see 9.10) |
+| 14 | Filter from the data itself | One or more words after `from`, `in`, `at`, `located in`, `living in`, `based in`, `residing in`, joined by `and`. Stopwords, table names and column names are skipped. The engine looks for the subject-table column whose **actual distinct values** contain each word (ignoring case), writing `<column> = '<word>'` for one value and `<column> IN ('a', 'b')` for several. A word after `and` that is not a value ends the list | the first value matches no column of the subject table, or two values match **different** columns |
+| 15 | `with <column> <value>` | An explicit column/value pair. It only runs when rules 13 and 14 produced no `WHERE`, and comparison phrasing (`with more than …`) is excluded first. Numbers are left unquoted | the named column is not a column of the subject table |
 | 16 | Building the column list | Picked in this order: the grouping column first; then the aggregate; else the key + `name`/`title`/`label` column + `COUNT` for rule 13's `HAVING`; else `COUNT(*)`; else the chosen columns; else `*`. With a join, every column is prefixed with its table name | — |
 
 #### Safety checks
@@ -2299,16 +2345,23 @@ The advisor never executes its own DDL (§5).
 
 ### 9.10 What reading the rules turned up
 
-Both of these come from reading the code; neither has been run.
+Both came from reading the code. **Both were fixed on 2026-09-21**; the
+accounts are kept because the shape recurs.
 
-- **Only the first filter value is kept, and the rest is dropped without a
-  word.** Rule 14 captures one word after the preposition and stops, so
-  `customers in mumbai and pune` should build `WHERE city = 'mumbai'` at
-  confidence 0.95 and lose `pune`. Section 15 of `backend/CLAUDE.md` records a fix for exactly this
-  (`city IN (...)`, Bug 10) in the engine this one replaced. That behaviour
-  didn't carry over. For the same reason, a multi-word value like `new delhi`
-  can't be matched either.
-- **`with <column> <value>` is the only phrase that fails silently.** Every
-  other rule that can't match what it read declines. Rule 15 just skips it,
-  so a question like `customers with gender female` on a schema without a
-  `gender` column should come back as all customers, labelled `RULE_ENGINE`.
+- ~~**Only the first filter value is kept, and the rest is dropped without a
+  word.**~~ **FIXED.** Rule 14 captured one word after the preposition and
+  broke out of its loop, so `customers in mumbai and pune` built
+  `WHERE city = 'mumbai'` at confidence 0.95 and lost `pune`. The pattern now
+  reads a list joined by `and` and emits `IN` for more than one value — the
+  behaviour §15 of `backend/CLAUDE.md` records as Bug 10 in the engine this one
+  replaced, which had not carried over. Two guards bound it: a word after `and`
+  that is not a value ends the list rather than declining, and values resolving
+  to different columns decline. A multi-word value like `new delhi` still
+  cannot be matched, and still declines rather than guessing.
+- ~~**`with <column> <value>` is the only phrase that fails silently.**~~
+  **FIXED.** Rule 15 skipped an unbindable column instead of declining, so
+  `customers with gender female` on a schema without a `gender` column came
+  back as every row, labelled `RULE_ENGINE`. It now declines with the reason.
+  Comparison phrasing is excluded before the check, so `customers with more
+  than three orders` still builds its join and `HAVING` rather than hunting for
+  a column called `more`.

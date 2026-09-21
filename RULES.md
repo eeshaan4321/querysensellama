@@ -227,27 +227,31 @@ The rules run in the order below. The first decline stops the build.
 
 #### E14 · Filter checked against the data
 - **What it does:** takes the word after `from`, `in`, `at`, `located in`,
-  `living in`, `based in` or `residing in`. Stopwords (`the`, `all`, `which`
-  …), table names and column names are skipped. For anything else, the
-  engine looks for the subject-table column whose **actual stored values**
-  contain that word (ignoring case), and writes `<column> = '<word>'`. Only
-  the first such word is used.
+  `living in`, `based in` or `residing in`, and any further words joined to it
+  by `and`. Stopwords (`the`, `all`, `which` …), table names and column names
+  are skipped. For anything else, the engine looks for the subject-table
+  column whose **actual stored values** contain that word (ignoring case). One
+  value writes `<column> = '<word>'`; several write `<column> IN ('a', 'b')`.
+  A word after `and` that is not a value ends the list.
 - **Why:** the previous engine assumed any location meant `city` and then
   checked `customers.city`. On a schema without that column it wrote the
   wrong column, and its own safety check silently stopped working. Asking
   the data which column holds the value works on any schema.
-- **Declines when:** no column of the subject table contains the value.
+- **Declines when:** the first value matches no column of the subject table,
+  or two values match different columns — the engine cannot tell which field
+  the question means.
 - **Example:** `show customers in mumbai` →
-  `SELECT * FROM customers WHERE city = 'mumbai';`. `customers in atlantis`
-  → declined.
+  `SELECT * FROM customers WHERE city = 'mumbai';`. `customers in mumbai and
+  pune` → `… WHERE city IN ('mumbai', 'pune');`. `customers in atlantis` →
+  declined.
 
 #### E15 · `with <column> <value>`
 - **What it does:** reads an explicit column/value pair. It only runs when
-  E13 and E14 produced no `WHERE`. Numbers are left unquoted; anything else
-  is quoted.
+  E13 and E14 produced no `WHERE`, and comparison phrasing (`with more than
+  three orders`) is excluded before the column is looked up. Numbers are left
+  unquoted; anything else is quoted.
 - **Why:** it covers questions that name both the column and the value.
-- **Declines when:** never. If the column doesn't match, the phrase is
-  ignored (see *Known gaps*).
+- **Declines when:** the named column is not a column of the subject table.
 - **Example:** `orders with status pending` →
   `SELECT * FROM orders WHERE status = 'pending';`
 
@@ -605,20 +609,33 @@ user's decision, in their own database.
 - **Recommends:** anchor the regex with `^`, or create a text index if
   searching within the text is needed.
 
+#### Reconciliation — added 2026-09-21
+The rules above each read a single signal and cannot see what the others
+emitted, so SA1 and SA2 could propose two separate single-column indexes on
+one table. MySQL uses one index per table access, so running both gives
+neither rule what it wanted — the composite SA2's caveat already described.
+After the rules run, two index proposals on the same table are now merged into
+one composite `CREATE INDEX`, **filtered column first**, naming both signals
+in its reason. The same column proposed twice collapses to a single statement.
+Structural flags and lone index proposals are untouched. This reconciles the
+one pair known to contradict; it is not general consistency checking.
+
 ---
 
 ## Known gaps in these rules
 
-Found by reading the code; not yet confirmed by running it.
+Found by reading the code. The first two were fixed on 2026-09-21 and are
+covered by unit tests; neither fix has been run against a live backend.
 
-- **E14 keeps only the first filter value.** `customers in mumbai and pune`
-  should build `WHERE city = 'mumbai'` at 0.95 and quietly lose `pune`. The
-  engine this one replaced handled it with `city IN (...)`, but that didn't
-  carry over. Multi-word values such as `new delhi` can't match either.
-- **E15 is the only rule that fails silently.** If the column in `with
-  <column> <value>` doesn't match, the phrase is dropped instead of declined.
-  `customers with gender female`, on a schema without `gender`, should return
-  every customer labelled `RULE_ENGINE`.
+- ~~**E14 keeps only the first filter value.**~~ **FIXED 2026-09-21.**
+  `customers in mumbai and pune` built `WHERE city = 'mumbai'` at 0.95 and
+  quietly lost `pune`; it now writes `city IN ('mumbai', 'pune')`, the
+  behaviour the engine this one replaced had. Multi-word values such as `new
+  delhi` still can't match, and still decline rather than guess.
+- ~~**E15 is the only rule that fails silently.**~~ **FIXED 2026-09-21.** An
+  unmatched column in `with <column> <value>` was dropped instead of declined,
+  so `customers with gender female` on a schema without `gender` returned every
+  customer labelled `RULE_ENGINE`. It now declines with the reason.
 - **E7 finds its verb inside other words.** It checks whether `delete` or
   `remove` appears anywhere in the text. So `show removed customers in mumbai`
   should become `DELETE FROM customers WHERE city = 'mumbai';`. QuerySense
