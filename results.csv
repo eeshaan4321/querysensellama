@@ -1,0 +1,55 @@
+#,question,case1_input_tokens,case1_output_tokens,case1_total_tokens,case1_llm_time_ms,case2_handled_by,case2_input_tokens,case2_output_tokens,case2_total_tokens,case2_time_ms,case2_confidence,case2_same_sql_as_case1,case1_sql,case2_sql
+1,Show all movies,250,6,256,168.2,RULE_ENGINE,0,0,0,82.5,0.95,,SELECT title FROM movies;,SELECT * FROM movies;
+2,Show only the title and genre of movies,255,8,263,183.5,RULE_ENGINE,0,0,0,13.5,0.95,,"SELECT title, genre FROM movies;","SELECT title, genre FROM movies;"
+3,How many rentals are there,259,11,270,279.6,RULE_ENGINE,0,0,0,11.5,0.95,,SELECT COUNT(rental_id) FROM rentals;,SELECT COUNT(*) FROM rentals;
+4,Show customers in Bengaluru,254,26,280,511.6,RULE_ENGINE,0,0,0,36.1,0.95,,"SELECT customer_id, first_name, last_name, city, joined_date FROM customers WHERE city = 'Bengaluru';",SELECT * FROM customers WHERE city = 'bengaluru';
+5,Show movies sorted by rating descending,253,12,265,263.7,RULE_ENGINE,0,0,0,9.1,0.95,,"SELECT title, rating FROM movies ORDER BY rating DESC;",SELECT * FROM movies ORDER BY rating DESC;
+6,Average amount of rentals,258,8,266,179.5,RULE_ENGINE,0,0,0,8.4,0.95,,SELECT AVG(amount) FROM rentals;,SELECT AVG(amount) FROM rentals;
+7,How many customers per city,254,17,271,350.5,RULE_ENGINE,0,0,0,7.2,0.95,,"SELECT city, COUNT(customer_id) AS customer_count FROM customers GROUP BY city;","SELECT city, COUNT(*) FROM customers GROUP BY city;"
+8,Top 5 rentals sorted by amount descending,262,28,290,538.9,RULE_ENGINE,0,0,0,8.1,0.95,,"SELECT rental_id, customer_id, movie_id, rental_date, returned_date, amount FROM rentals ORDER BY amount DESC LIMIT 5;",SELECT * FROM rentals ORDER BY amount DESC LIMIT 5;
+9,Show only the first name and last name of customers,259,10,269,215.6,RULE_ENGINE,0,0,0,7.8,0.95,,"SELECT first_name, last_name FROM customers;","SELECT first_name, last_name FROM customers;"
+10,Show rentals with amount above 100,263,28,291,575,RULE_ENGINE,0,0,0,7.2,0.95,,"SELECT rental_id, customer_id, movie_id, rental_date, returned_date, amount FROM rentals WHERE amount > 100;",SELECT * FROM rentals WHERE amount > 100;
+11,Show rentals from last month,259,20,279,396.9,OLLAMA,259,41,300,838.2,0.65,TRUE,"SELECT * FROM rentals WHERE rental_date >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH);","SELECT rental_id, customer_id, movie_id, rental_date, returned_date, amount
+FROM rentals
+WHERE rental_date >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH);"
+12,Which customers rented movies in January,270,56,326,1041.9,OLLAMA,270,56,326,1068,0.4,TRUE,"SELECT c.customer_id, c.first_name, c.last_name
+FROM customers c
+JOIN rentals r ON c.customer_id = r.customer_id
+WHERE MONTH(r.rental_date) = 1
+GROUP BY c.customer_id, c.first_name, c.last_name;","SELECT c.customer_id, c.first_name, c.last_name
+FROM customers c
+JOIN rentals r ON c.customer_id = r.customer_id
+WHERE MONTH(r.rental_date) = 1
+GROUP BY c.customer_id, c.first_name, c.last_name;"
+13,Show customers and the movies they rented,271,46,317,853,OLLAMA,271,46,317,878,0.65,TRUE,"SELECT c.customer_id, c.first_name, c.last_name, m.movie_id, m.title FROM customers c JOIN rentals r ON c.customer_id = r.customer_id JOIN movies m ON r.movie_id = m.movie_id;","SELECT c.customer_id, c.first_name, c.last_name, m.movie_id, m.title FROM customers c JOIN rentals r ON c.customer_id = r.customer_id JOIN movies m ON r.movie_id = m.movie_id;"
+14,List movies released this year,252,17,269,345.9,OLLAMA,252,17,269,386.2,0.65,TRUE,SELECT title FROM movies WHERE YEAR(release_year) = YEAR(CURDATE());,SELECT title FROM movies WHERE YEAR(release_year) = YEAR(CURDATE());
+15,Show the total rental amount for each customer,279,54,333,1015.9,OLLAMA,279,54,333,1070.6,0.65,TRUE,"SELECT c.customer_id, c.first_name, c.last_name, SUM(r.amount) AS total_rental_amount
+FROM customers c
+JOIN rentals r ON c.customer_id = r.customer_id
+GROUP BY c.customer_id, c.first_name, c.last_name;","SELECT c.customer_id, c.first_name, c.last_name, SUM(r.amount) AS total_rental_amount
+FROM customers c
+JOIN rentals r ON c.customer_id = r.customer_id
+GROUP BY c.customer_id, c.first_name, c.last_name;"
+16,Show rentals from last month,259,41,300,771.6,CACHE,0,0,0,10.2,1,,"SELECT rental_id, customer_id, movie_id, rental_date, returned_date, amount
+FROM rentals
+WHERE rental_date >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH);","SELECT rental_id, customer_id, movie_id, rental_date, returned_date, amount
+FROM rentals
+WHERE rental_date >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH);"
+17,Which customers rented movies in January,270,56,326,1060.5,CACHE,0,0,0,11.1,1,,"SELECT c.customer_id, c.first_name, c.last_name
+FROM customers c
+JOIN rentals r ON c.customer_id = r.customer_id
+WHERE MONTH(r.rental_date) = 1
+GROUP BY c.customer_id, c.first_name, c.last_name;","SELECT c.customer_id, c.first_name, c.last_name
+FROM customers c
+JOIN rentals r ON c.customer_id = r.customer_id
+WHERE MONTH(r.rental_date) = 1
+GROUP BY c.customer_id, c.first_name, c.last_name;"
+18,Show customers and the movies they rented,271,46,317,854.7,CACHE,0,0,0,10.6,1,,"SELECT c.customer_id, c.first_name, c.last_name, m.movie_id, m.title FROM customers c JOIN rentals r ON c.customer_id = r.customer_id JOIN movies m ON r.movie_id = m.movie_id;","SELECT c.customer_id, c.first_name, c.last_name, m.movie_id, m.title FROM customers c JOIN rentals r ON c.customer_id = r.customer_id JOIN movies m ON r.movie_id = m.movie_id;"
+19,List movies released this year,252,17,269,348,CACHE,0,0,0,10.8,1,,SELECT title FROM movies WHERE YEAR(release_year) = YEAR(CURDATE());,SELECT title FROM movies WHERE YEAR(release_year) = YEAR(CURDATE());
+20,Show the total rental amount for each customer,279,54,333,1010.7,CACHE,0,0,0,11,1,,"SELECT c.customer_id, c.first_name, c.last_name, SUM(r.amount) AS total_rental_amount
+FROM customers c
+JOIN rentals r ON c.customer_id = r.customer_id
+GROUP BY c.customer_id, c.first_name, c.last_name;","SELECT c.customer_id, c.first_name, c.last_name, SUM(r.amount) AS total_rental_amount
+FROM customers c
+JOIN rentals r ON c.customer_id = r.customer_id
+GROUP BY c.customer_id, c.first_name, c.last_name;"
