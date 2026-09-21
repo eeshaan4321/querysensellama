@@ -41,6 +41,12 @@ public class QueryIntentParser {
     private static final Pattern PREPOSITION_VALUE = Pattern.compile(
             "\\b(?:from|in|at|located in|living in|based in|residing in)\\s+([a-z]+(?:\\s+and\\s+[a-z]+)*)\\b");
 
+    private static final Pattern LEADING_DELETE = Pattern.compile(
+            "^(?:please )?(?:delete|remove)\\b");
+
+    private static final Pattern STANDALONE_DELETE = Pattern.compile(
+            "\\b(?:delete|remove)\\b");
+
     private static final Pattern LIMIT = Pattern.compile("\\b(?:top|first|limit)\\s+(\\d+)\\b");
 
     private static final Pattern ORDER_BY = Pattern.compile(
@@ -162,8 +168,17 @@ public class QueryIntentParser {
         }
 
         boolean joined = joinSpec != null;
-        QueryIntent.Verb verb = (text.contains("delete") || text.contains("remove"))
+        QueryIntent.Verb verb = LEADING_DELETE.matcher(text).find()
                 ? QueryIntent.Verb.DELETE : QueryIntent.Verb.SELECT;
+
+        Matcher strayDeleteVerb = STANDALONE_DELETE.matcher(text);
+        if (verb == QueryIntent.Verb.SELECT && strayDeleteVerb.find()) {
+            return RuleBuildResult.declined(
+                    "The question uses \"" + strayDeleteVerb.group() + "\" without opening with it, "
+                            + "so this engine cannot tell whether it asks to remove rows or to "
+                            + "show them.",
+                    bindings);
+        }
 
         if (verb == QueryIntent.Verb.DELETE && joined) {
             return RuleBuildResult.declined(

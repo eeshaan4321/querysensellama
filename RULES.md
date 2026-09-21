@@ -141,11 +141,19 @@ The rules run in the order below. The first decline stops the build.
 ### Working out what is being asked
 
 #### E7 · Verb
-- **What it does:** `delete` or `remove` anywhere in the question makes it a
-  `DELETE`; anything else is a `SELECT`. `SELECT` needs no verb at all, so
-  `customers in mumbai` works.
-- **Why:** questions are overwhelmingly reads, so reading is the default.
-- **Declines when:** a delete would span two joined tables.
+- **What it does:** `delete` or `remove` as a whole word **opening** the
+  question — optionally after `please` — makes it a `DELETE`; anything else is
+  a `SELECT`. `SELECT` needs no verb at all, so `customers in mumbai` works.
+- **Why:** questions are overwhelmingly reads, so reading is the default. The
+  verb has to lead because a `DELETE` is the highest-stakes thing the engine
+  can write, and a word buried mid-sentence is not a command.
+- **Declines when:** a delete would span two joined tables, or the whole word
+  `delete`/`remove` stands anywhere other than the opening — `customers in
+  mumbai i want to delete` could mean either a read or a write, and the engine
+  will not pick one.
+- **Example:** `delete customers in mumbai` →
+  `DELETE FROM customers WHERE city = 'mumbai';`. `show removed customers in
+  mumbai` → a plain `SELECT`, because `removed` is not the verb `remove`.
 
 #### E8 · Count
 - **What it does:** `count`, `how many`, `total number` or `number of` produces
@@ -636,8 +644,9 @@ covered by unit tests; neither fix has been run against a live backend.
   unmatched column in `with <column> <value>` was dropped instead of declined,
   so `customers with gender female` on a schema without `gender` returned every
   customer labelled `RULE_ENGINE`. It now declines with the reason.
-- **E7 finds its verb inside other words.** It checks whether `delete` or
-  `remove` appears anywhere in the text. So `show removed customers in mumbai`
-  should become `DELETE FROM customers WHERE city = 'mumbai';`. QuerySense
-  never runs generated SQL, but it shouldn't write a delete for a question
-  that asks to show something.
+- ~~**E7 finds its verb inside other words.**~~ **FIXED 2026-09-21.** It tested
+  for `delete` or `remove` anywhere in the text, so `show removed customers in
+  mumbai` became `DELETE FROM customers WHERE city = 'mumbai';`, and `show
+  deleted customers` was declined as a delete with no `WHERE`. The verb must
+  now be a whole word opening the question; standing anywhere else it declines.
+  QuerySense never runs generated SQL, so this was wrong rather than dangerous.

@@ -2204,7 +2204,7 @@ English word list except the date check (rule 3).
 
 | # | Rule | What it does | Declines when |
 |---|---|---|---|
-| 7 | Verb | `delete` or `remove` anywhere in the question means `DELETE`; anything else means `SELECT` | a delete would span two joined tables |
+| 7 | Verb | `delete` or `remove` as a whole word **opening** the question (optionally after `please`) means `DELETE`; anything else means `SELECT` | a delete would span two joined tables, or the whole word `delete`/`remove` stands anywhere else in the question — too ambiguous to call either way |
 | 8 | Count | `count`, `how many`, `total number`, `number of` produce `COUNT(*)` | — |
 | 9 | Explicit projection | `only X` / `just X` / `X of <table>`. The last one isn't used if the question also asks for an average, sum, max or min. The phrase is split on commas and `and`, filler words are dropped (`show`, `the`, `all` …), and each piece is bound; a multi-word piece that fails whole is tried again on its last word | any requested field is not a column of the subject table. It never falls back to `SELECT *` and quietly drops what was asked for |
 | 10 | Implicit projection | `customer city`, `customer first name`: a column phrase directly after the table noun. It only runs when rules 8 and 9 didn't, and only if the phrase runs to the end of the sentence, is at most three words, and contains no preposition, verb or table name. Those limits keep `customers in pune` a filter rather than a failed projection | the phrase looks like a column but matches none, or matches two equally well |
@@ -2365,3 +2365,12 @@ accounts are kept because the shape recurs.
   Comparison phrasing is excluded before the check, so `customers with more
   than three orders` still builds its join and `HAVING` rather than hunting for
   a column called `more`.
+- ~~**Rule 7 found its verb inside other words.**~~ **FIXED 2026-09-21**, from
+  `RULES.md`'s own gap list. It tested `text.contains("delete") ||
+  text.contains("remove")`, so `show removed customers in mumbai` built
+  `DELETE FROM customers WHERE city = 'mumbai';` at confidence 0.95, and `show
+  deleted customers` was declined as "asks to delete rows without saying which
+  ones" — a read rejected as a malformed write. The verb must now be a whole
+  word opening the question, optionally after `please`; the same word standing
+  anywhere else declines, because neither reading is safe to assume. The engine
+  never runs generated SQL, so this was wrong rather than dangerous.

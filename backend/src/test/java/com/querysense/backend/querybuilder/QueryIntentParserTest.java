@@ -243,4 +243,49 @@ class QueryIntentParserTest {
         assertThat(result.built()).isTrue();
         assertThat(result.sql()).contains("WHERE city = 'mumbai'");
     }
+
+    @Test
+    @DisplayName("\"removed\" is not the verb \"remove\" — the question still asks to show")
+    void removedIsNotADeleteVerb() {
+        RuleBuildResult result = parser.parse("show removed customers in mumbai");
+
+        assertThat(result.built()).isTrue();
+        assertThat(result.sql()).startsWith("SELECT").doesNotContain("DELETE");
+    }
+
+    @Test
+    @DisplayName("\"deleted\" is not the verb \"delete\" either")
+    void deletedIsNotADeleteVerb() {
+        RuleBuildResult result = parser.parse("show deleted customers");
+
+        assertThat(result.built()).isTrue();
+        assertThat(result.sql()).startsWith("SELECT").doesNotContain("DELETE");
+    }
+
+    @Test
+    @DisplayName("a question that opens with the verb still builds a DELETE")
+    void leadingDeleteStillBuildsADelete() {
+        RuleBuildResult result = parser.parse("delete customers in mumbai");
+
+        assertThat(result.built()).isTrue();
+        assertThat(result.sql()).isEqualTo("DELETE FROM customers WHERE city = 'mumbai';");
+    }
+
+    @Test
+    @DisplayName("\"remove\" leading the question builds a DELETE too")
+    void leadingRemoveBuildsADelete() {
+        RuleBuildResult result = parser.parse("remove customers in mumbai");
+
+        assertThat(result.built()).isTrue();
+        assertThat(result.sql()).startsWith("DELETE FROM customers");
+    }
+
+    @Test
+    @DisplayName("the verb standing mid-question is ambiguous, so the engine declines")
+    void midQuestionDeleteDeclines() {
+        RuleBuildResult result = parser.parse("customers in mumbai i want to delete");
+
+        assertThat(result.built()).isFalse();
+        assertThat(result.trace().declineReason()).contains("delete");
+    }
 }
