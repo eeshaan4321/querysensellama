@@ -16,4 +16,6 @@ public class QueryResponse {
     private Double confidence;
 
     private RuleTrace ruleTrace;
+
+    private String schemaWarning;
 }

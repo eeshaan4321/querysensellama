@@ -2,9 +2,32 @@ package com.querysense.backend.querybuilder;
 
 import com.querysense.backend.schema.ActiveSchemaProvider;
 import com.querysense.backend.schema.KnownSchema;
+import net.sf.jsqlparser.JSQLParserException;
+import net.sf.jsqlparser.expression.BinaryExpression;
+import net.sf.jsqlparser.expression.Expression;
+import net.sf.jsqlparser.expression.Function;
+import net.sf.jsqlparser.expression.Parenthesis;
+import net.sf.jsqlparser.expression.operators.relational.Between;
+import net.sf.jsqlparser.expression.operators.relational.InExpression;
+import net.sf.jsqlparser.expression.operators.relational.IsNullExpression;
+import net.sf.jsqlparser.parser.CCJSqlParserUtil;
+import net.sf.jsqlparser.schema.Column;
+import net.sf.jsqlparser.schema.Table;
+import net.sf.jsqlparser.statement.Statement;
+import net.sf.jsqlparser.statement.select.Join;
+import net.sf.jsqlparser.statement.select.OrderByElement;
+import net.sf.jsqlparser.statement.select.PlainSelect;
+import net.sf.jsqlparser.statement.select.Select;
+import net.sf.jsqlparser.statement.select.SelectItem;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 /** Flags LLM-generated SQL that appears to miss part of the question. */
@@ -50,5 +73,149 @@ public class GeneratedQueryValidator {
         }
 
         return false;
+    }
+
+    public Optional<String> namesUnknownIdentifiers(String generatedQuery, String databaseType) {
+        if (!"MySQL".equalsIgnoreCase(databaseType) || generatedQuery == null) {
+            return Optional.empty();
+        }
+        if (activeSchema.tables().isEmpty()) {
+            return Optional.empty();
+        }
+
+        PlainSelect select;
+        try {
+            Statement statement = CCJSqlParserUtil.parse(stripTrailingSemicolon(generatedQuery));
+            if (!(statement instanceof Select parsed) || !(parsed instanceof PlainSelect plainSelect)) {
+                return Optional.empty();
+            }
+            select = plainSelect;
+        } catch (JSQLParserException e) {
+            return Optional.empty();
+        }
+
+        Map<String, KnownSchema.Table> byQualifier = new LinkedHashMap<>();
+        List<KnownSchema.Table> resolved = new ArrayList<>();
+
+        for (Table table : tablesOf(select)) {
+            Optional<KnownSchema.Table> known = activeSchema.findTable(table.getName());
+            if (known.isEmpty()) {
+                return Optional.of("'" + table.getName() + "' is not a table in the schema that is "
+                        + "currently active, so this query cannot run against it.");
+            }
+            resolved.add(known.get());
+            byQualifier.put(table.getName().toLowerCase(), known.get());
+            if (table.getAlias() != null) {
+                byQualifier.put(table.getAlias().getName().toLowerCase(), known.get());
+            }
+        }
+
+        if (resolved.isEmpty()) {
+            return Optional.empty();
+        }
+
+        for (Column column : referencedColumns(select)) {
+            String name = column.getColumnName();
+            if (name == null || "*".equals(name)) {
+                continue;
+            }
+
+            String qualifier = column.getTable() != null ? column.getTable().getName() : null;
+            if (qualifier != null) {
+                KnownSchema.Table owner = byQualifier.get(qualifier.toLowerCase());
+                if (owner == null) {
+                    return Optional.of("'" + qualifier + "' is not one of the tables this query reads from.");
+                }
+                if (!hasColumn(owner, name)) {
+                    return Optional.of("'" + name + "' is not a column of '" + owner.name() + "'.");
+                }
+            } else if (resolved.stream().noneMatch(t -> hasColumn(t, name))) {
+                return Optional.of("'" + name + "' is not a column of "
+                        + String.join(" or ", resolved.stream().map(KnownSchema.Table::name).toList()) + ".");
+            }
+        }
+
+        return Optional.empty();
+    }
+
+    private List<Table> tablesOf(PlainSelect select) {
+        List<Table> tables = new ArrayList<>();
+        if (select.getFromItem() instanceof Table from) {
+            tables.add(from);
+        }
+        if (select.getJoins() != null) {
+            for (Join join : select.getJoins()) {
+                if (join.getRightItem() instanceof Table joined) {
+                    tables.add(joined);
+                }
+            }
+        }
+        return tables;
+    }
+
+    private Set<Column> referencedColumns(PlainSelect select) {
+        Set<Column> columns = new LinkedHashSet<>();
+
+        for (SelectItem<?> item : select.getSelectItems()) {
+            collectColumns(item.getExpression(), columns);
+        }
+        collectColumns(select.getWhere(), columns);
+        collectColumns(select.getHaving(), columns);
+
+        if (select.getGroupBy() != null) {
+            for (Object expression : select.getGroupBy().getGroupByExpressionList()) {
+                collectColumns((Expression) expression, columns);
+            }
+        }
+        if (select.getOrderByElements() != null) {
+            for (OrderByElement element : select.getOrderByElements()) {
+                collectColumns(element.getExpression(), columns);
+            }
+        }
+        if (select.getJoins() != null) {
+            for (Join join : select.getJoins()) {
+                if (join.getOnExpressions() != null) {
+                    for (Expression on : join.getOnExpressions()) {
+                        collectColumns(on, columns);
+                    }
+                }
+            }
+        }
+        return columns;
+    }
+
+    private void collectColumns(Expression expression, Set<Column> out) {
+        if (expression == null) {
+            return;
+        }
+        if (expression instanceof Column column) {
+            out.add(column);
+        } else if (expression instanceof BinaryExpression binary) {
+            collectColumns(binary.getLeftExpression(), out);
+            collectColumns(binary.getRightExpression(), out);
+        } else if (expression instanceof Function function) {
+            if (function.getParameters() != null) {
+                for (Object parameter : function.getParameters()) {
+                    collectColumns((Expression) parameter, out);
+                }
+            }
+        } else if (expression instanceof Parenthesis parenthesis) {
+            collectColumns(parenthesis.getExpression(), out);
+        } else if (expression instanceof InExpression in) {
+            collectColumns(in.getLeftExpression(), out);
+        } else if (expression instanceof IsNullExpression isNull) {
+            collectColumns(isNull.getLeftExpression(), out);
+        } else if (expression instanceof Between between) {
+            collectColumns(between.getLeftExpression(), out);
+        }
+    }
+
+    private boolean hasColumn(KnownSchema.Table table, String column) {
+        return table.columns().stream().anyMatch(c -> c.equalsIgnoreCase(column));
+    }
+
+    private String stripTrailingSemicolon(String sql) {
+        String trimmed = sql.trim();
+        return trimmed.endsWith(";") ? trimmed.substring(0, trimmed.length() - 1) : trimmed;
     }
 }

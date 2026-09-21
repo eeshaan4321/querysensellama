@@ -31,6 +31,7 @@ public class QueryGenerationServiceImpl implements QueryGenerationService {
     private static final double CONFIDENCE_CACHE = 1.0;
     private static final double CONFIDENCE_LLM = 0.65;
     private static final double CONFIDENCE_LLM_INCOMPLETE = 0.4;
+    private static final double CONFIDENCE_LLM_OFF_SCHEMA = 0.2;
 
     public QueryGenerationServiceImpl(
             RuleBasedQueryBuilder ruleBasedQueryBuilder,
@@ -49,6 +50,7 @@ public class QueryGenerationServiceImpl implements QueryGenerationService {
         String generatedSql;
         String source;
         double confidence;
+        String schemaWarning = null;
 
         RuleBuildResult ruleResult = ruleBasedQueryBuilder.build(input, databaseType);
 
@@ -71,15 +73,25 @@ public class QueryGenerationServiceImpl implements QueryGenerationService {
             } else {
                 generatedSql = llmFallbackService.generateQuery(input, databaseType);
                 source = SOURCE_LLM;
-                confidence = generatedQueryValidator.looksIncomplete(input, generatedSql, databaseType)
-                        ? CONFIDENCE_LLM_INCOMPLETE
-                        : CONFIDENCE_LLM;
+                schemaWarning = generatedQueryValidator
+                        .namesUnknownIdentifiers(generatedSql, databaseType)
+                        .orElse(null);
+
+                if (schemaWarning != null) {
+                    confidence = CONFIDENCE_LLM_OFF_SCHEMA;
+                } else {
+                    confidence = generatedQueryValidator.looksIncomplete(input, generatedSql, databaseType)
+                            ? CONFIDENCE_LLM_INCOMPLETE
+                            : CONFIDENCE_LLM;
+                }
             }
         }
 
-        saveToHistory(input, generatedSql, databaseType, source);
+        if (schemaWarning == null) {
+            saveToHistory(input, generatedSql, databaseType, source);
+        }
 
-        return new QueryResponse(generatedSql, databaseType, source, confidence, trace);
+        return new QueryResponse(generatedSql, databaseType, source, confidence, trace, schemaWarning);
     }
 
     private void saveToHistory(String input, String generatedSql,

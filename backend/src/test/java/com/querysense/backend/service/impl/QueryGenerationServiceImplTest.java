@@ -19,6 +19,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class QueryGenerationServiceImplTest {
@@ -26,6 +29,7 @@ class QueryGenerationServiceImplTest {
     private RuleBasedQueryBuilder rules;
     private QueryHistoryRepository history;
     private LlmFallbackService llm;
+    private GeneratedQueryValidator validator;
     private QueryGenerationServiceImpl service;
 
     @BeforeEach
@@ -33,9 +37,10 @@ class QueryGenerationServiceImplTest {
         rules = mock(RuleBasedQueryBuilder.class);
         history = mock(QueryHistoryRepository.class);
         llm = mock(LlmFallbackService.class);
-        GeneratedQueryValidator validator = mock(GeneratedQueryValidator.class);
+        validator = mock(GeneratedQueryValidator.class);
 
         when(validator.looksIncomplete(anyString(), anyString(), anyString())).thenReturn(false);
+        when(validator.namesUnknownIdentifiers(anyString(), anyString())).thenReturn(Optional.empty());
         when(history.findFirstByUserInputIgnoreCaseAndDatabaseTypeIgnoreCase(anyString(), anyString()))
                 .thenReturn(Optional.empty());
         when(history.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -100,5 +105,49 @@ class QueryGenerationServiceImplTest {
 
         assertThat(QueryHistory.class.getDeclaredFields())
                 .noneSatisfy(f -> assertThat(f.getName()).containsIgnoringCase("trace"));
+    }
+
+    @Test
+    @DisplayName("SQL naming a table outside the schema is returned flagged, and never written to history")
+    void hallucinatedSqlIsFlaggedAndNotCached() {
+        when(rules.build(anyString(), anyString()))
+                .thenReturn(RuleBuildResult.declined("The question names no known table.", List.of()));
+        when(llm.generateQuery(anyString(), anyString()))
+                .thenReturn("SELECT buyer_id FROM transactions;");
+        when(validator.namesUnknownIdentifiers(anyString(), anyString()))
+                .thenReturn(Optional.of("'transactions' is not a table in the active schema."));
+
+        QueryResponse response = service.generateQuery("top 5 buyers by spend", "MySQL");
+
+        assertThat(response.getHandledBy()).isEqualTo("OLLAMA");
+        assertThat(response.getConfidence()).isEqualTo(0.2);
+        assertThat(response.getSchemaWarning()).contains("transactions");
+        verify(history, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("LLM output that matches the schema is still cached")
+    void conformingLlmOutputIsCached() {
+        when(rules.build(anyString(), anyString()))
+                .thenReturn(RuleBuildResult.declined("The question asks about a period of time.", List.of()));
+        when(llm.generateQuery(anyString(), anyString())).thenReturn("SELECT * FROM orders;");
+
+        QueryResponse response = service.generateQuery("orders from last month", "MySQL");
+
+        assertThat(response.getSchemaWarning()).isNull();
+        assertThat(response.getConfidence()).isEqualTo(0.65);
+        verify(history, times(1)).save(any());
+    }
+
+    @Test
+    @DisplayName("a rule-built query is recorded as before")
+    void ruleBuiltIsRecorded() {
+        RuleTrace trace = new RuleTrace(RuleTrace.BUILT, "SELECT", List.of(), null, List.of(), null);
+        when(rules.build(anyString(), anyString()))
+                .thenReturn(RuleBuildResult.built("SELECT * FROM customers;", trace));
+
+        service.generateQuery("Show all customers", "MySQL");
+
+        verify(history, times(1)).save(any());
     }
 }

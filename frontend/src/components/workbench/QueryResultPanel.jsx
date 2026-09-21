@@ -4,6 +4,7 @@ import { CodeBlock } from '../common/CodeBlock';
 import { EngineBadge } from '../common/EngineBadge';
 import { ConfidenceMeter } from '../common/ConfidenceMeter';
 import { Button } from '../common/Button';
+import { SchemaWarning } from './SchemaWarning';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
 import { isLlmSource } from '../../api/contracts';
 import './QueryResultPanel.css';
@@ -27,6 +28,8 @@ export function QueryResultPanel({ result, targetDb }) {
       </div>
 
       <CodeBlock code={result.generatedQuery} dialect={targetDb} />
+
+      <SchemaWarning warning={result.schemaWarning} />
 
       <div className="query-result__foot">
         <ConfidenceMeter value={result.confidence} handledBy={result.handledBy} />
