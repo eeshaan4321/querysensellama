@@ -201,4 +201,71 @@ class SchemaAdvisorServiceImplTest {
         result.setDatabaseType("MySQL");
         return result;
     }
+
+    @Test
+    @DisplayName("a filter and a sort on different columns collapse into one composite index")
+    void filterAndSortCollapseIntoOneComposite() {
+        QueryAnalysisResult result = base();
+        result.setHasFullTableScan(true);
+        result.setAccessType("ALL");
+        result.setFilteredColumn("gender");
+        result.setUsesFilesort(true);
+        result.setOrderByColumn("status");
+        result.setEstimatedRows(12000L);
+
+        List<SchemaRecommendation> recommendations = advisor.recommend(result);
+
+        assertThat(recommendations).hasSize(1);
+        assertThat(recommendations.get(0).getSuggestedAction())
+                .isEqualTo("CREATE INDEX idx_user_details_gender_status "
+                        + "ON user_details(gender, status);");
+        assertThat(recommendations.get(0).getReason()).contains("one index per table");
+    }
+
+    @Test
+    @DisplayName("a filter and a sort on the same column do not emit the same statement twice")
+    void sameColumnIsNotRecommendedTwice() {
+        QueryAnalysisResult result = base();
+        result.setHasFullTableScan(true);
+        result.setAccessType("ALL");
+        result.setFilteredColumn("status");
+        result.setUsesFilesort(true);
+        result.setOrderByColumn("status");
+
+        List<SchemaRecommendation> recommendations = advisor.recommend(result);
+
+        assertThat(recommendations).hasSize(1);
+        assertThat(recommendations.get(0).getSuggestedAction())
+                .isEqualTo("CREATE INDEX idx_user_details_status ON user_details(status);");
+    }
+
+    @Test
+    @DisplayName("reconciling the two index rules leaves the structural flag standing")
+    void structuralRecommendationSurvivesReconciliation() {
+        QueryAnalysisResult result = base();
+        result.setHasFullTableScan(true);
+        result.setAccessType("ALL");
+        result.setFilteredColumn("gender");
+        result.setUsesFilesort(true);
+        result.setOrderByColumn("status");
+        result.setUsesTemporaryTable(true);
+
+        List<SchemaRecommendation> recommendations = advisor.recommend(result);
+
+        assertThat(recommendations).hasSize(2);
+        assertThat(recommendations).extracting(SchemaRecommendation::getType)
+                .containsExactly("INDEX", "STRUCTURAL");
+    }
+
+    @Test
+    @DisplayName("no two recommendations ever propose an index on the same table")
+    void neverTwoIndexesOnOneTable() {
+        for (QueryAnalysisResult result : everyRuleFiring()) {
+            List<String> indexedTables = advisor.recommend(result).stream()
+                    .filter(r -> "INDEX".equals(r.getType()))
+                    .map(SchemaRecommendation::getTargetTable)
+                    .toList();
+            assertThat(indexedTables).doesNotHaveDuplicates();
+        }
+    }
 }

@@ -109,6 +109,55 @@ public class SchemaAdvisorServiceImpl implements SchemaAdvisorService {
                             + "'; consider a composite index covering the grouped column(s) if one column is consistently responsible."
             ));
         }
+
+        reconcileIndexes(recommendations);
+    }
+
+    private void reconcileIndexes(List<SchemaRecommendation> recommendations) {
+        List<SchemaRecommendation> indexes = recommendations.stream()
+                .filter(r -> "INDEX".equals(r.getType()))
+                .toList();
+
+        if (indexes.size() < 2) {
+            return;
+        }
+
+        SchemaRecommendation filterIndex = indexes.get(0);
+        SchemaRecommendation sortIndex = indexes.get(1);
+
+        String table = filterIndex.getTargetTable();
+        if (table == null || !table.equals(sortIndex.getTargetTable())) {
+            return;
+        }
+
+        String filterColumn = filterIndex.getTargetColumn();
+        String sortColumn = sortIndex.getTargetColumn();
+        recommendations.removeAll(indexes);
+
+        if (filterColumn == null || sortColumn == null || filterColumn.equalsIgnoreCase(sortColumn)) {
+            recommendations.add(0, filterIndex);
+            return;
+        }
+
+        recommendations.add(0, new SchemaRecommendation(
+                "INDEX",
+                table,
+                filterColumn + ", " + sortColumn,
+                "This query narrows the rows down by " + filterColumn + " and then puts what is "
+                        + "left in order by " + sortColumn + ". The database can only use one index "
+                        + "per table at a time, so two separate indexes would not both get used. "
+                        + "One index covering both columns, in this order, is what it needs. "
+                        + "Re-check after applying rather than assuming it worked.",
+                "Two signals were reported for '" + table + "': a full table scan filtering on '"
+                        + filterColumn + "', and an extra sorting pass for ORDER BY '" + sortColumn
+                        + "'. MySQL uses one index per table access, so the two single-column "
+                        + "indexes those rules propose separately cannot both apply — a composite "
+                        + "index on (" + filterColumn + ", " + sortColumn + ") is the one that can "
+                        + "serve both. Column order matters: the filtered column leads. Verify with "
+                        + "EXPLAIN after applying.",
+                "CREATE INDEX idx_" + safeName(table, filterColumn + "_" + sortColumn)
+                        + " ON " + table + "(" + filterColumn + ", " + sortColumn + ");"
+        ));
     }
 
     private void addMongoRecommendations(QueryAnalysisResult result, List<SchemaRecommendation> recommendations) {
