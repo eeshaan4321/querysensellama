@@ -13,6 +13,9 @@ public class MongoSimpleAnalyzer {
 
     private static final List<String> KNOWN_INDEXED_FIELDS = List.of("_id", "email", "userId");
 
+    private static final Pattern COLLECTION_PATTERN =
+            Pattern.compile("\\bdb\\s*\\.\\s*(\\w+)\\s*\\.");
+
     private static final Pattern FILTER_FIELD_PATTERN =
             Pattern.compile("\\{\\s*\"?(\\w+)\"?\\s*:");
 
@@ -22,7 +25,7 @@ public class MongoSimpleAnalyzer {
     public QueryAnalysisResult analyze(String mongoQueryText, String collectionName) {
         QueryAnalysisResult result = new QueryAnalysisResult();
         result.setDatabaseType("MongoDB");
-        result.setTableName(collectionName);
+        result.setTableName(collectionName != null ? collectionName : collectionFrom(mongoQueryText));
         result.setQueryType("FIND");
 
         if (mongoQueryText == null || mongoQueryText.isBlank()) {
@@ -34,6 +37,15 @@ public class MongoSimpleAnalyzer {
         checkUnanchoredRegex(mongoQueryText, result);
 
         return result;
+    }
+
+    /** db.<collection>.find(...) names its collection; reading it beats reporting 'null'. */
+    private String collectionFrom(String queryText) {
+        if (queryText == null) {
+            return null;
+        }
+        Matcher matcher = COLLECTION_PATTERN.matcher(queryText);
+        return matcher.find() ? matcher.group(1) : null;
     }
 
     private void checkUnindexedFilter(String queryText, QueryAnalysisResult result) {
