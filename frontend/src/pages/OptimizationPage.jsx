@@ -10,7 +10,6 @@ import { ApplyScript } from '../components/optimization/ApplyScript';
 import { RecommendationList } from '../components/schema/RecommendationList';
 import { adviseSchema, compareQueries } from '../api';
 import { TargetDb } from '../api/contracts';
-import { mockSimulateOptimizedQuery } from '../mock/fixtures';
 import { useWorkbench } from '../context/workbench.js';
 import { useActiveSchema } from '../context/activeSchema.js';
 
@@ -20,8 +19,8 @@ export function OptimizationPage() {
   const navigate = useNavigate();
 
   const [loading, setLoading] = useState(false);
-  const [preview, setPreview] = useState(null);
   const [comparison, setComparison] = useState(null);
+  const [compareError, setCompareError] = useState(null);
   const [adviceLoading, setAdviceLoading] = useState(false);
   const [adviceError, setAdviceError] = useState(null);
 
@@ -58,23 +57,17 @@ export function OptimizationPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [analysis, schemaAdvice]);
 
-  async function runPreview() {
+  async function runComparison() {
     setLoading(true);
+    setCompareError(null);
     try {
-      const sim = mockSimulateOptimizedQuery({
-        generatedQuery: build.generatedQuery,
-        tableName: analysis.tableName,
+      const result = await compareQueries({
+        query: build.generatedQuery,
+        targetDb: activeDb,
       });
-      setPreview(sim);
-
-      const compareResult = await compareQueries({
-        originalQuery: build.generatedQuery,
-        optimizedQuery: sim.optimizedQuery,
-        originalAnalysis: analysis,
-        optimizedAnalysis: { ...analysis, estimatedRows: 4, hasFullTableScan: false },
-        changes: sim.changes,
-      });
-      setComparison(compareResult);
+      setComparison(result);
+    } catch (err) {
+      setCompareError(err.response?.data?.message || err.message || 'Comparison failed.');
     } finally {
       setLoading(false);
     }
@@ -85,7 +78,7 @@ export function OptimizationPage() {
       <div>
         <PageHeader
           title="Optimization"
-          description="Schema changes the advisor found for this query, plus a labelled preview of the rewrite engine that doesn't exist yet."
+          description="Schema changes the advisor found for this query, plus the rewrite the engine can apply to the query itself."
         />
         <EmptyState title="Run an analysis first" detail="Both halves of this page build on the Analysis page's EXPLAIN or Mongo findings." />
       </div>
@@ -96,7 +89,7 @@ export function OptimizationPage() {
     <div>
       <PageHeader
         title="Optimization"
-        description="Two halves. The schema changes below are real — every one is anchored to an EXPLAIN finding, and QuerySense recommends them without ever running them for you. The rewrite preview under them is simulated; the Comparison Engine has no backend endpoint yet."
+        description="Two halves, optimising different things. The schema changes below change the database and leave the query alone; the rewrite under them changes the query and leaves the database alone. QuerySense recommends both without ever running either for you."
       />
 
       <section style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
@@ -156,71 +149,67 @@ export function OptimizationPage() {
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--space-3)' }}>
           <h3 style={{ fontSize: 'var(--text-sm)', color: 'var(--ink-secondary)', margin: 0 }}>
-            Query rewrite preview
+            Query rewrite
           </h3>
-          {!isMongo && !preview && (
-            <Button onClick={runPreview} loading={loading}>Simulate rewrite</Button>
+          {!isMongo && !comparison && (
+            <Button onClick={runComparison} loading={loading}>Compare rewrite</Button>
           )}
         </div>
 
-        <div style={{
-          fontSize: 'var(--text-xs)', color: 'var(--llm-tint)', background: 'var(--llm-wash)',
-          border: '1px solid color-mix(in srgb, var(--llm) 35%, transparent)', borderRadius: 'var(--radius-sm)',
-          padding: 'var(--space-2) var(--space-3)', width: 'fit-content',
-        }}>
-          Simulated — the Comparison Engine has no backend endpoint yet
-        </div>
+        <p className="page-note">
+          Every rule here preserves the rows the query returns. The row and cost figures come from
+          EXPLAIN over both versions — they are the optimiser&apos;s estimates, not measurements.
+        </p>
 
         {isMongo ? (
           <EmptyState
             title="SQL only, for now"
-            detail="This preview's simulated rewrite and cost estimate are built around EXPLAIN row counts — there's nothing equivalent to preview for MongoDB yet. The schema changes above are real and do apply to MongoDB."
+            detail="The rewriter has no MongoDB rules, so there is nothing to compare for a Mongo query. The schema changes above are real and do apply to MongoDB."
           />
-        ) : !preview && !loading ? (
-          <EmptyState title="Not previewed yet" detail="Click Simulate rewrite to see what a rewrite might look like." />
-        ) : preview ? (
+        ) : compareError ? (
+          <EmptyState title="Comparison failed" detail={compareError} />
+        ) : !comparison && !loading ? (
+          <EmptyState title="Not compared yet" detail="Click Compare rewrite to run the rewriter and EXPLAIN both versions." />
+        ) : comparison && !comparison.rewritten ? (
+          <EmptyState title="No rewrite applied" detail={comparison.summary} />
+        ) : comparison ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-6)' }}>
             <section>
-              <h4 style={{ fontSize: 'var(--text-sm)', color: 'var(--ink-secondary)', marginBottom: 'var(--space-2)' }}>Before / after (simulated)</h4>
-              <BeforeAfterDiff before={build.generatedQuery} after={preview.optimizedQuery} />
+              <h4 style={{ fontSize: 'var(--text-sm)', color: 'var(--ink-secondary)', marginBottom: 'var(--space-2)' }}>Before / after</h4>
+              <BeforeAfterDiff before={comparison.originalQuery} after={comparison.optimizedQuery} />
             </section>
 
-            {comparison && (
-              <section style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-6)' }}>
-                <div>
-                  <h4 style={{ fontSize: 'var(--text-sm)', color: 'var(--ink-secondary)', marginBottom: 'var(--space-3)' }}>
-                    Estimated cost (simulated)
-                  </h4>
-                  <CostDeltaChart before={analysis.estimatedRows ?? 0} after={4} />
-                </div>
-                <div>
-                  <h4 style={{ fontSize: 'var(--text-sm)', color: 'var(--ink-secondary)', marginBottom: 'var(--space-3)' }}>
-                    Why it would change
-                  </h4>
-                  <RuleTraceList trace={comparison.ruleTrace} />
-                </div>
-              </section>
-            )}
-
-            <section>
-              <h4 style={{ fontSize: 'var(--text-sm)', color: 'var(--ink-secondary)', marginBottom: 'var(--space-2)' }}>
-                Simulated rewrite rules
-              </h4>
-              <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
-                {preview.rulesApplied.map((r) => (
-                  <li key={r.ruleId} style={{ fontSize: 'var(--text-sm)', color: 'var(--ink-secondary)' }}>
-                    <code style={{ color: 'var(--rule-tint)', fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)' }}>{r.ruleId}</code>{' '}
-                    {r.description}
-                  </li>
-                ))}
-              </ul>
+            <section style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-6)' }}>
+              <div>
+                <h4 style={{ fontSize: 'var(--text-sm)', color: 'var(--ink-secondary)', marginBottom: 'var(--space-3)' }}>
+                  Estimated rows read
+                </h4>
+                {comparison.originalAnalysis?.estimatedRows != null
+                  && comparison.optimizedAnalysis?.estimatedRows != null ? (
+                  <CostDeltaChart
+                    before={comparison.originalAnalysis.estimatedRows}
+                    after={comparison.optimizedAnalysis.estimatedRows}
+                  />
+                ) : (
+                  <p className="page-note">EXPLAIN reported no row estimate for one of the two plans.</p>
+                )}
+              </div>
+              <div>
+                <h4 style={{ fontSize: 'var(--text-sm)', color: 'var(--ink-secondary)', marginBottom: 'var(--space-3)' }}>
+                  Why it changed
+                </h4>
+                <RuleTraceList
+                  trace={comparison.changes.map((c) => ({
+                    ruleId: c.ruleId,
+                    explanation: c.explanation,
+                  }))}
+                />
+              </div>
             </section>
 
-            {comparison && (
-              <p style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-muted)', borderTop: '1px solid var(--border)', paddingTop: 'var(--space-4)' }}>
-                {comparison.summary}
-              </p>
-            )}
+            <p style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-muted)', borderTop: '1px solid var(--border)', paddingTop: 'var(--space-4)' }}>
+              {comparison.summary}
+            </p>
           </div>
         ) : null}
       </section>

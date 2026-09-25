@@ -41,5 +41,5 @@ export const ENDPOINT_STATUS = {
   schemaAdvisor: 'REAL',
   history: 'REAL',
   schemaUpload: 'REAL',
-  comparison: 'SIMULATED',
+  comparison: 'REAL',
 };

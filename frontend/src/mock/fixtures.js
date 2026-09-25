@@ -136,6 +136,35 @@ export function mockAnalyzeQuery({ query, targetDb, resourceLevel }) {
     filtered: hasFullTableScan ? 12.5 : 100,
     estimatedRowsReturned: hasFullTableScan ? 38 : 4,
     queryCost: hasFullTableScan ? 31.45 : 1.2,
+    planTree: {
+      kind: 'query_block',
+      label: 'query block',
+      cost: hasFullTableScan ? 31.45 : 1.2,
+      children: [
+        ...(orderByColumn
+          ? [{
+              kind: 'ordering_operation',
+              label: 'ordering operation',
+              usesFilesort,
+              children: [{
+                kind: 'table',
+                label: table,
+                accessType: hasFullTableScan ? 'ALL' : 'ref',
+                keyUsed: hasFullTableScan ? null : `idx_${table}_${column}`,
+                estimatedRows,
+                children: [],
+              }],
+            }]
+          : [{
+              kind: 'table',
+              label: table,
+              accessType: hasFullTableScan ? 'ALL' : 'ref',
+              keyUsed: hasFullTableScan ? null : `idx_${table}_${column}`,
+              estimatedRows,
+              children: [],
+            }]),
+      ],
+    },
     verdict: hasFullTableScan
       ? {
           severity: 'INFO',
@@ -264,65 +293,32 @@ export function mockSchemaAdvise({ query, targetDb, resourceLevel }) {
   return recommendations;
 }
 
-export function mockCompare({ originalAnalysis, optimizedAnalysis, changes = [] }) {
-  const before = originalAnalysis?.estimatedRows ?? 303;
-  const after = optimizedAnalysis?.estimatedRows ?? 4;
+export function mockCompare({ query }) {
+  const original = query || "SELECT * FROM customers WHERE city = 'mumbai' OR city = 'pune';";
+  const optimized = original
+    .replace(/select\s+\*/i, 'SELECT id, name, email, city, phone')
+    .replace(/city\s*=\s*'mumbai'\s+OR\s+city\s*=\s*'pune'/i, "city IN ('mumbai', 'pune')");
+  const rewritten = optimized !== original;
+
   return {
-    estimatedCostDelta: after - before,
-    isEstimate: true,
-    ruleTrace: [
-      ...(originalAnalysis?.hasFullTableScan
-        ? [{ ruleId: 'EXPLAIN-01', explanation: `EXPLAIN reported accessType ${originalAnalysis.accessType ?? 'ALL'} with no key in use — full table scan.` }]
-        : []),
-      ...changes,
-    ],
-    summary: `Estimated rows examined would drop from ${before} to ${after} under this simulated rewrite. Nothing here was measured, and no index was applied — the schema changes above are the part you can actually run.`,
+    originalQuery: original,
+    optimizedQuery: optimized,
+    rewritten,
+    changes: rewritten
+      ? [
+          { ruleId: 'RW1', explanation: "Named the 5 columns of 'customers' instead of SELECT *, so an index covering them can answer the query without reading the row. The rows returned are identical." },
+          { ruleId: 'RW2', explanation: "Collapsed 2 OR'd equality tests on 'city' into a single IN list. MySQL can range-scan an index for IN, where a chain of ORs on the same column often falls back to a scan. The rows returned are identical." },
+        ]
+      : [],
+    originalAnalysis: { estimatedRows: 303, queryCost: 62.15 },
+    optimizedAnalysis: rewritten ? { estimatedRows: 12, queryCost: 4.65 } : null,
+    estimatedRowsDelta: rewritten ? -291 : null,
+    queryCostDelta: rewritten ? -57.5 : null,
+    estimate: true,
+    summary: rewritten
+      ? '2 rewrite rules applied. EXPLAIN estimates 291 fewer rows read under the rewrite. That is an estimate from the plan, not a measurement.'
+      : 'No rewrite rule applied to this query, so there is nothing to compare it against.',
   };
-}
-
-const REWRITE_RULES = [
-  { ruleId: 'GEN-01', description: 'Project only the columns actually needed instead of SELECT *.' },
-  { ruleId: 'GEN-02', description: 'Cap unbounded result sets with a LIMIT clause.' },
-];
-
-export function mockSimulateOptimizedQuery({ generatedQuery, tableName }) {
-  const rulesApplied = REWRITE_RULES;
-  const table = tableName || 'customers';
-
-  const whereMatch = generatedQuery.match(/where\s+([a-z_]+)\s*=\s*('[^']*'|"[^"]*"|[\w.]+)/i);
-  const whereClause = whereMatch ? `${whereMatch[1]} = ${whereMatch[2]}` : null;
-  const filteredColumn = whereMatch ? whereMatch[1].toLowerCase() : null;
-
-  const hasSelectStar = /select\s+\*/i.test(generatedQuery);
-  const hasExistingLimit = /\blimit\s+\d+/i.test(generatedQuery);
-
-  const projectionRule = rulesApplied.find((r) => r.ruleId === 'GEN-01');
-  const limitRule = rulesApplied.find((r) => r.ruleId === 'GEN-02');
-
-  const changes = [];
-  let selectClause = '*';
-  if (projectionRule && hasSelectStar && filteredColumn) {
-    selectClause = filteredColumn;
-    changes.push({
-      ruleId: projectionRule.ruleId,
-      explanation: `Projected only the column this query actually filters on ('${filteredColumn}') instead of SELECT * — per ${projectionRule.ruleId}.`,
-    });
-  }
-
-  let limitClause = '';
-  if (limitRule && !hasExistingLimit) {
-    limitClause = '\nLIMIT 20';
-    changes.push({
-      ruleId: limitRule.ruleId,
-      explanation: `Added a LIMIT to cap an otherwise unbounded result set — per ${limitRule.ruleId}.`,
-    });
-  }
-
-  const optimizedQuery = whereClause
-    ? `SELECT ${selectClause}\nFROM ${table}\nWHERE ${whereClause}${limitClause};`
-    : generatedQuery;
-
-  return { optimizedQuery, rulesApplied, changes };
 }
 
 let historyIdCounter = 1000;
@@ -334,6 +330,9 @@ let historyStore = [
     optimizedQuery: null,
     databaseType: 'MySQL',
     source: 'RULE_ENGINE',
+    confidence: 0.95,
+    durationMs: 14,
+    schemaLabel: 'QuerySense demo schema (built-in)',
     createdAt: new Date(Date.now() - 1000 * 60 * 42).toISOString(),
   },
   {
@@ -343,6 +342,9 @@ let historyStore = [
     optimizedQuery: null,
     databaseType: 'MySQL',
     source: 'GEMINI',
+    confidence: 0.95,
+    durationMs: 14,
+    schemaLabel: 'QuerySense demo schema (built-in)',
     createdAt: new Date(Date.now() - 1000 * 60 * 60 * 5).toISOString(),
   },
   {
@@ -352,6 +354,9 @@ let historyStore = [
     optimizedQuery: null,
     databaseType: 'MongoDB',
     source: 'RULE_ENGINE',
+    confidence: 0.95,
+    durationMs: 14,
+    schemaLabel: 'QuerySense demo schema (built-in)',
     createdAt: new Date(Date.now() - 1000 * 60 * 60 * 26).toISOString(),
   },
 ];
