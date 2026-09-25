@@ -21,12 +21,15 @@ lowercased before it is read.
 | Domain optimisation | 7 | TX1–TX7 | `optimization/TransactionalOptimizationRules` |
 | Resource optimisation | 5 | RS1–RS5 | `optimization/ResourceConsciousService` |
 | Schema advisor | 5 | SA1–SA5 | `service/impl/SchemaAdvisorServiceImpl` |
-| **Total** | **59** | | |
+| Query rewrite | 3 | RW1–RW3 | `optimization/QueryRewriter` |
+| **Total** | **62** | | |
 
 **The rule engine has 22 rules.** Of those, 18 are conditions under which it
-refuses a question and hands it to the language model. The other 37 rules
+refuses a question and hands it to the language model. The other 40 rules
 belong to the modules that analyse and optimise a query after it has been
-generated. None of the 59 uses a model.
+generated. None of the 62 uses a model.
+
+Read again on 2026-09-21, when section 10 was added.
 
 ---
 
@@ -442,6 +445,12 @@ claims the choice was wrong; recommendations belong to the schema advisor.
 
 ## 5. MongoDB checks — 2 rules
 
+> **Scope, decided 2026-09-21:** these two text checks are all the MongoDB
+> analysis there will be. MongoDB is a named non-goal (PROJECT.md §5) — no live
+> connection, no upload support, no rule-engine Mongo path. Neither rule runs
+> the query, and the "known indexed fields" list they test against is a
+> hardcoded placeholder, not real index metadata.
+
 MongoDB queries aren't run through MongoDB's `explain()`. These two checks
 read the query text instead.
 
@@ -611,6 +620,9 @@ user's decision, in their own database.
 #### SA4 · MongoDB index
 - **Fires when:** unindexed filter (M1).
 - **Recommends:** `db.<collection>.createIndex({ <field>: 1 });`
+- **Until 2026-09-21 it could not name the collection** — the analyzer was
+  called with `collectionName = null`. It now reads the collection out of
+  `db.<name>.find(...)` in the query text.
 
 #### SA5 · MongoDB regex
 - **Fires when:** unanchored regex (M2).
@@ -627,6 +639,71 @@ one composite `CREATE INDEX`, **filtered column first**, naming both signals
 in its reason. The same column proposed twice collapses to a single statement.
 Structural flags and lone index proposals are untouched. This reconciles the
 one pair known to contradict; it is not general consistency checking.
+
+---
+
+## 10. Query rewrite — 3 rules
+
+Added 2026-09-21, behind `POST /api/query/compare`. These are the only rules
+in QuerySense that produce a **new query** rather than advice about one.
+
+**Every rule here preserves the rows the query returns.** This is the whole
+design constraint. A rewrite that returns different rows is a different
+question, not a faster answer to the same one — so a rule that cannot
+guarantee an identical result set declines rather than fires. The practical
+consequence: there is no "add a LIMIT" rule, even though capping an unbounded
+scan is the most obvious cheap win available, because it changes the answer.
+
+All three are MySQL-only and SELECT-only. A write statement, an unparseable
+string, or a MongoDB query comes back exactly as it arrived.
+
+#### RW1 · Name the columns
+- **Fires when:** `SELECT *`, one table, no join, and the table is in the
+  active schema.
+- **Rewrites to:** the schema's column list, in declaration order.
+- **Why:** an index covering those columns can answer the query without
+  reading the row. Naming them changes nothing about the result.
+- **Example:** `SELECT * FROM customers WHERE city = 'mumbai';` →
+  `SELECT id, name, email, city, phone FROM customers WHERE city = 'mumbai';`
+- **Declines on a join**, where `*` spans more than one table and the
+  expansion would have to guess at column ordering and duplicate names.
+  **Declines on a table it does not know** — the case that would otherwise
+  invent columns, which is the same failure the LLM guard exists for.
+
+#### RW2 · Collapse an OR chain into IN
+- **Fires when:** the `WHERE` clause is an `OR` chain of equality tests
+  against a single column, two or more values.
+- **Rewrites to:** `column IN (v1, v2, …)`.
+- **Why:** MySQL can range-scan an index for `IN`; a chain of `OR`s on the
+  same column often falls back to a scan. The predicate is identical.
+- **Example:** `WHERE city = 'mumbai' OR city = 'pune' OR city = 'delhi'` →
+  `WHERE city IN ('mumbai', 'pune', 'delhi')`
+- **Declines across two columns** — `city = 'mumbai' OR name = 'asha'` is not
+  one predicate. **Declines on a single equality**, because a one-element
+  `IN` is noise. It walks the `OR` tree and bails on anything that is not
+  `column = constant`, so an `AND` nested inside, or a column-to-column
+  comparison, stops the rule rather than being quietly dropped — the same
+  "keep every condition or decline" principle as E14.
+
+#### RW3 · Drop a sort that cannot sort anything
+- **Fires when:** `ORDER BY` is present on a bare aggregate
+  (`COUNT`/`SUM`/`AVG`/`MIN`/`MAX`) with no `GROUP BY` and no `LIMIT`.
+- **Rewrites to:** the same query without the `ORDER BY`.
+- **Why:** the query returns exactly one row. The sort cannot change the
+  result; it only costs a filesort.
+- **Example:** `SELECT COUNT(*) FROM customers ORDER BY name;` →
+  `SELECT COUNT(*) FROM customers;`
+- **Keeps `ORDER BY` when a `GROUP BY` is present**, where it orders the
+  groups and is load-bearing, and on any non-aggregate query, where sorting
+  is the point.
+
+#### An implementation trap worth recording
+JSQLParser 5.3's plain `ExpressionList` renders an `IN` list **without
+parentheses**, so RW2's first implementation emitted
+`WHERE city IN 'mumbai', 'pune'` — invalid SQL, not merely ugly formatting.
+`ParenthesedExpressionList` is the correct type. Nothing about the object
+graph reveals this; only rendering the SQL and reading it does. Two of the 14
+`QueryRewriterTest` cases assert the parentheses for that reason.
 
 ---
 

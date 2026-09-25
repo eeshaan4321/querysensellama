@@ -344,6 +344,52 @@ pipeline run**. That is the backend's documented, deliberate trade-off: it keeps
 the request shape identical to `/analyze` instead of making callers pass an
 analysis object back in.
 
+### `GET /api/health` · `GET /test`
+
+```jsonc
+// GET /api/health
+{ "status": "UP", "schemaLabel": "shop.sql", "builtInSchema": false }
+```
+
+Added 2026-09-21, replacing `TestController`. The frontend's shell banner polls
+it every 20s. `GET /test` still returns the bare string `QuerySense Running`
+for older probes. Neither touches the database, so a probe cannot be used to
+tell whether MySQL is reachable — only whether the app is up.
+
+### `POST /api/query/compare`
+
+```jsonc
+// request                                          // response
+{                                                   {
+  "query": "SELECT * FROM customers                   "originalQuery":  "SELECT * FROM …",
+            WHERE city = 'mumbai'                     "optimizedQuery": "SELECT id, name, … IN (…)",
+            OR city = 'pune';",                       "rewritten": true,
+  "databaseType": "MySQL"                             "changes": [ { "ruleId": "RW1",
+}                                                                    "explanation": "Named the 5 …" } ],
+                                                      "originalAnalysis":  { /* QueryAnalysisResult */ },
+                                                      "optimizedAnalysis": { /* QueryAnalysisResult */ },
+                                                      "estimatedRowsDelta": -291,
+                                                      "queryCostDelta": -57.5,
+                                                      "estimate": true,
+                                                      "summary": "2 rewrite rules applied. …"
+                                                    }
+```
+
+- Added 2026-09-21. Runs `QueryRewriter`, then `EXPLAIN`s **both** versions
+  through the same `QueryAnalysisService` the Analysis screen uses.
+- **A delta is negative when the rewrite is an improvement** — it is
+  `after - before`, so `-291` means 291 fewer rows read.
+- `estimate` is always `true` and is not a placeholder. Both numbers come from
+  `EXPLAIN`, which estimates; nothing here is measured. The summary sentence
+  repeats this in words.
+- **No rewrite is not an error.** `rewritten: false` with
+  `optimizedAnalysis: null` and null deltas means no rule applied. The original
+  is still analysed and returned.
+- `databaseType: "MongoDB"` returns immediately with `rewritten: false` and a
+  summary saying so — the rewriter has no MongoDB rules. **The analyser is not
+  called at all** on that path.
+- No history row is written. This endpoint reads.
+
 ### `GET /api/query/history`
 
 Returns the JPA entity unwrapped:
@@ -355,8 +401,17 @@ Returns the JPA entity unwrapped:
     "optimizedQuery": null,          // column exists, nothing writes to it
     "databaseType": "MySQL",
     "source": "OLLAMA",              // RULE_ENGINE | CACHE | OLLAMA
+    "confidence": 0.65,              // added 2026-09-21; null on older rows
+    "durationMs": 1143,              // added 2026-09-21; null on older rows
+    "schemaLabel": "shop.sql",       // added 2026-09-21; which schema was live
     "createdAt": "2026-09-08T19:23:23.644141" } ]
 ```
+
+`confidence`, `durationMs` and `schemaLabel` were added 2026-09-21 and are
+**null for every row written before that** — `ddl-auto=update` adds the columns
+without backfilling them. The History screen renders a null as `—`.
+`schemaLabel` is the load-bearing one: uploads swap the active schema between
+runs, so without it an old row cannot be interpreted.
 
 `createdAt` is a `LocalDateTime` — serialised **without a timezone**, so it is
 local server time. Rows come back in insertion order; the frontend sorts newest
@@ -477,8 +532,8 @@ once at startup rather than per query:
                                        ├── Optimisation rules (no request)
                                        └── Resource policy    (no request)
 3. POST /api/query/schema-advisor    → Schema advice
-   (reuses step 3)                   → Optimization, real half
-   (no request)                      → Optimization, simulated half
+   (reuses step 3)                   → Optimization, schema half
+4. POST /api/query/compare           → Optimization, rewrite half (on click)
 ```
 
 Stages that make no request are derived from a response already in hand.
@@ -492,11 +547,12 @@ through that screen, and writes the result back to context so neither screen
 asks twice. This matters because `EXPLAIN` already runs twice per pipeline
 (§3, `/schema-advisor`); a naive refetch here would make it four.
 
-**The simulated half is the one place the UI shows invented numbers.**
-`src/api/comparison.js` has no endpoint to call, so it always returns
-generated data regardless of `VITE_USE_MOCK`. Treat the before/after diff and
-the cost chart as a preview of a feature, not a measurement — the schema
-changes above them on the same screen are real.
+**Both halves of Optimization are real as of 2026-09-21.** The rewrite half
+calls `POST /api/query/compare`, which `EXPLAIN`s the original and the
+rewrite and returns both plans (§3). It fires on a button rather than on
+arrival, because it is the only stage that costs two more `EXPLAIN` round
+trips. The numbers it shows are `EXPLAIN` estimates and the screen says so —
+estimates, but no longer invented.
 
 ### Layout
 
@@ -611,9 +667,10 @@ so a run that never picked a domain behaves exactly as before. Its messages
 still say "transactional" — they were written for that profile and have not
 been reworded.
 
-**Do not confuse this section with the Optimization screen's "Simulated
-rewrite rules" list.** They look alike and are framed alike. This one is
-`/api/query/analyze`; that one is `fixtures.js`.
+**Do not confuse this section with the Optimization screen's rewrite rules
+(§9.11).** They look alike and are framed alike. This one is advice text from
+`/api/query/analyze` and changes nothing; that one rewrites the SQL itself
+via `/api/query/compare`.
 
 ### Two things the shell shows permanently
 
@@ -672,32 +729,94 @@ script"** — an earlier draft read "Schema changes to apply" and "Apply all",
 which implied an action the app does not perform. The only control on that
 block is Copy.
 
+### Not a gap: MongoDB is analysed, never connected
+
+**Decided 2026-09-21. This is a non-goal, not a TODO.** QuerySense will not
+grow a live MongoDB connection, a Mongo path in the rule engine, or Mongo
+support in schema upload. What exists is what will exist: two static text
+checks over the query string (`MongoSimpleAnalyzer` — unindexed filter field,
+unanchored `$regex`), the two schema-advisor rules those feed, and LLM
+generation.
+
+The reasoning is the same proportionality argument as the DDL non-goal above,
+pointed at scope rather than privilege. Supporting MongoDB properly is not one
+feature, it is four: a live connection, upload provisioning collections and
+indexes, schema-grounded Mongo prompts, and a rule-engine Mongo path. Each is
+comparable in size to the whole rewrite engine. Done half-way, the result is a
+system that *looks* like it supports two databases and is measurably worse at
+one of them — which is the single thing this project's central claim cannot
+survive. "MySQL, done properly, with the limits stated" is a stronger position
+than two databases half-supported.
+
+**What this forbids, so later work doesn't quietly reintroduce it:**
+uncommenting `spring.data.mongodb.uri` and wiring a `MongoTemplate`; extending
+`SchemaUploadService` to emit Mongo collections; adding a Mongo branch to
+`RuleBasedQueryBuilder`. Each would put QuerySense back on the road to a second
+half-supported database.
+
+**What follows from the decision, stated rather than discovered:**
+
+- **The rule engine declines every MongoDB question**, so 100% of Mongo
+  generation is the LLM. With Ollama down, every Mongo question 503s.
+- **Mongo LLM generation is ungrounded and unguarded.**
+  `buildSchemaContext` returns `""` for any non-MySQL dialect and
+  `GeneratedQueryValidator` returns clean for one. Both are deliberate:
+  `KnownSchema` describes relational tables, and there is no Mongo schema to
+  check output against. **Report Mongo accuracy as its own figure; folding it
+  into a blended number hides this.**
+- **Schema upload does nothing for MongoDB.** The pipeline emits MySQL DDL,
+  seeds through JDBC and reads MySQL `EXPLAIN`, end to end.
+- **`MongoSimpleAnalyzer` never runs the query** and produces no plan. Its
+  "known indexed fields" list is the hardcoded placeholder `_id`, `email`,
+  `userId` — not real index metadata.
+- **There is no comparison for MongoDB.** `QueryRewriter` has no Mongo rules,
+  and `/api/query/compare` returns `rewritten: false` with a summary saying so,
+  without calling the analyser at all.
+
+The UI carries this rather than leaving it to be discovered: the Optimization
+screen's rewrite half shows "SQL only, for now" for a Mongo analysis, and the
+Analysis screen shows Mongo findings instead of a plan. Neither pretends a
+plan is coming.
+
 ### Missing endpoints
 
 | Endpoint | Status | What is needed |
 |---|---|---|
-| `POST /api/query/compare` | **Nothing exists.** No controller, no service, no DTO. The frontend simulates it in the browser instead of hiding the screen. | A comparison engine returning a cost/row delta and a per-rule trace. It also needs the item below to exist first — there is no "after" query to compare a "before" against. |
+| `POST /api/query/compare` | **Built 2026-09-21.** `QueryComparisonController` → `QueryComparisonServiceImpl` → `QueryRewriter`, returning `CompareResponse`. The frontend calls it; the browser simulation is deleted. | — |
 | `POST /api/history` | **No write endpoint.** | Only needed if the frontend should store per-run metadata the backend does not currently see (resource level, confidence, cost delta). Today the backend writes history itself and those fields are not persisted at all. |
 
 ### Missing capabilities behind endpoints that do exist
 
-1. **Nothing rewrites a query.** `DomainOptimizationService` and
-   `ResourceConsciousService` both return `List<OptimizationSuggestion>` —
-   advice text with a severity. No code path edits SQL. Consequences:
-   `QueryHistory.optimizedQuery` is always `null`, and the optimisation screen's
-   `BeforeAfterDiff` has no real "after" to render — it diffs against a rewrite
-   the browser simulated, not one the backend produced.
+1. **Query rewriting exists, and is deliberately narrow.** Added 2026-09-21.
+   `optimization/QueryRewriter` emits a rewritten SELECT plus the rules that
+   changed it; `POST /api/query/compare` EXPLAINs both versions and returns the
+   row and cost delta with a per-rule trace. Three rules, all of them
+   **semantics-preserving** — see §9.11. That property is the whole design
+   constraint: a rewrite that returns different rows is a different query, not
+   an optimisation, so a rule that cannot guarantee identical rows declines.
 
-   **This is now stated by the screen's shape rather than only in its
-   caption.** The Optimization page was split on 2026-09-10 into a real half
-   (the schema advisor's recommendations, with the DDL to run) above a
-   simulated half (this rewrite preview, behind the amber badge). The two
-   optimise different things: the advisor changes the *database* and leaves
-   the query alone; the preview changes the *query* and leaves the database
-   alone. Only the first has a backend behind it. See §7 for what the split
-   removed.
+   **What is still absent:** `DomainOptimizationService` and
+   `ResourceConsciousService` still return advice text only — nothing turns one
+   of *their* suggestions into SQL. `QueryHistory.optimizedQuery` is still
+   always `null`; the compare endpoint does not write history.
 
-2. **Limited consistency checking in the schema advisor.** Each rule still
+   The Optimization page's two halves remain, but both are now real. They
+   optimise different things: the advisor changes the *database* and leaves the
+   query alone; the rewriter changes the *query* and leaves the database alone.
+   The amber "Simulated" badge is gone, along with `mockSimulateOptimizedQuery`.
+
+2. **`KnownSchema` and the seeded MySQL tables disagree about columns.**
+   Found 2026-09-21. `KnownSchema.CUSTOMERS` declares a `phone` column that
+   `mysql/schema.sql` never creates, and its `orders` declares
+   `(id, customer_id, employee_id, order_date, status)` where the script
+   creates `(order_id, customer_id, order_date, amount, status)`. Harmless
+   while nothing turned the declared list into SQL; `QueryRewriter`'s RW1
+   does, which is why the compare endpoint withdraws a rewrite whose EXPLAIN
+   failed (§7). **Uploaded schemas are not affected** — they are parsed from
+   the DDL that provisioned the tables. Fixing it means deciding which side is
+   authoritative for the demo schema, which is a bigger call than this note.
+
+3. **Limited consistency checking in the schema advisor.** Each rule still
    reads one `EXPLAIN` signal and cannot see what the others emitted. **Since
    2026-09-21 one pair is reconciled:** a full scan and a filesort on the same
    table now collapse into a single composite `CREATE INDEX`, filtered column
@@ -706,44 +825,52 @@ block is Copy.
    overlaps remain possible, and the screen still says so rather than showing a
    green "internally consistent" badge.
 
-3. **Per-table, but still not a plan tree.** `MySqlExplainAnalyzer` keeps every
-   `EXPLAIN` row in `tables[]` alongside the collapsed summary, and
-   `ExplainPlanView` renders one block per table for a join — so per-table
-   access type, index and row estimate *are* shown. What is still absent is a
-   plan *tree*: `EXPLAIN`'s tabular output is a flat list of table accesses in
-   join order, not a node graph, so nesting and operator flow are not
-   recoverable from it. That needs `EXPLAIN FORMAT=JSON`, which exists behind
-   `querysense.explain.format=JSON` but is not what the analysis screen reads.
+4. ~~**Per-table, but still not a plan tree.**~~ **BUILT 2026-09-21.**
+   `QueryAnalysisResult.planTree` carries a `PlanNode` graph and the Analysis
+   screen renders it under the per-table blocks. It is parsed from
+   `EXPLAIN FORMAT=JSON` — but **not** by flipping
+   `querysense.explain.format`, which would swap an unexercised reader in front
+   of every analysis (CLAUDE.md §18, judgement call 1). Instead the side probe
+   that already fetched the cost figure now returns both, so the tree costs no
+   extra round trip and the tabular reader stays the authority on the plan.
+   A failed probe costs the tree and the cost, never the plan.
 
-4. **No optimiser cost figure.** The backend reads `EXPLAIN`'s `rows` estimate
+5. **No optimiser cost figure.** The backend reads `EXPLAIN`'s `rows` estimate
    and computes no cost. The UI therefore says "Estimated rows" — labelling a
    row count as a cost would invent a unit.
 
-5. **MongoDB is barely supported**, and schema upload does nothing for it.
-   The upload pipeline is MySQL-only end to end: it emits MySQL DDL, seeds
-   through JDBC and reads MySQL `EXPLAIN`. Uploading a schema does not give
-   the Mongo path a collection, an index, or a grounded prompt.
-   - `spring.data.mongodb.uri` is commented out; there is no Mongo connection.
-   - `MongoSimpleAnalyzer` is a static text check over the query string — two
-     regexes, for unindexed filter fields and unanchored `$regex`. It never runs
-     the query and produces no plan.
-   - The rule engine refuses all MongoDB input, so **every** MongoDB question
-     goes to the LLM and fails without Ollama.
-   - `MongoSimpleAnalyzer` is called with `collectionName = null`, so Mongo
-     schema recommendations cannot name their collection.
+6. **MongoDB stays a text-level check — a decision, not a backlog item.**
+   See "Not a gap: MongoDB is analysed, never connected" above. The one real
+   defect on that path was fixed 2026-09-21: `MongoSimpleAnalyzer` was called
+   with `collectionName = null`, so Mongo recommendations could not name their
+   collection. It now reads the collection out of `db.<name>.find(...)` itself,
+   and an explicit name still wins.
 
-6. **`EXPLAIN` runs twice per pipeline run**, because the schema advisor re-runs
+7. **`EXPLAIN` runs twice per pipeline run**, because the schema advisor re-runs
    the whole analysis. Accepted at this scale; worth revisiting if the analysis
    gets expensive.
 
-7. **History stores no run context.** No resource level, confidence or
-   timing is persisted — only input, query, database type, source and timestamp.
-   Adding columns to `QueryHistory` is the prerequisite for any analytics over
-   past runs.
+8. **History run context — mostly built 2026-09-21.** `QueryHistory` gained
+   `confidence`, `durationMs` and `schemaLabel`, all set in `saveToHistory` and
+   shown as columns on the History screen. `schemaLabel` is the one that
+   matters most in practice: uploads swap the active schema between runs, so
+   without it an old row cannot be interpreted at all.
 
-8. **`TestController` (`GET /test`)** is a debug endpoint that returns a bare
-   string. It is used as the health probe; if that becomes load-bearing it
-   deserves a real health response.
+   **`resourceLevel` is still not stored, and cannot be** without a contract
+   change — it is a parameter of `/api/query/analyze`, and history is written
+   by `/api/query/generate`, which never sees it. Storing it means either
+   widening the generate request or writing history from the analyze path.
+   Neither was done silently. Rows written before this change carry nulls, and
+   the table renders those as `—` rather than inventing a value.
+
+9. ~~**`TestController` (`GET /test`)** is a debug endpoint…~~ **RESOLVED
+   2026-09-21.** It became load-bearing the moment the shell's health banner
+   started polling it, so it got the real response that note asked for.
+   `HealthController` now serves `GET /api/health` returning
+   `{status, schemaLabel, builtInSchema}` — a caller branches on a field rather
+   than parsing a string, and the probe says *which schema is answering*.
+   `GET /test` still returns its old string, because older probes and docs call
+   it; `TestController` itself is gone, folded into `HealthController`.
 
 ### Correctness defect: the rule engine resolves multi-word tables to the wrong table
 
@@ -919,9 +1046,13 @@ Mongo accuracy as its own figure; folding it into a blended number hides this.
    clean when the table has no columns, which is exactly the invented-table
    case, and it takes the table name as an argument rather than reading it
    from the SQL.
-3. **Still open.** Decide explicitly what MongoDB grounding should look like,
-   rather than leaving it as an inherited no-op. Schema upload does not help
-   here; see §5.5.
+3. ~~**Still open.** Decide explicitly what MongoDB grounding should look
+   like…~~ **DECIDED 2026-09-21: it stays a no-op, and the no-op is now
+   deliberate.** See "Not a gap: MongoDB is analysed, never connected" in §5.
+   There is no Mongo schema to ground a prompt with or to check output against,
+   and creating one is the four-feature build that decision rules out. The
+   consequence — Mongo generation is ungrounded and unguarded — is now stated
+   in §5 and on screen rather than left to be discovered.
 
 ### Schema upload — where the code lives
 
@@ -1067,21 +1198,33 @@ schema-conformance check before a result is returned or cached) and #3
 
 ### Frontend housekeeping
 
-- **Mock mode exists and fails toward mock.** `client.js` checks
-  `VITE_USE_MOCK !== 'false'`, so an unset or misspelled value silently runs the
-  whole app on `src/mock/fixtures.js`. `.env` ships with the literal `false`.
-  This is the single most misleading failure mode in the project: the app looks
-  healthy with the backend stopped.
-- **The comparison screen is always simulated**, mock mode or not. See §4.
-- **No backend health check.** Nothing calls `/test`; a dead backend shows up as
-  a per-request error, not a banner.
+- ~~**Mock mode exists and fails toward mock.**~~ **FIXED 2026-09-21.** It was
+  `VITE_USE_MOCK !== 'false'`, so an unset or misspelled value silently ran the
+  whole app on `src/mock/fixtures.js` — the app looked healthy with the backend
+  stopped. Mock mode is now opt-in: `resolveUseMock` returns true only for the
+  literal `true` or `1`, trimmed and case-insensitive. A typo now costs you the
+  fixtures, never the truth. Seven cases in `src/api/client.test.js`.
+- ~~**The comparison screen is always simulated.**~~ **FIXED 2026-09-21** — it
+  calls `POST /api/query/compare`. See §5 Missing endpoints.
+- ~~**No backend health check.**~~ **FIXED 2026-09-21.** `useBackendHealth`
+  polls `GET /test` every 20s and `BackendHealthBanner` renders one shell-wide
+  notice naming the base URL, saying the screens are empty rather than stale,
+  with a Retry. Mock mode gets its own amber banner, since that is not a
+  failure. The banner stays hidden before the first probe returns, so a healthy
+  load never flashes it.
 - **The Architecture screen was removed 2026-09-11.** It was a pipeline diagram
   for reviewers, not something an end user needs. Its nav item, the `/about`
-  route, `pages/AboutPage.jsx` and `components/architecture/` are gone; nothing
-  else referenced them. `/about` now matches no route and renders an empty
-  shell.
-- 3 oxlint warnings are outstanding (two react-refresh, one unused parameter in
-  the fixtures). No errors; `npm run build` is clean.
+  route, `pages/AboutPage.jsx` and `components/architecture/` are gone.
+  ~~`/about` now matches no route and renders an empty shell.~~ **FIXED
+  2026-09-21** — a `path="*"` route renders `NotFoundPage`, which names the
+  path asked for and says the screen it pointed at was removed.
+- ~~3 oxlint warnings are outstanding~~ **FIXED 2026-09-21. `npm run lint` is
+  now completely clean.** All three were `only-export-components` on the
+  context files, which exported both a provider component and a hook. Each
+  context is now split: `context/<name>.js` holds the context object and the
+  `use*` hook, `context/<Name>Context.jsx` holds only the provider component.
+  Consumers import the hook from the `.js`; only `App.jsx` imports the
+  providers. 16 import sites were repointed.
 
 ---
 
@@ -1132,12 +1275,12 @@ schema-conformance check before a result is returned or cached) and #3
   half-succeeding upload would leave the app pointing at tables that do not
   exist — the same shape of confusion as the `explainFailed: true` trap two
   bullets up.
-- **Numbers in the Optimization screen's lower half are invented.** The
-  rewrite preview has no endpoint and never did; it is simulated even in real
-  mode. The schema changes in the upper half of the same screen are real
-  `/api/query/schema-advisor` output — the divider and the amber badge are
-  the only thing separating them, so read which half a figure came from
-  before quoting it.
+- **The Optimization screen's two halves answer different questions**, and
+  since 2026-09-21 both are backed by real endpoints. The upper half changes
+  the *database* (`/api/query/schema-advisor`); the lower changes the *query*
+  (`/api/query/compare`). A row count in the lower half is an `EXPLAIN`
+  estimate over a query that does not exist in your history — so say which
+  half a figure came from before quoting it.
 - **An advisor recommendation is not always runnable.** When `EXPLAIN`
   reports a full scan but no filterable column, `SchemaAdvisorServiceImpl`
   falls back to a placeholder — `CREATE INDEX idx_orders_col ON
@@ -1939,6 +2082,142 @@ returns clean when that list is empty — an invented table passes it — and it
 takes the table name as an argument rather than reading it from the SQL. It is
 right for `/analyze`, where the table is known to exist, and useless here.
 
+### Session of 2026-09-21 — the instrumentation, and a real rewrite engine
+
+Phases 0–2 of a plan agreed in-session: make verification trustworthy, then
+confirm what was already built, then replace the one simulated screen. Backend
+**260 → 286 tests**, frontend **19 → 44**, both suites green, `npm run build`
+clean, 3 pre-existing oxlint warnings and no new ones.
+
+**Phase 0 — the instrumentation.** Mock mode fails toward the backend now
+(§5 Frontend housekeeping), and a shell-wide health banner reads `GET /test`.
+These came first deliberately: the next phase is judging screens by eye, and
+"the app looks healthy with the backend stopped" is the worst possible hazard
+to carry into that.
+
+**Phase 1 — the §8 reproduction, automated.** `OffSchemaCacheRoundTripTest`
+asks the same off-schema question **twice** through a real
+`GeneratedQueryValidator` and a genuinely stateful history store, and asserts
+the second answer does not come back as `CACHE` at 1.00. The existing
+`hallucinatedSqlIsFlaggedAndNotCached` mocked the validator and only called
+once, so the round trip — the actual failure shape §5 describes — had no guard.
+
+**These tests were proved to have teeth rather than assumed to.** They were
+written against code that already worked, so watching them fail was not
+possible the usual way; instead the guard was temporarily removed
+(`if (schemaWarning == null)` → `if (true)`) and both cases were confirmed to
+fail, then it was restored. A test that has never failed is a test that has
+never been shown to test anything.
+
+**One expectation was wrong, and the code was right.** The third case asserted
+one history row after asking a *grounded* question twice; there are two. That
+is correct — §2 and §3 both say history is a per-run log — so the test was
+corrected to pin the real contract (`["OLLAMA", "CACHE"]`) rather than the
+code being changed to match a guess.
+
+**Phase 2 — `QueryRewriter` and `POST /api/query/compare`.** §9.11 has the
+rules and §3 the endpoint. The shape follows `backend/CLAUDE.md` §8's Task C:
+analyse both versions, diff them, and say *which rule fired* — not two strings
+side by side. The honesty constraint from Paper #5 is carried in the response
+itself (`estimate: true`) and in the summary's wording, not just in a caption.
+
+**The frontend's simulation is deleted, not hidden.** `mockCompare` now returns
+the backend's shape; `mockSimulateOptimizedQuery` and `REWRITE_RULES` are gone;
+the amber "Simulated — the Comparison Engine has no backend endpoint yet" badge
+is gone; `ENDPOINT_STATUS.comparison` is `REAL`. The Optimization page's
+descriptions no longer say the rewrite engine does not exist.
+
+**A guard found by reading the seed scripts, not by a test failing.**
+`KnownSchema.CUSTOMERS` declares `(id, name, email, city, phone)`, but
+`src/main/resources/mysql/schema.sql` creates `customers (id, name, city,
+email)` — **there is no `phone` column**, and `orders` disagrees on its key
+name and columns too. RW1 materialises the *declared* column list into real
+SQL, which turns that long-standing, harmless drift into `Unknown column
+'phone' in 'field list'` the moment anyone clicks Compare against the built-in
+demo schema on a seeded database.
+
+So the comparison service now **withdraws a rewrite whose EXPLAIN failed**
+rather than presenting it: `rewritten: false`, no deltas, and a summary saying
+it could not be checked and that the schema and the live tables likely
+disagree. That guard is right regardless of this particular drift — any rule,
+present or future, that emits SQL the database rejects is caught by it.
+
+**The drift itself is untouched and still open**, because it is older and
+wider than this work: `KnownSchema` is the built-in demo schema's static
+description and the seed scripts are what actually exists. Uploaded schemas
+are unaffected — they are parsed from the DDL that provisioned the tables, so
+their column lists match by construction. See §5.
+
+**Deliberately not built:** an "add a LIMIT" rule. The deleted simulation had
+one, and it changes the rows returned — which makes it a different query, not
+a faster one. Every rule that survived preserves the result set.
+
+### Session of 2026-09-21 — phase 4: the plan tree, run context, and a clean lint
+
+Same session as the entry above, continued. Backend **287 → 308 tests**,
+frontend **44 → 59**, both green, build clean, and **`npm run lint` is now at
+zero warnings** for the first time.
+
+**The plan tree reuses a probe that was already running.** `EXPLAIN`'s tabular
+output is a flat list, so nesting needs `FORMAT=JSON` — but flipping
+`querysense.explain.format` would put an unexercised reader in front of every
+analysis, which CLAUDE.md §18 rejected for good reason. The cost probe already
+fetches that JSON and threw everything but one number away; it now returns the
+tree as well. One round trip, tabular still authoritative, and
+`PlanTreeWiringTest` asserts the single `queryForObject` call so a later edit
+cannot quietly make it two.
+
+**History run context stops short of `resourceLevel`, deliberately.**
+`confidence`, `durationMs` and `schemaLabel` are all available where history is
+written. `resourceLevel` is not — it belongs to `/api/query/analyze` and
+history is written by `/api/query/generate`. Storing it needs a contract change,
+so it is named as still-missing rather than faked from a default.
+
+**A mutation test that silently proved nothing, caught and redone.** The
+plan-tree wiring tests passed on first run, so the guard was removed to check
+they had teeth — and they still passed. The `perl` delete had matched nothing:
+the file has CRLF endings and the pattern ended in a bare `
+`. Worse, the
+"restore" then appended a duplicate line. Deleting by line number instead
+produced the expected 2 failures, and the duplicate was removed. **A mutation
+test that does not fail is not evidence; it is a second thing to verify.**
+
+**Lint reached zero by splitting each context in two.** The warning was
+`only-export-components` — a file exporting both a provider component and a
+hook. `context/<name>.js` now holds the context object and the `use*` hook;
+`context/<Name>Context.jsx` holds only the provider. 16 import sites moved.
+
+### Session of 2026-09-21 — phase 3: MongoDB becomes a decision
+
+Backend **308 → 315 tests**, frontend **59 → 64**, all green.
+
+**MongoDB is now a named non-goal**, written up in §5 beside the DDL-execution
+one and in the same shape: the reasoning, what it forbids so later work does
+not quietly reintroduce it, and the consequences stated rather than left to be
+discovered. The argument is proportionality about scope — supporting Mongo
+properly is four features, each about the size of the rewrite engine, and
+half-doing it produces a system that looks like it supports two databases while
+being measurably worse at one. That is the one thing this project's central
+claim cannot survive.
+
+**The one real defect on that path is fixed.** `MongoSimpleAnalyzer` was called
+with `collectionName = null`, so every Mongo schema recommendation was about a
+collection it could not name. The collection is right there in
+`db.<name>.find(...)`, so the analyzer now reads it out of the query text; an
+explicitly supplied name still wins, and text that names no collection leaves
+it null rather than guessing. Seven cases in `MongoCollectionNameTest`.
+
+**The Analysis screen now says what it did not do.** `MongoFindingsList`
+carries a permanent scope note — the query was never run, MongoDB is never
+connected, and "no findings" means two text checks found nothing rather than
+that the query is fast. It shows on the clean state *and* alongside findings,
+because the clean state is the one most likely to be misread. Its own test
+asserts the note survives in both.
+
+**Scoping out is not the same as leaving it broken.** The decision removed four
+would-be features and kept two bug fixes and one honesty fix. That split is the
+point: a non-goal bounds what gets built, not what gets to be wrong.
+
 ### Not verified
 
 - ~~**No screen of the current frontend has been exercised against the live
@@ -1959,12 +2238,44 @@ right for `/analyze`, where the table is known to exist, and useless here.
   a backend on real MySQL, since H2 cannot produce `EXPLAIN` output.
 - The `OLLAMA` rename fix is exactly what an end-to-end fallback run would
   confirm, and is the first thing to check.
-- **Nothing from the 2026-09-21 session has met a live backend.** The schema
-  conformance guard, the `IN` filter list, the two new decline paths and the
-  advisor's composite index are covered by unit tests and nothing else. The
-  fastest live check is the §8 reproduction: ask the same off-schema question
-  twice against an upload and confirm the second call no longer comes back as
-  `CACHE` at 1.00. `SchemaWarning` has never been rendered in a browser.
+- **Nothing from either 2026-09-21 session has met a live backend.** The schema
+  conformance guard, the `IN` filter list, the two new decline paths, the
+  advisor's composite index, and now `QueryRewriter`, `POST /api/query/compare`,
+  the health banner and the mock-mode flip are covered by unit tests and a clean
+  build — nothing more. `SchemaWarning` has never been rendered in a browser and
+  neither has `BackendHealthBanner` or the rewritten Optimization page.
+
+  The §8 reproduction is **no longer the fastest live check**, because it is now
+  an automated test (`OffSchemaCacheRoundTripTest`). What live running is still
+  owed is the part no unit test can reach: that `EXPLAIN` over a *rewritten*
+  query returns a usable plan, that the row and cost deltas are not degenerate
+  on real data, and that the JSON probe on a real MySQL produces a plan tree
+  whose shape matches the fixtures in `MySqlPlanTreeTest` — those were written
+  from the documented `FORMAT=JSON` structure, not captured from this database.
+  Checklist:
+  1. Backend on real MySQL, frontend on `npm run dev`. Confirm **no** banner —
+     that alone proves the probe and the mock-mode flip.
+  2. Stop the backend. Confirm the red banner names the base URL; restart, hit
+     Retry, confirm it clears.
+  3. Workbench → Analysis → Optimization → **Compare rewrite** on a query with
+     `SELECT *` and an `OR` chain on one column, against an uploaded schema.
+     Confirm the diff, a per-rule reason for every changed line, and a row
+     delta that is not null.
+  4. Repeat with a query no rule touches — expect "No rewrite applied", not an
+     error.
+  5. Repeat with MongoDB selected — expect the "SQL only, for now" empty state
+     and, in the network tab, **no** call to `/api/query/analyze` behind it.
+  6. On the Analysis screen, confirm the **Plan tree** section renders nested
+     nodes for a join, and that a sort is attributed to the operation rather
+     than to the tables under it. If it shows the "no plan tree" note instead,
+     the JSON probe failed — the per-table plan above it will still be right.
+  7. On History, confirm the three new columns are populated for fresh runs and
+     show `—` for rows written before today.
+  8. Visit `/about` — expect the Not-found page naming the path, not a blank
+     shell.
+  9. Run a MongoDB question end to end (needs Ollama). Confirm the Analysis
+     screen's scope note appears, and that any schema recommendation now names
+     its collection rather than saying `null`.
 
 ### Behavioural shift worth watching
 
@@ -1988,7 +2299,7 @@ rest of this document. Five were built; the sixth, query cost, was built on
 | # | Requirement | Status |
 |---|---|---|
 | 1 | Upload schema **and simulate the rules on it** | **Built** — seeding defect fixed 2026-09-10, see §7 |
-| 2 | Show code for optimization on the interface | **Built** — for schema DDL; the query rewrite is still simulated |
+| 2 | Show code for optimization on the interface | **Built** — schema DDL, and since 2026-09-21 the query rewrite too (§9.11) |
 | 3 | Calculate query **cost** in the EXPLAIN | **Built 2026-09-10** — `query_cost` via a separate JSON probe, labelled unitless |
 | 4 | Rule-based system customised to schema | **Built** |
 | 5 | LLM fallback | **Built** |
@@ -2019,11 +2330,12 @@ Added 2026-09-10; see the §7 session entry. The Optimization screen's upper
 half renders the advisor's recommendations with the DDL in a copyable block,
 and `buildApplyScript` aggregates them into one pasteable script.
 
-**The distinction to keep straight when demoing:** *schema-change* code is
-real and comes from the backend. *Query-rewrite* code — the before/after diff
-in the lower half — is generated by a regex in the browser, because the
-Comparison Engine does not exist (§5). If review meant "show us the optimised
-**query**", that is the simulated half and is not built.
+**The distinction to keep straight when demoing:** *schema-change* code
+changes the database and leaves the query alone; *query-rewrite* code changes
+the query and leaves the database alone. Both come from the backend as of
+2026-09-21 — if review meant "show us the optimised **query**", that is the
+lower half, and it is now `QueryRewriter` output rather than a browser regex
+(§9.11).
 
 Per §5's "Not a gap", the interface shows this code and never runs it.
 
@@ -2389,3 +2701,42 @@ accounts are kept because the shape recurs.
   word opening the question, optionally after `please`; the same word standing
   anywhere else declines, because neither reading is safe to assume. The engine
   never runs generated SQL, so this was wrong rather than dangerous.
+
+### 9.11 Query rewrite — 3 rules (`QueryRewriter`)
+
+Added 2026-09-21, behind `POST /api/query/compare`. **Every rule preserves the
+rows the query returns.** That is the design constraint, not a coincidence: a
+rewrite that returns different rows is a different query, so a rule that cannot
+guarantee identical rows declines instead of firing. This is why there is no
+"add a LIMIT" rule, which the deleted browser simulation had — capping an
+unbounded result set changes the answer.
+
+All three are MySQL-only and SELECT-only; a write statement, an unparseable
+string or a MongoDB query comes back untouched.
+
+| Rule | Fires when | Rewrites to | Why it is safe |
+|---|---|---|---|
+| **RW1** | `SELECT *`, single table, no join, table in the active schema | the schema's column list | Same columns, named explicitly — lets a covering index answer without reading the row |
+| **RW2** | `WHERE` is an `OR` chain of equality tests on **one** column | `col IN (…)` | Identical predicate; MySQL can range-scan an index for `IN` where an `OR` chain often falls back to a scan |
+| **RW3** | `ORDER BY` on a bare aggregate (`COUNT`/`SUM`/`AVG`/`MIN`/`MAX`), no `GROUP BY`, no `LIMIT` | the same query without `ORDER BY` | The query returns one row, so the sort could not change the result — it only cost a filesort |
+
+**Where each one declines, and why it matters:**
+
+- **RW1** declines on a join, because `*` spans more than one table there and
+  the expansion would have to guess at ordering and duplicate column names. It
+  also declines when the table is not in the active schema — the case that
+  would otherwise invent columns.
+- **RW2** declines when the `OR` spans two different columns (not the same
+  predicate), and on a single equality (a one-element `IN` is noise, not an
+  optimisation). It walks the `OR` tree and bails on **anything** that is not
+  `column = constant`, so an `AND` nested inside, or a column-to-column
+  comparison, stops it rather than being silently dropped.
+- **RW3** keeps `ORDER BY` when a `GROUP BY` is present, where it orders the
+  groups and is load-bearing, and on any non-aggregate query, where it is the
+  point of the query.
+
+⚠️ **`IN` lists need `ParenthesedExpressionList`, not `ExpressionList`.**
+JSQLParser 5.3's plain `ExpressionList` renders without parentheses, so the
+emitted SQL was `WHERE city IN 'mumbai', 'pune'` — not merely ugly but
+**invalid**. Two of the 14 `QueryRewriterTest` cases assert the parentheses for
+exactly this reason; nothing about the object graph reveals the problem.
