@@ -2,6 +2,7 @@ package com.querysense.backend.analysis;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.querysense.backend.dto.PlanNode;
 import com.querysense.backend.dto.TableAnalysis;
 import org.springframework.stereotype.Component;
 
@@ -65,6 +66,104 @@ public class MySqlJsonExplainParser {
         }
         try {
             return Double.valueOf(cost.asText().trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    /** The nesting the tabular reader cannot express: wrapper operations above the tables they drive. */
+    public PlanNode parsePlanTree(String json) {
+        if (json == null || json.isBlank()) {
+            return null;
+        }
+
+        JsonNode root;
+        try {
+            root = objectMapper.readTree(json);
+        } catch (Exception e) {
+            return null;
+        }
+
+        JsonNode queryBlock = root.path(QUERY_BLOCK_FIELD);
+        if (queryBlock.isMissingNode() || !queryBlock.isObject()) {
+            return null;
+        }
+        return toPlanNode(QUERY_BLOCK_FIELD, queryBlock);
+    }
+
+    private PlanNode toPlanNode(String kind, JsonNode node) {
+        List<PlanNode> children = new ArrayList<>();
+        collectChildren(node, children);
+
+        boolean isTable = TABLE_FIELD.equals(kind);
+        JsonNode rows = node.hasNonNull("rows_examined_per_scan")
+                ? node.get("rows_examined_per_scan")
+                : node.get("rows");
+
+        return new PlanNode(
+                kind,
+                isTable ? text(node, "table_name") : kind.replace('_', ' '),
+                isTable ? text(node, "access_type") : null,
+                isTable ? text(node, "key") : null,
+                rows != null && rows.isNumber() ? rows.asLong() : null,
+                costOf(node),
+                node.path(FILESORT_FIELD).asBoolean(false),
+                node.path(TEMP_TABLE_FIELD).asBoolean(false),
+                List.copyOf(children));
+    }
+
+    /** Child plan nodes only — scalar fields and cost blocks are this node's own detail. */
+    private void collectChildren(JsonNode node, List<PlanNode> out) {
+        Iterator<Map.Entry<String, JsonNode>> fields = node.fields();
+        while (fields.hasNext()) {
+            Map.Entry<String, JsonNode> field = fields.next();
+            String key = field.getKey();
+            JsonNode value = field.getValue();
+
+            if (COST_INFO_FIELD.equals(key)) {
+                continue;
+            }
+            if (value.isObject()) {
+                out.add(toPlanNode(key, value));
+            } else if (value.isArray()) {
+                List<PlanNode> nested = new ArrayList<>();
+                for (JsonNode element : value) {
+                    if (element.isObject()) {
+                        collectChildren(element, nested);
+                    }
+                }
+                if (!nested.isEmpty()) {
+                    out.add(new PlanNode(key, key.replace('_', ' '), null, null, null, null,
+                            false, false, List.copyOf(nested)));
+                }
+            }
+        }
+    }
+
+    /** query_cost for a block, prefix_cost for a table — both arrive as JSON strings. */
+    private Double costOf(JsonNode node) {
+        JsonNode costInfo = node.path(COST_INFO_FIELD);
+        if (!costInfo.isObject()) {
+            return null;
+        }
+        for (String field : List.of(QUERY_COST_FIELD, "prefix_cost")) {
+            Double value = asDouble(costInfo.path(field));
+            if (value != null) {
+                return value;
+            }
+        }
+        return null;
+    }
+
+    private Double asDouble(JsonNode node) {
+        if (node.isMissingNode() || node.isNull()) {
+            return null;
+        }
+        if (node.isNumber()) {
+            return node.asDouble();
+        }
+        try {
+            return Double.valueOf(node.asText().trim());
         } catch (NumberFormatException e) {
             return null;
         }

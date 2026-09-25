@@ -32,6 +32,8 @@ public class QueryAnalysisResult {
 
     private boolean explainFailed;
 
+    private PlanNode planTree;
+
     private Double queryCost;
 
     private AnalysisVerdict verdict;
@@ -123,6 +125,9 @@ public class QueryAnalysisResult {
     public List<String> getWarnings() { return warnings; }
     public void setWarnings(List<String> warnings) { this.warnings = warnings; }
     public void addWarning(String warning) { this.warnings.add(warning); }
+
+    public PlanNode getPlanTree() { return planTree; }
+    public void setPlanTree(PlanNode planTree) { this.planTree = planTree; }
 
     public boolean isExplainFailed() { return explainFailed; }
     public void setExplainFailed(boolean explainFailed) { this.explainFailed = explainFailed; }

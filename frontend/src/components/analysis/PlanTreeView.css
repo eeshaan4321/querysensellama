@@ -1,0 +1,74 @@
+.plan-tree,
+.plan-tree__children {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.plan-tree__children {
+  margin-left: var(--space-4);
+  padding-left: var(--space-4);
+  border-left: 1px solid var(--border);
+}
+
+.plan-tree__node {
+  padding: var(--space-1) 0;
+}
+
+.plan-tree__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+}
+
+.plan-tree__label {
+  color: var(--ink-secondary);
+}
+
+.plan-tree__node--table > .plan-tree__row .plan-tree__label {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--ink);
+}
+
+.plan-tree__chip {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  color: var(--ink-secondary);
+}
+
+.plan-tree__chip--key {
+  color: var(--rule-tint);
+  border-color: color-mix(in srgb, var(--rule) 35%, transparent);
+  background: var(--rule-wash);
+}
+
+.plan-tree__chip--warn {
+  color: var(--llm-tint);
+  border-color: color-mix(in srgb, var(--llm) 35%, transparent);
+  background: var(--llm-wash);
+}
+
+.plan-tree__rows,
+.plan-tree__cost {
+  font-size: var(--text-xs);
+  color: var(--ink-muted);
+}
+
+.plan-tree__empty {
+  font-size: var(--text-sm);
+  color: var(--ink-muted);
+  line-height: var(--leading-relaxed);
+  margin: 0;
+}
+
+.plan-tree__empty code {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}

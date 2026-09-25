@@ -5,6 +5,7 @@ import { EmptyState } from '../components/common/EmptyState';
 import { CodeBlock } from '../components/common/CodeBlock';
 import { Button } from '../components/common/Button';
 import { ExplainPlanView } from '../components/analysis/ExplainPlanView';
+import { PlanTreeView } from '../components/analysis/PlanTreeView';
 import { VerdictBanner } from '../components/analysis/VerdictBanner';
 import { RuleTracePanel } from '../components/analysis/RuleTracePanel';
 import { MongoFindingsList } from '../components/analysis/MongoFindingsList';
@@ -83,7 +84,20 @@ export function AnalysisPage() {
           {(build.targetDb || targetDb) === TargetDb.MONGODB ? (
             <MongoFindingsList analysis={analysis} />
           ) : (
-            <ExplainPlanView plan={analysis} />
+            <>
+              <ExplainPlanView plan={analysis} />
+
+              <section>
+                <h3 style={{ fontSize: 'var(--text-sm)', color: 'var(--ink-secondary)', marginBottom: 'var(--space-2)' }}>
+                  Plan tree
+                </h3>
+                <p className="page-note" style={{ marginBottom: 'var(--space-3)' }}>
+                  The same plan as above, in the shape MySQL actually executes it: operations wrap
+                  the tables they drive, and a sort is attributed to the step that performs it.
+                </p>
+                <PlanTreeView tree={analysis.planTree} />
+              </section>
+            </>
           )}
 
           <section>

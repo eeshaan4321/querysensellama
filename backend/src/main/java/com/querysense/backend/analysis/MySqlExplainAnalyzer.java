@@ -1,6 +1,7 @@
 package com.querysense.backend.analysis;
 
 import com.querysense.backend.dto.QueryAnalysisResult;
+import com.querysense.backend.dto.PlanNode;
 import com.querysense.backend.dto.TableAnalysis;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -105,6 +106,7 @@ public class MySqlExplainAnalyzer {
             PlanRead plan = readPlan(query);
             result.setTables(plan.tables());
             result.setQueryCost(plan.queryCost());
+            result.setPlanTree(plan.planTree());
             summarise(result, plan.tables(), tableName);
         } catch (BadSqlGrammarException e) {
             log.warn("EXPLAIN rejected the query on table '{}': {}", tableName, e.getMessage(), e);
@@ -136,7 +138,7 @@ public class MySqlExplainAnalyzer {
         return explainExecutor.withActiveCatalog(jdbc -> readPlanWith(jdbc, query));
     }
 
-    private record PlanRead(List<TableAnalysis> tables, Double queryCost) {}
+    private record PlanRead(List<TableAnalysis> tables, Double queryCost, PlanNode planTree) {}
 
     private PlanRead readPlanWith(JdbcTemplate jdbc, String query) {
         if (explainFormat == ExplainFormat.JSON) {
@@ -144,7 +146,8 @@ public class MySqlExplainAnalyzer {
                 String json = jdbc.queryForObject("EXPLAIN FORMAT=JSON " + query, String.class);
                 List<TableAnalysis> tables = jsonExplainParser.parse(json);
                 if (!tables.isEmpty()) {
-                    return new PlanRead(tables, jsonExplainParser.parseQueryCost(json));
+                    return new PlanRead(tables, jsonExplainParser.parseQueryCost(json),
+                            jsonExplainParser.parsePlanTree(json));
                 }
                 log.warn("EXPLAIN FORMAT=JSON returned no table nodes — falling back to tabular EXPLAIN.");
             } catch (BadSqlGrammarException e) {
@@ -154,17 +157,25 @@ public class MySqlExplainAnalyzer {
             }
         }
         List<TableAnalysis> tables = jdbc.query("EXPLAIN FORMAT=TRADITIONAL " + query, EXPLAIN_ROW_MAPPER);
-        return new PlanRead(tables, readQueryCost(jdbc, query));
+        JsonProbe probe = readJsonProbe(jdbc, query);
+        return new PlanRead(tables, probe.queryCost(), probe.planTree());
     }
 
-    private Double readQueryCost(JdbcTemplate jdbc, String query) {
+    private record JsonProbe(Double queryCost, PlanNode planTree) {}
+
+    /**
+     * One side probe serves both the cost figure and the plan tree; the tabular read above
+     * stays the authority on the plan itself.
+     */
+    private JsonProbe readJsonProbe(JdbcTemplate jdbc, String query) {
         try {
             String json = jdbc.queryForObject("EXPLAIN FORMAT=JSON " + query, String.class);
-            return jsonExplainParser.parseQueryCost(json);
+            return new JsonProbe(jsonExplainParser.parseQueryCost(json),
+                    jsonExplainParser.parsePlanTree(json));
         } catch (RuntimeException e) {
-            log.debug("Cost probe did not return a usable query_cost ({}) — omitting the cost figure.",
+            log.debug("JSON probe returned nothing usable ({}) — omitting the cost and the plan tree.",
                     e.toString());
-            return null;
+            return new JsonProbe(null, null);
         }
     }
 
