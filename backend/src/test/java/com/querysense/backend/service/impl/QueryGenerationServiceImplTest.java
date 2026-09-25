@@ -7,6 +7,8 @@ import com.querysense.backend.querybuilder.GeneratedQueryValidator;
 import com.querysense.backend.querybuilder.RuleBasedQueryBuilder;
 import com.querysense.backend.querybuilder.RuleBuildResult;
 import com.querysense.backend.repository.QueryHistoryRepository;
+import com.querysense.backend.schema.ActiveSchemaProvider;
+import com.querysense.backend.schema.KnownSchema;
 import com.querysense.backend.service.LlmFallbackService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -45,7 +47,10 @@ class QueryGenerationServiceImplTest {
                 .thenReturn(Optional.empty());
         when(history.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
-        service = new QueryGenerationServiceImpl(rules, history, llm, validator);
+        ActiveSchemaProvider activeSchema = mock(ActiveSchemaProvider.class);
+        when(activeSchema.active()).thenReturn(KnownSchema.builtIn());
+
+        service = new QueryGenerationServiceImpl(rules, history, llm, validator, activeSchema);
     }
 
     @Test

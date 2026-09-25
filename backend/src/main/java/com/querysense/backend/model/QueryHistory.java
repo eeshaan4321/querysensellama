@@ -30,5 +30,11 @@ public class QueryHistory {
 
     private String source;
 
+    private Double confidence;
+
+    private Long durationMs;
+
+    private String schemaLabel;
+
     private LocalDateTime createdAt;
 }

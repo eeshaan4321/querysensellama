@@ -7,6 +7,7 @@ import com.querysense.backend.querybuilder.GeneratedQueryValidator;
 import com.querysense.backend.querybuilder.RuleBasedQueryBuilder;
 import com.querysense.backend.querybuilder.RuleBuildResult;
 import com.querysense.backend.repository.QueryHistoryRepository;
+import com.querysense.backend.schema.ActiveSchemaProvider;
 import com.querysense.backend.service.LlmFallbackService;
 import com.querysense.backend.service.QueryGenerationService;
 import org.springframework.stereotype.Service;
@@ -22,6 +23,7 @@ public class QueryGenerationServiceImpl implements QueryGenerationService {
     private final QueryHistoryRepository queryHistoryRepository;
     private final LlmFallbackService llmFallbackService;
     private final GeneratedQueryValidator generatedQueryValidator;
+    private final ActiveSchemaProvider activeSchema;
 
     private static final String SOURCE_RULE_ENGINE = "RULE_ENGINE";
     private static final String SOURCE_CACHE = "CACHE";
@@ -37,16 +39,19 @@ public class QueryGenerationServiceImpl implements QueryGenerationService {
             RuleBasedQueryBuilder ruleBasedQueryBuilder,
             QueryHistoryRepository queryHistoryRepository,
             LlmFallbackService llmFallbackService,
-            GeneratedQueryValidator generatedQueryValidator) {
+            GeneratedQueryValidator generatedQueryValidator,
+            ActiveSchemaProvider activeSchema) {
         this.ruleBasedQueryBuilder = ruleBasedQueryBuilder;
         this.queryHistoryRepository = queryHistoryRepository;
         this.llmFallbackService = llmFallbackService;
         this.generatedQueryValidator = generatedQueryValidator;
+        this.activeSchema = activeSchema;
     }
 
     @Override
     public QueryResponse generateQuery(String input, String databaseType) {
 
+        long startedAt = System.nanoTime();
         String generatedSql;
         String source;
         double confidence;
@@ -87,20 +92,25 @@ public class QueryGenerationServiceImpl implements QueryGenerationService {
             }
         }
 
+        long durationMs = (System.nanoTime() - startedAt) / 1_000_000;
+
         if (schemaWarning == null) {
-            saveToHistory(input, generatedSql, databaseType, source);
+            saveToHistory(input, generatedSql, databaseType, source, confidence, durationMs);
         }
 
         return new QueryResponse(generatedSql, databaseType, source, confidence, trace, schemaWarning);
     }
 
-    private void saveToHistory(String input, String generatedSql,
-                               String databaseType, String source) {
+    private void saveToHistory(String input, String generatedSql, String databaseType,
+                               String source, double confidence, long durationMs) {
         QueryHistory history = new QueryHistory();
         history.setUserInput(input);
         history.setGeneratedQuery(generatedSql);
         history.setDatabaseType(databaseType);
         history.setSource(source);
+        history.setConfidence(confidence);
+        history.setDurationMs(durationMs);
+        history.setSchemaLabel(activeSchema.active().label());
         history.setCreatedAt(LocalDateTime.now());
 
         queryHistoryRepository.save(history);
