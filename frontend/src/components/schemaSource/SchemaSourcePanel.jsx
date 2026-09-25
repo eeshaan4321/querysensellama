@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { Button } from '../common/Button';
 import { uploadSchemaFile, uploadSchemaText } from '../../api';
-import { useActiveSchema } from '../../context/ActiveSchemaContext';
+import { useActiveSchema } from '../../context/activeSchema.js';
 import './SchemaSourcePanel.css';
 
 const PLACEHOLDER = `CREATE TABLE clients (

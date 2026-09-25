@@ -1,6 +1,6 @@
-import { createContext, useContext, useState, useCallback } from 'react';
+import { useState, useCallback } from 'react';
+import { EngineStatusContext } from './engineStatus.js';
 
-const EngineStatusContext = createContext(null);
 
 export function EngineStatusProvider({ children }) {
   const [status, setStatus] = useState(null);
@@ -14,10 +14,4 @@ export function EngineStatusProvider({ children }) {
       {children}
     </EngineStatusContext.Provider>
   );
-}
-
-export function useEngineStatus() {
-  const ctx = useContext(EngineStatusContext);
-  if (!ctx) throw new Error('useEngineStatus must be used within EngineStatusProvider');
-  return ctx;
 }

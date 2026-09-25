@@ -4,8 +4,8 @@ import { QueryForm } from '../components/workbench/QueryForm';
 import { QueryResultPanel } from '../components/workbench/QueryResultPanel';
 import { EmptyState } from '../components/common/EmptyState';
 import { buildQuery, postHistory } from '../api';
-import { useEngineStatus } from '../context/EngineStatusContext';
-import { useWorkbench } from '../context/WorkbenchContext';
+import { useEngineStatus } from '../context/engineStatus.js';
+import { useWorkbench } from '../context/workbench.js';
 
 export function WorkbenchPage() {
   const {

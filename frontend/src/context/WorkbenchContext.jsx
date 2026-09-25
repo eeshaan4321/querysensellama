@@ -1,7 +1,6 @@
-import { createContext, useContext, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ResourceLevel, TargetDb } from '../api/contracts';
-
-const WorkbenchContext = createContext(null);
+import { WorkbenchContext } from './workbench.js';
 
 export function WorkbenchProvider({ children }) {
   const [resourceLevel, setResourceLevel] = useState(ResourceLevel.MEDIUM);
@@ -28,10 +27,4 @@ export function WorkbenchProvider({ children }) {
   );
 
   return <WorkbenchContext.Provider value={value}>{children}</WorkbenchContext.Provider>;
-}
-
-export function useWorkbench() {
-  const ctx = useContext(WorkbenchContext);
-  if (!ctx) throw new Error('useWorkbench must be used within WorkbenchProvider');
-  return ctx;
 }

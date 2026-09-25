@@ -1,7 +1,7 @@
 import { PageHeader } from '../components/common/PageHeader';
 import { SchemaSourcePanel } from '../components/schemaSource/SchemaSourcePanel';
 import { SchemaTablePreview } from '../components/schemaSource/SchemaTablePreview';
-import { useActiveSchema } from '../context/ActiveSchemaContext';
+import { useActiveSchema } from '../context/activeSchema.js';
 
 export function SchemaSourcePage() {
   const { schema, loading, error } = useActiveSchema();

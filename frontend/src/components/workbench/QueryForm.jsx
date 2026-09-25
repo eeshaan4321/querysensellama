@@ -3,7 +3,7 @@ import { Button } from '../common/Button';
 import { ResourceLevel, TargetDb } from '../../api/contracts';
 import { RESOURCE_LEVEL_INFO } from '../../lib/resourceLevels';
 import './QueryForm.css';
-import { useActiveSchema } from '../../context/ActiveSchemaContext';
+import { useActiveSchema } from '../../context/activeSchema.js';
 
 const RESOURCE_OPTIONS = [
   { value: ResourceLevel.LOW, label: 'Low' },

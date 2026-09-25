@@ -1,7 +1,7 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { getActiveSchema, resetSchema } from '../api';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
-const ActiveSchemaContext = createContext(null);
+import { getActiveSchema, resetSchema } from '../api';
+import { ActiveSchemaContext } from './activeSchema.js';
 
 export function ActiveSchemaProvider({ children }) {
   const [schema, setSchema] = useState(null);
@@ -53,10 +53,4 @@ export function ActiveSchemaProvider({ children }) {
   );
 
   return <ActiveSchemaContext.Provider value={value}>{children}</ActiveSchemaContext.Provider>;
-}
-
-export function useActiveSchema() {
-  const ctx = useContext(ActiveSchemaContext);
-  if (!ctx) throw new Error('useActiveSchema must be used within ActiveSchemaProvider');
-  return ctx;
 }

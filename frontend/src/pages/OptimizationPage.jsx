@@ -11,8 +11,8 @@ import { RecommendationList } from '../components/schema/RecommendationList';
 import { adviseSchema, compareQueries } from '../api';
 import { TargetDb } from '../api/contracts';
 import { mockSimulateOptimizedQuery } from '../mock/fixtures';
-import { useWorkbench } from '../context/WorkbenchContext';
-import { useActiveSchema } from '../context/ActiveSchemaContext';
+import { useWorkbench } from '../context/workbench.js';
+import { useActiveSchema } from '../context/activeSchema.js';
 
 export function OptimizationPage() {
   const { build, analysis, targetDb, resourceLevel, schemaAdvice, setSchemaAdvice } = useWorkbench();

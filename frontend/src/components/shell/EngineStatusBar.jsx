@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { useEngineStatus } from '../../context/EngineStatusContext';
-import { useActiveSchema } from '../../context/ActiveSchemaContext';
+import { useEngineStatus } from '../../context/engineStatus.js';
+import { useActiveSchema } from '../../context/activeSchema.js';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
 import { isLlmSource } from '../../api/contracts';
 import './EngineStatusBar.css';

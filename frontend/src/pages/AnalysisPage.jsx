@@ -11,7 +11,7 @@ import { MongoFindingsList } from '../components/analysis/MongoFindingsList';
 import { SuggestionsList } from '../components/analysis/SuggestionsList';
 import { analyzeQuery } from '../api';
 import { TargetDb } from '../api/contracts';
-import { useWorkbench } from '../context/WorkbenchContext';
+import { useWorkbench } from '../context/workbench.js';
 
 export function AnalysisPage() {
   const { build, targetDb, resourceLevel, analysis, suggestions, setAnalysis, setSuggestions } = useWorkbench();

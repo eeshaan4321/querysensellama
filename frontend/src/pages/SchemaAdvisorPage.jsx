@@ -5,8 +5,8 @@ import { EmptyState } from '../components/common/EmptyState';
 import { Button } from '../components/common/Button';
 import { RecommendationList } from '../components/schema/RecommendationList';
 import { adviseSchema } from '../api';
-import { useWorkbench } from '../context/WorkbenchContext';
-import { useActiveSchema } from '../context/ActiveSchemaContext';
+import { useWorkbench } from '../context/workbench.js';
+import { useActiveSchema } from '../context/activeSchema.js';
 
 export function SchemaAdvisorPage() {
   const { build, targetDb, resourceLevel, schemaAdvice, setSchemaAdvice } = useWorkbench();

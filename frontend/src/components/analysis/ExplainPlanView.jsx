@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion';
 import { PlanMetrics } from './PlanMetrics';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
-import { useActiveSchema } from '../../context/ActiveSchemaContext';
+import { useActiveSchema } from '../../context/activeSchema.js';
 import { accessTypeGloss, FIELD_GLOSS } from '../../lib/explainGlossary';
 import './ExplainPlanView.css';
 
