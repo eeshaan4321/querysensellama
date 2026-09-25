@@ -9,6 +9,7 @@ import { AnalysisPage } from './pages/AnalysisPage';
 import { OptimizationPage } from './pages/OptimizationPage';
 import { SchemaAdvisorPage } from './pages/SchemaAdvisorPage';
 import { HistoryPage } from './pages/HistoryPage';
+import { NotFoundPage } from './pages/NotFoundPage';
 
 function App() {
   return (
@@ -24,6 +25,7 @@ function App() {
                 <Route path="optimization" element={<OptimizationPage />} />
                 <Route path="schema" element={<SchemaAdvisorPage />} />
                 <Route path="history" element={<HistoryPage />} />
+                <Route path="*" element={<NotFoundPage />} />
               </Route>
             </Routes>
           </BrowserRouter>
