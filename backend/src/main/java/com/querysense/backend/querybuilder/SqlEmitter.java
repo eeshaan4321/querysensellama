@@ -1,5 +1,6 @@
 package com.querysense.backend.querybuilder;
 
+import com.querysense.backend.dialect.Dialect;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -7,8 +8,14 @@ import java.util.stream.Collectors;
 
 /** Writes SQL from a QueryIntent. */
 @Component
-public class SqlEmitter {
+public class SqlEmitter implements QueryEmitter {
 
+    @Override
+    public Dialect dialect() {
+        return Dialect.MYSQL;
+    }
+
+    @Override
     public String emit(QueryIntent intent) {
         StringBuilder sql = new StringBuilder();
 
