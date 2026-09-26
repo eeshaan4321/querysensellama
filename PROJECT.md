@@ -878,8 +878,9 @@ backend. Scope and deadline were put back to the user; no decision recorded yet.
    query alone; the rewriter changes the *query* and leaves the database alone.
    The amber "Simulated" badge is gone, along with `mockSimulateOptimizedQuery`.
 
-2. **`mysql/schema.sql` and `h2/schema.sql` are two tables behind the database
-   they are supposed to create.** Restated 2026-09-25 **against the live
+2. ~~**`mysql/schema.sql` and `h2/schema.sql` are two tables behind the database
+   they are supposed to create.**~~ **FIXED 2026-09-26** — see the last
+   paragraph of this item. Restated 2026-09-25 **against the live
    MySQL**, which reverses what this entry said from 2026-09-21 to that date.
    It read "`KnownSchema` and the seeded MySQL tables disagree about columns",
    naming `KnownSchema` as the wrong side because `mysql/schema.sql` creates
@@ -904,9 +905,21 @@ backend. Scope and deadline were put back to the user; no decision recorded yet.
    **Fix:** bring both scripts up to the nine tables the database has, with
    seed data, and keep them there with `KnownSchemaMatchesSeedScriptsTest` —
    which parses both with the upload path's own `DdlSchemaParser` and asserts
-   the tables, columns and foreign keys match `KnownSchema`. That test exists
-   and **currently fails**, naming the missing tables. It needs no database.
-   Nothing had ever compared the two sides, which is how the drift lasted.
+   the tables, columns and foreign keys match `KnownSchema`. It needs no
+   database. Nothing had ever compared the two sides, which is how the drift
+   lasted.
+
+   **Done 2026-09-26.** Both `schema.sql` files create all nine tables, in FK
+   order, column for column with `KnownSchema`; the old `orders.order_id` and
+   `orders.amount` are gone (the amount lives on `payments`). Both `data.sql`
+   files seed every table. MySQL generates 303 customers, 30 employees, 60
+   products, 900 orders, 1,800 order items and a payment per non-cancelled
+   order. H2 keeps its 25 hand-written customers and 40 orders, plus 80 order
+   items and 35 payments. `KnownSchemaMatchesSeedScriptsTest` is green. **The
+   H2 scripts were executed** through H2's `RunScript` with the profile's JDBC
+   URL; **the MySQL `data.sql` was not run**, since that would write to the
+   live database. Against an existing database, `CREATE TABLE IF NOT EXISTS`
+   and `INSERT IGNORE` leave current rows alone.
 
 3. **Limited consistency checking in the schema advisor.** Each rule still
    reads one `EXPLAIN` signal and cannot see what the others emitted. **Since
@@ -2414,8 +2427,8 @@ than the witness. One `SHOW TABLES` would have settled it before any code moved.
 
 **Left in place:** the failing `KnownSchemaMatchesSeedScriptsTest`, deliberately
 red, naming the tables the scripts do not create. §5 item 2 now states the
-direction correctly. Bringing the scripts up to nine tables is the fix and has
-not been done.
+direction correctly. Bringing the scripts up to nine tables is the fix, and
+it was done on 2026-09-26; the test is green.
 
 **Also this day: the MongoDB non-goal was reopened.** Asked whether the SQL
 structure could exist on the Mongo side, the answer is yes, and §5 now carries
