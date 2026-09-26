@@ -9,9 +9,11 @@ import org.bson.json.JsonWriterSettings;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /** Writes a QueryIntent as a mongosh find, countDocuments, deleteMany or aggregate. */
@@ -89,21 +91,42 @@ public class MongoEmitter implements QueryEmitter {
         }
         unwinds.forEach(array -> stages.add(new Document("$unwind", "$" + array)));
 
-        if (intent.hasAggregate() && !(bareCount && intent.having().isEmpty() && intent.orderBy().isEmpty())) {
+        if (bareCount && intent.having().isEmpty()) {
+            stages.add(new Document("$count", "count"));
+            return stages;
+        }
+
+        if (intent.hasAggregate()) {
             List<QueryIntent.ColumnRef> keys = groupKeys(intent);
             Document group = new Document("_id", groupId(intent, keys));
+            Set<String> selectedAliases = new LinkedHashSet<>();
             for (QueryIntent.SelectItem item : intent.selectItems()) {
                 if (item.operand() instanceof QueryIntent.Aggregate agg) {
-                    group.append(alias(intent, agg), accumulator(intent, agg));
+                    String a = alias(intent, agg);
+                    group.append(a, accumulator(intent, agg));
+                    selectedAliases.add(a);
+                }
+            }
+            Set<String> havingOnlyAliases = new LinkedHashSet<>();
+            for (QueryIntent.Predicate p : intent.having()) {
+                QueryIntent.Aggregate agg = (QueryIntent.Aggregate) p.lhs();
+                String a = alias(intent, agg);
+                if (!group.containsKey(a)) {
+                    group.append(a, accumulator(intent, agg));
+                }
+                if (!selectedAliases.contains(a)) {
+                    havingOnlyAliases.add(a);
                 }
             }
             stages.add(new Document("$group", group));
             if (!intent.having().isEmpty()) {
-                Document having = new Document();
-                for (QueryIntent.Predicate p : intent.having()) {
-                    having.append(alias(intent, (QueryIntent.Aggregate) p.lhs()), condition(p));
-                }
+                Document having = matchDocument(intent.having(), p -> alias(intent, (QueryIntent.Aggregate) p.lhs()));
                 stages.add(new Document("$match", having));
+                if (!havingOnlyAliases.isEmpty()) {
+                    Document project = new Document();
+                    havingOnlyAliases.forEach(a -> project.append(a, 0));
+                    stages.add(new Document("$project", project));
+                }
             }
             if (!intent.orderBy().isEmpty()) {
                 Document sort = new Document();
@@ -124,27 +147,50 @@ public class MongoEmitter implements QueryEmitter {
         if (intent.limit() != null) {
             stages.add(new Document("$limit", intent.limit()));
         }
-        if (bareCount) {
-            stages.add(new Document("$count", "count"));
-        } else {
-            Document projection = projection(intent);
-            if (!projection.isEmpty()) {
-                stages.add(new Document("$project", projection));
-            }
+        Document projection = projection(intent);
+        if (!projection.isEmpty()) {
+            stages.add(new Document("$project", projection));
         }
         return stages;
     }
 
     private Document filter(QueryIntent intent, List<QueryIntent.Predicate> predicates) {
+        for (QueryIntent.Predicate p : predicates) {
+            requireFilterable(intent, (QueryIntent.ColumnRef) p.lhs());
+        }
+        return matchDocument(predicates, p -> field(intent, (QueryIntent.ColumnRef) p.lhs()));
+    }
+
+    private void requireFilterable(QueryIntent intent, QueryIntent.ColumnRef ref) {
+        if (ref.table() != null && !ref.table().equals(intent.fromTable())) {
+            throw new UnexpressibleIntentException("A filter on " + ref.table() + "." + ref.column()
+                    + " needs the joined collection, which does not exist yet at $match time;"
+                    + " MongoDB cannot match on it before the $lookup that produces it.");
+        }
+        if (!intent.hasAggregate()) {
+            return;
+        }
+        String field = field(intent, ref);
+        for (String array : embeddedArrays(intent)) {
+            if (field.startsWith(array + ".")) {
+                throw new UnexpressibleIntentException("A filter on " + field
+                        + " targets an element inside the embedded array '" + array
+                        + "', which MongoDB cannot match per-element before the $unwind that separates them.");
+            }
+        }
+    }
+
+    private Document matchDocument(List<QueryIntent.Predicate> predicates,
+                                    Function<QueryIntent.Predicate, String> keyOf) {
         Document out = new Document();
         List<Document> repeated = new ArrayList<>();
         for (QueryIntent.Predicate p : predicates) {
-            String field = field(intent, (QueryIntent.ColumnRef) p.lhs());
+            String key = keyOf.apply(p);
             Object condition = condition(p);
-            if (out.containsKey(field)) {
-                repeated.add(new Document(field, condition));
+            if (out.containsKey(key)) {
+                repeated.add(new Document(key, condition));
             } else {
-                out.append(field, condition);
+                out.append(key, condition);
             }
         }
         if (repeated.isEmpty()) {
@@ -230,7 +276,14 @@ public class MongoEmitter implements QueryEmitter {
 
     private Document accumulator(QueryIntent intent, QueryIntent.Aggregate agg) {
         if (agg.fn() == QueryIntent.Fn.COUNT) {
-            return new Document("$sum", 1);
+            if (agg.column() == null || "_id".equals(agg.column().column())) {
+                return new Document("$sum", 1);
+            }
+            String field = field(intent, agg.column());
+            Document ifNull = new Document("$ifNull", Arrays.asList("$" + field, null));
+            Document eq = new Document("$eq", Arrays.asList(ifNull, null));
+            Document cond = new Document("$cond", Arrays.asList(eq, 0, 1));
+            return new Document("$sum", cond);
         }
         String operator = "$" + agg.fn().name().toLowerCase();
         return new Document(operator, "$" + field(intent, agg.column()));
@@ -252,10 +305,14 @@ public class MongoEmitter implements QueryEmitter {
         return base ? ref.column() : ref.table() + "." + ref.column();
     }
 
-    private List<String> embeddedArraysUsed(QueryIntent intent) {
-        List<String> arrays = activeSchema.findTable(Dialect.MONGODB, intent.fromTable())
+    private List<String> embeddedArrays(QueryIntent intent) {
+        return activeSchema.findTable(Dialect.MONGODB, intent.fromTable())
                 .map(KnownSchema.Table::embeddedArrays)
                 .orElse(List.of());
+    }
+
+    private List<String> embeddedArraysUsed(QueryIntent intent) {
+        List<String> arrays = embeddedArrays(intent);
         Set<String> used = new LinkedHashSet<>();
         for (QueryIntent.SelectItem item : intent.selectItems()) {
             QueryIntent.ColumnRef ref = switch (item.operand()) {

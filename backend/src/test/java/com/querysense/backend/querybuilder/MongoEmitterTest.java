@@ -211,4 +211,117 @@ class MongoEmitterTest {
         MongoQuery parsed = parser.parse(emitter.emit(intent));
         assertThat(parsed.filter().getString("name")).isEqualTo("O'Brien \"Jr\"");
     }
+
+    // --- Fix round 1 ---
+
+    @Test
+    @DisplayName("a HAVING aggregate absent from the select list is grouped anyway, then hidden from the result")
+    void havingOnlyAggregateIsGroupedThenProjectedAway() {
+        QueryIntent intent = new QueryIntent(QueryIntent.Verb.SELECT, "customers",
+                new JoinSpec("orders", col("customers", "_id"), col("orders", "customer_id")),
+                List.of(new SelectItem(col("city")), new SelectItem(new Aggregate(Fn.AVG, col("customer_id")))),
+                List.of(),
+                List.of(new Predicate(new Aggregate(Fn.COUNT, col("orders", "_id")), Op.GT,
+                        List.of(Literal.number(3)))),
+                List.of(), null);
+
+        assertThat(roundTrip(intent)).isEqualTo("db.customers.aggregate(["
+                + "{\"$lookup\": {\"from\": \"orders\", \"localField\": \"_id\", \"foreignField\": \"customer_id\", \"as\": \"orders\"}}, "
+                + "{\"$unwind\": \"$orders\"}, "
+                + "{\"$group\": {\"_id\": \"$city\", \"avg_customer_id\": {\"$avg\": \"$customer_id\"}, \"count_orders__id\": {\"$sum\": 1}}}, "
+                + "{\"$match\": {\"count_orders__id\": {\"$gt\": 3}}}, "
+                + "{\"$project\": {\"count_orders__id\": 0}}])");
+    }
+
+    @Test
+    @DisplayName("two HAVING conditions on the same aggregate are combined under $and")
+    void repeatedHavingAliasUsesAnd() {
+        QueryIntent intent = new QueryIntent(QueryIntent.Verb.SELECT, "orders", null,
+                List.of(new SelectItem(col("status")), new SelectItem(new Aggregate(Fn.COUNT, null))),
+                List.of(),
+                List.of(new Predicate(new Aggregate(Fn.COUNT, null), Op.GT, List.of(Literal.number(3))),
+                        new Predicate(new Aggregate(Fn.COUNT, null), Op.LT, List.of(Literal.number(10)))),
+                List.of(), null);
+
+        assertThat(roundTrip(intent)).isEqualTo("db.orders.aggregate(["
+                + "{\"$group\": {\"_id\": \"$status\", \"count\": {\"$sum\": 1}}}, "
+                + "{\"$match\": {\"$and\": [{\"count\": {\"$gt\": 3}}, {\"count\": {\"$lt\": 10}}]}}])");
+    }
+
+    @Test
+    @DisplayName("a bare COUNT(*) with a join drops LIMIT rather than capping the count")
+    void bareCountWithJoinIgnoresLimit() {
+        QueryIntent intent = new QueryIntent(QueryIntent.Verb.SELECT, "customers",
+                new JoinSpec("orders", col("customers", "_id"), col("orders", "customer_id")),
+                List.of(new SelectItem(new Aggregate(Fn.COUNT, null))),
+                List.of(), List.of(), List.of(), 5);
+
+        assertThat(roundTrip(intent)).isEqualTo("db.customers.aggregate(["
+                + "{\"$lookup\": {\"from\": \"orders\", \"localField\": \"_id\", \"foreignField\": \"customer_id\", \"as\": \"orders\"}}, "
+                + "{\"$unwind\": \"$orders\"}, "
+                + "{\"$count\": \"count\"}])");
+    }
+
+    @Test
+    @DisplayName("a bare COUNT(*) with a join and ORDER BY builds without throwing, and drops the sort")
+    void bareCountWithJoinIgnoresOrderBy() {
+        QueryIntent intent = new QueryIntent(QueryIntent.Verb.SELECT, "customers",
+                new JoinSpec("orders", col("customers", "_id"), col("orders", "customer_id")),
+                List.of(new SelectItem(new Aggregate(Fn.COUNT, null))),
+                List.of(), List.of(), List.of(new OrderItem(col("order_date"), Direction.ASC)), null);
+
+        assertThat(roundTrip(intent)).isEqualTo("db.customers.aggregate(["
+                + "{\"$lookup\": {\"from\": \"orders\", \"localField\": \"_id\", \"foreignField\": \"customer_id\", \"as\": \"orders\"}}, "
+                + "{\"$unwind\": \"$orders\"}, "
+                + "{\"$count\": \"count\"}])");
+    }
+
+    @Test
+    @DisplayName("a WHERE predicate on a joined table's column is refused; $match cannot see it before $lookup")
+    void whereOnJoinedTableColumnDeclines() {
+        QueryIntent intent = new QueryIntent(QueryIntent.Verb.SELECT, "customers",
+                new JoinSpec("orders", col("customers", "_id"), col("orders", "customer_id")),
+                List.of(new SelectItem(Star.INSTANCE)),
+                List.of(new Predicate(col("orders", "status"), Op.EQ, List.of(Literal.text("shipped", "SHIPPED")))),
+                List.of(), List.of(), null);
+
+        assertThatThrownBy(() -> emitter.emit(intent))
+                .isInstanceOf(UnexpressibleIntentException.class)
+                .hasMessageContaining("status");
+    }
+
+    @Test
+    @DisplayName("filtering on an embedded array's field while aggregating is refused, not silently mis-scoped")
+    void whereOnEmbeddedArrayFieldDuringAggregateDeclines() {
+        QueryIntent intent = select("orders",
+                List.of(new SelectItem(new Aggregate(Fn.SUM, col("items.quantity")))),
+                List.of(new Predicate(col("items.product_id"), Op.EQ, List.of(Literal.number(3)))),
+                List.of(), null);
+
+        assertThatThrownBy(() -> emitter.emit(intent))
+                .isInstanceOf(UnexpressibleIntentException.class)
+                .hasMessageContaining("items.product_id");
+    }
+
+    @Test
+    @DisplayName("a non-aggregating find may still filter on an embedded array's field")
+    void whereOnEmbeddedArrayFieldWithoutAggregateStillBuilds() {
+        QueryIntent intent = select("orders", List.of(new SelectItem(Star.INSTANCE)),
+                List.of(new Predicate(col("items.quantity"), Op.EQ, List.of(Literal.number(5)))),
+                List.of(), null);
+
+        assertThat(roundTrip(intent)).isEqualTo("db.orders.find({\"items.quantity\": 5})");
+    }
+
+    @Test
+    @DisplayName("COUNT(column) excludes nulls via $cond instead of counting them with $sum: 1")
+    void countColumnExcludesNullsViaCond() {
+        QueryIntent intent = select("customers",
+                List.of(new SelectItem(col("city")), new SelectItem(new Aggregate(Fn.COUNT, col("email")))),
+                List.of(), List.of(), null);
+
+        assertThat(roundTrip(intent)).isEqualTo("db.customers.aggregate(["
+                + "{\"$group\": {\"_id\": \"$city\", \"count_email\": "
+                + "{\"$sum\": {\"$cond\": [{\"$eq\": [{\"$ifNull\": [\"$email\", null]}, null]}, 0, 1]}}}}])");
+    }
 }
