@@ -41,19 +41,23 @@ public class MongoShellParser {
         List<Document> pipeline = null;
         switch (method) {
             case "find" -> {
+                checkMaxArgs(method, args, 2, head.start(2));
                 operation = MongoQuery.Operation.FIND;
                 filter = args.isEmpty() ? new Document() : document(args.get(0), head.end());
                 projection = args.size() > 1 ? document(args.get(1), head.end()) : null;
             }
             case "aggregate" -> {
+                checkMaxArgs(method, args, 1, head.start(2));
                 operation = MongoQuery.Operation.AGGREGATE;
                 pipeline = args.isEmpty() ? List.of() : stages(args.get(0), head.end());
             }
             case "countDocuments", "count" -> {
+                checkMaxArgs(method, args, 1, head.start(2));
                 operation = MongoQuery.Operation.COUNT;
                 filter = args.isEmpty() ? new Document() : document(args.get(0), head.end());
             }
             case "deleteMany" -> {
+                checkMaxArgs(method, args, 1, head.start(2));
                 operation = MongoQuery.Operation.DELETE;
                 filter = args.isEmpty() ? new Document() : document(args.get(0), head.end());
             }
@@ -75,6 +79,7 @@ public class MongoShellParser {
             }
             pos[0] = chained.end();
             List<String> chainArgs = arguments(src, pos);
+            checkMaxArgs(name, chainArgs, 1, chained.start(1));
             switch (name) {
                 case "sort" -> sort = chainArgs.isEmpty() ? new Document() : document(chainArgs.get(0), chained.end());
                 case "limit" -> limit = integer(chainArgs, chained.end());
@@ -109,7 +114,13 @@ public class MongoShellParser {
             } else if (c == '{' || c == '[' || c == '(') {
                 depth++;
                 current.append(c);
-            } else if (c == '}' || c == ']' || (c == ')' && depth > 0)) {
+            } else if (c == '}' || c == ']') {
+                if (depth == 0) {
+                    throw new MongoShellParseException("Unmatched '" + c + "'.", i);
+                }
+                depth--;
+                current.append(c);
+            } else if (c == ')' && depth > 0) {
                 depth--;
                 current.append(c);
             } else if (c == ')') {
@@ -124,6 +135,13 @@ public class MongoShellParser {
             }
         }
         throw new MongoShellParseException("The query has no closing ')'.", src.length());
+    }
+
+    private static void checkMaxArgs(String method, List<String> args, int max, int position) {
+        if (args.size() > max) {
+            throw new MongoShellParseException(
+                    method + "() takes at most " + max + (max == 1 ? " argument." : " arguments."), position);
+        }
     }
 
     private static void addArgument(List<String> args, StringBuilder current) {

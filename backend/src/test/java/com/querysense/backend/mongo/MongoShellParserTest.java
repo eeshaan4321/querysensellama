@@ -107,4 +107,22 @@ class MongoShellParserTest {
                 .isInstanceOf(MongoShellParseException.class)
                 .satisfies(e -> assertThat(((MongoShellParseException) e).position()).isGreaterThan(0));
     }
+
+    @Test
+    @DisplayName("extra positional arguments are refused, not silently dropped")
+    void extraArgumentsRefused() {
+        assertThatThrownBy(() -> parser.parse("db.customers.find({}, {}, {x: 1})"))
+                .isInstanceOf(MongoShellParseException.class).hasMessageContaining("find");
+        assertThatThrownBy(() -> parser.parse("db.orders.find({}).limit(3, 5)"))
+                .isInstanceOf(MongoShellParseException.class);
+        assertThatThrownBy(() -> parser.parse("db.orders.aggregate([], {})"))
+                .isInstanceOf(MongoShellParseException.class);
+    }
+
+    @Test
+    @DisplayName("an unmatched closing bracket fails immediately, not with a negative depth")
+    void unmatchedClosingBracketRefused() {
+        assertThatThrownBy(() -> parser.parse("db.customers.find({a: 1}})"))
+                .isInstanceOf(MongoShellParseException.class).hasMessageContaining("}");
+    }
 }
