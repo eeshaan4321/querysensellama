@@ -288,4 +288,28 @@ class QueryIntentParserTest {
         assertThat(result.built()).isFalse();
         assertThat(result.trace().declineReason()).contains("delete");
     }
+
+    @Test
+    @DisplayName("a column dropped from the database inside an aggregate declines instead of building SQL")
+    void aggregateColumnDroppedFromDatabaseDeclines() {
+        when(metadata.getColumnNames(eq("products")))
+                .thenReturn(List.of("id", "name", "category_id", "supplier_id"));
+
+        RuleBuildResult result = parser.parse("average price of products");
+
+        assertThat(result.built()).isFalse();
+        assertThat(result.trace().declineReason()).contains("not in the database right now");
+    }
+
+    @Test
+    @DisplayName("a HAVING count-target column dropped from the database declines too")
+    void havingCountTargetColumnDroppedFromDatabaseDeclines() {
+        when(metadata.getColumnNames(eq("orders")))
+                .thenReturn(List.of("customer_id", "employee_id", "order_date", "status"));
+
+        RuleBuildResult result = parser.parse("Which customers placed more than three orders");
+
+        assertThat(result.built()).isFalse();
+        assertThat(result.trace().declineReason()).contains("not in the database right now");
+    }
 }

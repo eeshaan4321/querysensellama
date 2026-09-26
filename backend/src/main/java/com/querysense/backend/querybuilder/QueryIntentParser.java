@@ -532,7 +532,12 @@ public class QueryIntentParser {
     }
 
     private Optional<String> columnOf(KnownSchema.Table table, QueryIntent.Operand operand) {
-        if (!(operand instanceof QueryIntent.ColumnRef ref)) {
+        QueryIntent.ColumnRef ref;
+        if (operand instanceof QueryIntent.ColumnRef direct) {
+            ref = direct;
+        } else if (operand instanceof QueryIntent.Aggregate agg && agg.column() != null) {
+            ref = agg.column();
+        } else {
             return Optional.empty();
         }
         if (ref.table() != null && !ref.table().equals(table.name())) {
