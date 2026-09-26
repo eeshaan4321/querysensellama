@@ -265,6 +265,8 @@ public class QueryIntentParser {
         String countTargetColumn = null;
         if (comparison.find()) {
             String operator = COMPARISON_GREATER.contains(comparison.group(2)) ? ">" : "<";
+            QueryIntent.Op op = COMPARISON_GREATER.contains(comparison.group(2))
+                    ? QueryIntent.Op.GT : QueryIntent.Op.LT;
             Optional<Integer> literal = numberFrom(comparison.group(3));
             if (literal.isEmpty()) {
                 return RuleBuildResult.declined(
@@ -276,15 +278,18 @@ public class QueryIntentParser {
             Optional<String> lhsColumn = binder.bindColumn(subject, comparison.group(1));
             if (lhsColumn.isPresent()) {
                 String lhs = joined ? subject.name() + "." + lhsColumn.get() : lhsColumn.get();
-                where.add(new QueryIntent.Predicate(lhs, operator, String.valueOf(literal.get()), false));
+                where.add(new QueryIntent.Predicate(qualify(lhsColumn.get(), subject, joined), op,
+                        List.of(QueryIntent.Literal.number(literal.get()))));
                 bindings.add(new RuleTrace.Binding(
                         comparison.group(1) + " " + comparison.group(2) + " " + comparison.group(3),
                         "COMPARISON", lhs + " " + operator + " " + literal.get()));
             } else if (joined) {
                 countTargetColumn = related.columns().get(0);
                 String rendered = "COUNT(" + related.name() + "." + countTargetColumn + ")";
-                having.add(new QueryIntent.Predicate(rendered, operator,
-                        String.valueOf(literal.get()), false));
+                having.add(new QueryIntent.Predicate(
+                        new QueryIntent.Aggregate(QueryIntent.Fn.COUNT,
+                                new QueryIntent.ColumnRef(related.name(), countTargetColumn)),
+                        op, List.of(QueryIntent.Literal.number(literal.get()))));
                 bindings.add(new RuleTrace.Binding(
                         comparison.group(2) + " " + comparison.group(3) + " " + related.name(),
                         "COMPARISON", rendered + " " + operator + " " + literal.get()));
@@ -299,6 +304,7 @@ public class QueryIntentParser {
         Matcher preposition = PREPOSITION_VALUE.matcher(text);
         while (preposition.find()) {
             List<String> values = new ArrayList<>();
+            List<String> storedValues = new ArrayList<>();
             String valueColumn = null;
 
             for (String candidate : preposition.group(1).split("\s+and\s+")) {
@@ -307,8 +313,8 @@ public class QueryIntentParser {
                         || isColumnOfEither(candidate, subject, related)) {
                     break;
                 }
-                Optional<String> column = columnHolding(subject, candidate);
-                if (column.isEmpty()) {
+                Optional<ValueMatch> match = columnHolding(subject, candidate);
+                if (match.isEmpty()) {
                     if (!values.isEmpty()) {
                         break;
                     }
@@ -317,25 +323,29 @@ public class QueryIntentParser {
                                     + "\", so this engine cannot tell which field the question means.",
                             bindings);
                 }
-                if (valueColumn != null && !valueColumn.equals(column.get())) {
+                String column = match.get().column();
+                if (valueColumn != null && !valueColumn.equals(column)) {
                     return RuleBuildResult.declined(
                             "\"" + values.get(0) + "\" and \"" + candidate + "\" are values of different "
-                                    + "columns (" + valueColumn + " and " + column.get() + "), so this "
+                                    + "columns (" + valueColumn + " and " + column + "), so this "
                                     + "engine cannot tell which one the question filters on.",
                             bindings);
                 }
-                valueColumn = column.get();
+                valueColumn = column;
                 values.add(candidate);
+                storedValues.add(match.get().stored());
             }
 
             if (values.isEmpty()) {
                 continue;
             }
 
-            String lhs = joined ? subject.name() + "." + valueColumn : valueColumn;
-            where.add(values.size() == 1
-                    ? new QueryIntent.Predicate(lhs, "=", values.get(0), true)
-                    : QueryIntent.Predicate.in(lhs, values));
+            List<QueryIntent.Literal> literals = new ArrayList<>();
+            for (int i = 0; i < values.size(); i++) {
+                literals.add(QueryIntent.Literal.text(values.get(i), storedValues.get(i)));
+            }
+            where.add(new QueryIntent.Predicate(qualify(valueColumn, subject, joined),
+                    values.size() == 1 ? QueryIntent.Op.EQ : QueryIntent.Op.IN, List.copyOf(literals)));
             bindings.add(new RuleTrace.Binding(String.join(" and ", values), "FILTER",
                     subject.name() + "." + valueColumn));
             break;
@@ -352,32 +362,37 @@ public class QueryIntentParser {
                         bindings);
             }
             String value = with.group(2);
-            boolean quoted = numberFrom(value).isEmpty();
-            String lhs = joined ? subject.name() + "." + column.get() : column.get();
-            where.add(new QueryIntent.Predicate(lhs, "=", value, quoted));
+            Optional<Integer> number = numberFrom(value);
+            QueryIntent.Literal literalValue = number.isPresent()
+                    ? new QueryIntent.Literal(value, true, number.get())
+                    : QueryIntent.Literal.text(value, storedValueOf(subject, column.get(), value));
+            where.add(new QueryIntent.Predicate(qualify(column.get(), subject, joined),
+                    QueryIntent.Op.EQ, List.of(literalValue)));
             bindings.add(new RuleTrace.Binding(with.group(1) + " " + value, "FILTER",
                     subject.name() + "." + column.get()));
         }
 
         if (groupColumn != null) {
-            selectItems.add(new QueryIntent.SelectItem(qualify(groupColumn, subject, joined), null));
+            selectItems.add(new QueryIntent.SelectItem(qualify(groupColumn, subject, joined)));
         }
         if (aggregateFunction != null) {
-            selectItems.add(new QueryIntent.SelectItem(
-                    qualify(aggregateColumn, subject, joined), aggregateFunction));
+            selectItems.add(new QueryIntent.SelectItem(new QueryIntent.Aggregate(
+                    QueryIntent.Fn.valueOf(aggregateFunction),
+                    qualify(aggregateColumn, subject, joined))));
         } else if (countTargetColumn != null) {
             for (String col : identifyingColumns(subject)) {
-                selectItems.add(0, new QueryIntent.SelectItem(subject.name() + "." + col, null));
+                selectItems.add(0, new QueryIntent.SelectItem(
+                        new QueryIntent.ColumnRef(subject.name(), col)));
             }
-            selectItems.add(new QueryIntent.SelectItem(
-                    related.name() + "." + countTargetColumn, "COUNT"));
+            selectItems.add(new QueryIntent.SelectItem(new QueryIntent.Aggregate(
+                    QueryIntent.Fn.COUNT, new QueryIntent.ColumnRef(related.name(), countTargetColumn))));
         } else if (countRequested) {
-            selectItems.add(new QueryIntent.SelectItem("*", "COUNT"));
+            selectItems.add(new QueryIntent.SelectItem(new QueryIntent.Aggregate(QueryIntent.Fn.COUNT, null)));
         } else if (!projected.isEmpty()) {
             projected.forEach(c -> selectItems.add(
-                    new QueryIntent.SelectItem(qualify(c, subject, joined), null)));
+                    new QueryIntent.SelectItem(qualify(c, subject, joined))));
         } else if (verb == QueryIntent.Verb.SELECT && selectItems.isEmpty()) {
-            selectItems.add(new QueryIntent.SelectItem("*", null));
+            selectItems.add(new QueryIntent.SelectItem(QueryIntent.Star.INSTANCE));
         }
 
         if (verb == QueryIntent.Verb.DELETE) {
@@ -404,7 +419,7 @@ public class QueryIntentParser {
             }
         }
 
-        List<String> orderBy = new ArrayList<>();
+        List<QueryIntent.OrderItem> orderBy = new ArrayList<>();
         Matcher order = ORDER_BY.matcher(text);
         if (order.find()) {
             Optional<String> column = binder.bindColumn(subject, order.group(1));
@@ -414,8 +429,9 @@ public class QueryIntentParser {
                                 + "column of " + subject.name() + ".",
                         bindings);
             }
-            String direction = order.group(2) != null && order.group(2).contains("desc") ? "DESC" : "ASC";
-            orderBy.add(qualify(column.get(), subject, joined) + " " + direction);
+            QueryIntent.Direction direction = order.group(2) != null && order.group(2).contains("desc")
+                    ? QueryIntent.Direction.DESC : QueryIntent.Direction.ASC;
+            orderBy.add(new QueryIntent.OrderItem(qualify(column.get(), subject, joined), direction));
         }
 
         Integer limit = null;
@@ -447,15 +463,12 @@ public class QueryIntentParser {
         String relatedColumn = subjectIsTarget ? edge.fromColumn() : edge.toColumn();
         return new QueryIntent.JoinSpec(
                 related.name(),
-                subject.name() + "." + subjectColumn,
-                related.name() + "." + relatedColumn);
+                new QueryIntent.ColumnRef(subject.name(), subjectColumn),
+                new QueryIntent.ColumnRef(related.name(), relatedColumn));
     }
 
-    private String qualify(String column, KnownSchema.Table table, boolean joined) {
-        if (column == null || "*".equals(column)) {
-            return column;
-        }
-        return joined ? table.name() + "." + column : column;
+    private QueryIntent.ColumnRef qualify(String column, KnownSchema.Table table, boolean joined) {
+        return new QueryIntent.ColumnRef(joined ? table.name() : null, column);
     }
 
     private List<String> identifyingColumns(KnownSchema.Table table) {
@@ -476,15 +489,25 @@ public class QueryIntentParser {
                 || (b != null && binder.bindColumn(b, token).isPresent());
     }
 
-    private Optional<String> columnHolding(KnownSchema.Table table, String value) {
+    private record ValueMatch(String column, String stored) {}
+
+    private Optional<ValueMatch> columnHolding(KnownSchema.Table table, String value) {
         for (String column : table.columns()) {
-            List<String> values = metadata.getDistinctValues(table.name(), column);
-            boolean holds = values.stream().anyMatch(v -> v != null && v.equalsIgnoreCase(value));
-            if (holds) {
-                return Optional.of(column);
+            Optional<String> stored = metadata.getDistinctValues(table.name(), column).stream()
+                    .filter(v -> v != null && v.equalsIgnoreCase(value))
+                    .findFirst();
+            if (stored.isPresent()) {
+                return Optional.of(new ValueMatch(column, stored.get()));
             }
         }
         return Optional.empty();
+    }
+
+    private String storedValueOf(KnownSchema.Table table, String column, String value) {
+        return metadata.getDistinctValues(table.name(), column).stream()
+                .filter(v -> v != null && v.equalsIgnoreCase(value))
+                .findFirst()
+                .orElse(value);
     }
 
     private List<String> boundColumnsOf(KnownSchema.Table table,
@@ -494,13 +517,13 @@ public class QueryIntentParser {
                                         String groupColumn) {
         List<String> names = new ArrayList<>();
         for (QueryIntent.SelectItem item : selectItems) {
-            bareColumnFor(table, item.column()).ifPresent(names::add);
+            columnOf(table, item.operand()).ifPresent(names::add);
         }
         for (QueryIntent.Predicate predicate : where) {
-            bareColumnFor(table, predicate.lhs()).ifPresent(names::add);
+            columnOf(table, predicate.lhs()).ifPresent(names::add);
         }
         for (QueryIntent.Predicate predicate : having) {
-            bareColumnFor(table, predicate.lhs()).ifPresent(names::add);
+            columnOf(table, predicate.lhs()).ifPresent(names::add);
         }
         if (groupColumn != null) {
             names.add(groupColumn);
@@ -508,18 +531,15 @@ public class QueryIntentParser {
         return names;
     }
 
-    private Optional<String> bareColumnFor(KnownSchema.Table table, String rendered) {
-        if (rendered == null || "*".equals(rendered) || rendered.contains("(")) {
+    private Optional<String> columnOf(KnownSchema.Table table, QueryIntent.Operand operand) {
+        if (!(operand instanceof QueryIntent.ColumnRef ref)) {
             return Optional.empty();
         }
-        String bare = rendered.contains(".")
-                ? rendered.substring(rendered.indexOf('.') + 1)
-                : rendered;
-        if (rendered.contains(".") && !rendered.startsWith(table.name() + ".")) {
+        if (ref.table() != null && !ref.table().equals(table.name())) {
             return Optional.empty();
         }
-        boolean known = table.columns().stream().anyMatch(c -> c.equalsIgnoreCase(bare));
-        return known ? Optional.of(bare) : Optional.empty();
+        boolean known = table.columns().stream().anyMatch(c -> c.equalsIgnoreCase(ref.column()));
+        return known ? Optional.of(ref.column()) : Optional.empty();
     }
 
     private Optional<Integer> numberFrom(String token) {

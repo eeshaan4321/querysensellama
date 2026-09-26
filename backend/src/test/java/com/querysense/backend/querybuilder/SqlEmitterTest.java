@@ -1,5 +1,16 @@
 package com.querysense.backend.querybuilder;
 
+import com.querysense.backend.querybuilder.QueryIntent.Aggregate;
+import com.querysense.backend.querybuilder.QueryIntent.ColumnRef;
+import com.querysense.backend.querybuilder.QueryIntent.Direction;
+import com.querysense.backend.querybuilder.QueryIntent.Fn;
+import com.querysense.backend.querybuilder.QueryIntent.JoinSpec;
+import com.querysense.backend.querybuilder.QueryIntent.Literal;
+import com.querysense.backend.querybuilder.QueryIntent.Op;
+import com.querysense.backend.querybuilder.QueryIntent.OrderItem;
+import com.querysense.backend.querybuilder.QueryIntent.Predicate;
+import com.querysense.backend.querybuilder.QueryIntent.SelectItem;
+import com.querysense.backend.querybuilder.QueryIntent.Star;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -11,12 +22,20 @@ class SqlEmitterTest {
 
     private final SqlEmitter emitter = new SqlEmitter();
 
+    private static ColumnRef col(String column) {
+        return new ColumnRef(null, column);
+    }
+
+    private static ColumnRef col(String table, String column) {
+        return new ColumnRef(table, column);
+    }
+
     @Test
     @DisplayName("a single-table select stays unqualified and byte-identical to today's output")
     void singleTableSelectIsUnqualified() {
         QueryIntent intent = new QueryIntent(
                 QueryIntent.Verb.SELECT, "customers", null,
-                List.of(new QueryIntent.SelectItem("*", null)),
+                List.of(new SelectItem(Star.INSTANCE)),
                 List.of(), List.of(), List.of(), null);
 
         assertThat(emitter.emit(intent)).isEqualTo("SELECT * FROM customers;");
@@ -27,8 +46,8 @@ class SqlEmitterTest {
     void joinQualifiesColumns() {
         QueryIntent intent = new QueryIntent(
                 QueryIntent.Verb.SELECT, "customers",
-                new QueryIntent.JoinSpec("orders", "customers.id", "orders.customer_id"),
-                List.of(new QueryIntent.SelectItem("customers.name", null)),
+                new JoinSpec("orders", col("customers", "id"), col("orders", "customer_id")),
+                List.of(new SelectItem(col("customers", "name"))),
                 List.of(), List.of(), List.of(), null);
 
         assertThat(emitter.emit(intent)).isEqualTo(
@@ -41,12 +60,13 @@ class SqlEmitterTest {
     void groupByCoversNonAggregatedProjections() {
         QueryIntent intent = new QueryIntent(
                 QueryIntent.Verb.SELECT, "customers",
-                new QueryIntent.JoinSpec("orders", "customers.id", "orders.customer_id"),
-                List.of(new QueryIntent.SelectItem("customers.id", null),
-                        new QueryIntent.SelectItem("customers.name", null),
-                        new QueryIntent.SelectItem("orders.id", "COUNT")),
+                new JoinSpec("orders", col("customers", "id"), col("orders", "customer_id")),
+                List.of(new SelectItem(col("customers", "id")),
+                        new SelectItem(col("customers", "name")),
+                        new SelectItem(new Aggregate(Fn.COUNT, col("orders", "id")))),
                 List.of(),
-                List.of(new QueryIntent.Predicate("COUNT(orders.id)", ">", "3", false)),
+                List.of(new Predicate(new Aggregate(Fn.COUNT, col("orders", "id")), Op.GT,
+                        List.of(Literal.number(3)))),
                 List.of(), null);
 
         assertThat(emitter.emit(intent)).isEqualTo(
@@ -61,8 +81,8 @@ class SqlEmitterTest {
     void noAggregateMeansNoGroupBy() {
         QueryIntent intent = new QueryIntent(
                 QueryIntent.Verb.SELECT, "customers", null,
-                List.of(new QueryIntent.SelectItem("name", null)),
-                List.of(new QueryIntent.Predicate("city", "=", "mumbai", true)),
+                List.of(new SelectItem(col("name"))),
+                List.of(new Predicate(col("city"), Op.EQ, List.of(Literal.text("mumbai", "Mumbai")))),
                 List.of(), List.of(), null);
 
         assertThat(emitter.emit(intent))
@@ -75,8 +95,8 @@ class SqlEmitterTest {
     void orderByThenLimit() {
         QueryIntent intent = new QueryIntent(
                 QueryIntent.Verb.SELECT, "products", null,
-                List.of(new QueryIntent.SelectItem("*", null)),
-                List.of(), List.of(), List.of("price DESC"), 5);
+                List.of(new SelectItem(Star.INSTANCE)),
+                List.of(), List.of(), List.of(new OrderItem(col("price"), Direction.DESC)), 5);
 
         assertThat(emitter.emit(intent))
                 .isEqualTo("SELECT * FROM products ORDER BY price DESC LIMIT 5;");
@@ -88,7 +108,7 @@ class SqlEmitterTest {
         QueryIntent intent = new QueryIntent(
                 QueryIntent.Verb.DELETE, "customers", null,
                 List.of(),
-                List.of(new QueryIntent.Predicate("city", "=", "pune", true)),
+                List.of(new Predicate(col("city"), Op.EQ, List.of(Literal.text("pune", "Pune")))),
                 List.of(), List.of(), null);
 
         assertThat(emitter.emit(intent)).isEqualTo("DELETE FROM customers WHERE city = 'pune';");
@@ -99,9 +119,9 @@ class SqlEmitterTest {
     void multiplePredicatesAreAnded() {
         QueryIntent intent = new QueryIntent(
                 QueryIntent.Verb.SELECT, "orders", null,
-                List.of(new QueryIntent.SelectItem("*", null)),
-                List.of(new QueryIntent.Predicate("status", "=", "shipped", true),
-                        new QueryIntent.Predicate("customer_id", ">", "10", false)),
+                List.of(new SelectItem(Star.INSTANCE)),
+                List.of(new Predicate(col("status"), Op.EQ, List.of(Literal.text("shipped", "SHIPPED"))),
+                        new Predicate(col("customer_id"), Op.GT, List.of(Literal.number(10)))),
                 List.of(), List.of(), null);
 
         assertThat(emitter.emit(intent)).isEqualTo(
@@ -113,11 +133,37 @@ class SqlEmitterTest {
     void bareCountHasNoGroupBy() {
         QueryIntent intent = new QueryIntent(
                 QueryIntent.Verb.SELECT, "orders", null,
-                List.of(new QueryIntent.SelectItem("*", "COUNT")),
+                List.of(new SelectItem(new Aggregate(Fn.COUNT, null))),
                 List.of(), List.of(), List.of(), null);
 
         assertThat(emitter.emit(intent))
                 .isEqualTo("SELECT COUNT(*) FROM orders;")
                 .doesNotContain("GROUP BY");
+    }
+
+    @Test
+    @DisplayName("IN quotes every value, and prints the typed text rather than the stored value")
+    void inQuotesTypedText() {
+        QueryIntent intent = new QueryIntent(
+                QueryIntent.Verb.SELECT, "customers", null,
+                List.of(new SelectItem(Star.INSTANCE)),
+                List.of(new Predicate(col("city"), Op.IN, List.of(
+                        Literal.text("mumbai", "Mumbai"), Literal.text("pune", "Pune")))),
+                List.of(), List.of(), null);
+
+        assertThat(emitter.emit(intent))
+                .isEqualTo("SELECT * FROM customers WHERE city IN ('mumbai', 'pune');");
+    }
+
+    @Test
+    @DisplayName("a number written as a word prints as typed, exactly as before the refactor")
+    void numberWordPrintsAsTyped() {
+        QueryIntent intent = new QueryIntent(
+                QueryIntent.Verb.SELECT, "customers", null,
+                List.of(new SelectItem(Star.INSTANCE)),
+                List.of(new Predicate(col("id"), Op.EQ, List.of(new Literal("three", true, 3)))),
+                List.of(), List.of(), null);
+
+        assertThat(emitter.emit(intent)).isEqualTo("SELECT * FROM customers WHERE id = three;");
     }
 }

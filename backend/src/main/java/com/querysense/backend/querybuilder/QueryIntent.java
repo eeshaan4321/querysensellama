@@ -1,9 +1,8 @@
 package com.querysense.backend.querybuilder;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
-/** A question resolved against the active schema, ready to be written as SQL. */
+/** A question resolved against the active schema, in a form any dialect's emitter can write. */
 public record QueryIntent(
         Verb verb,
         String fromTable,
@@ -11,34 +10,58 @@ public record QueryIntent(
         List<SelectItem> selectItems,
         List<Predicate> where,
         List<Predicate> having,
-        List<String> orderBy,
+        List<OrderItem> orderBy,
         Integer limit) {
 
     public enum Verb { SELECT, DELETE }
 
-    public record JoinSpec(String joinedTable, String leftColumn, String rightColumn) {}
+    public enum Fn { COUNT, SUM, AVG, MIN, MAX }
 
-    public record SelectItem(String column, String aggregate) {
+    public enum Direction { ASC, DESC }
+
+    public enum Op {
+        EQ("="), GT(">"), GTE(">="), LT("<"), LTE("<="), IN("IN");
+
+        private final String sql;
+
+        Op(String sql) {
+            this.sql = sql;
+        }
+
+        public String sql() {
+            return sql;
+        }
+    }
+
+    public sealed interface Operand permits ColumnRef, Aggregate, Star {}
+
+    public record ColumnRef(String table, String column) implements Operand {}
+
+    public record Aggregate(Fn fn, ColumnRef column) implements Operand {}
+
+    public enum Star implements Operand { INSTANCE }
+
+    public record Literal(String text, boolean numeric, Object value) {
+        public static Literal number(int n) {
+            return new Literal(String.valueOf(n), true, n);
+        }
+
+        public static Literal text(String typed, String stored) {
+            return new Literal(typed, false, stored);
+        }
+    }
+
+    public record SelectItem(Operand operand) {
         public boolean aggregated() {
-            return aggregate != null;
-        }
-
-        public String render() {
-            return aggregated() ? aggregate + "(" + column + ")" : column;
+            return operand instanceof Aggregate;
         }
     }
 
-    public record Predicate(String lhs, String operator, String literal, boolean quoted) {
-        public static Predicate in(String lhs, List<String> values) {
-            return new Predicate(lhs, "IN",
-                    values.stream().map(v -> "'" + v + "'").collect(Collectors.joining(", ", "(", ")")),
-                    false);
-        }
+    public record Predicate(Operand lhs, Op op, List<Literal> values) {}
 
-        public String render() {
-            return lhs + " " + operator + " " + (quoted ? "'" + literal + "'" : literal);
-        }
-    }
+    public record OrderItem(ColumnRef column, Direction direction) {}
+
+    public record JoinSpec(String table, ColumnRef left, ColumnRef right) {}
 
     public boolean hasAggregate() {
         return selectItems.stream().anyMatch(SelectItem::aggregated);
