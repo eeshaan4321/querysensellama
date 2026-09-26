@@ -55,10 +55,12 @@ class OffSchemaCacheRoundTripTest {
             stored.add(call.getArgument(0));
             return call.getArgument(0);
         });
-        when(history.findFirstByUserInputIgnoreCaseAndDatabaseTypeIgnoreCase(anyString(), anyString()))
+        when(history.findFirstByUserInputIgnoreCaseAndDatabaseTypeIgnoreCaseAndSchemaLabel(
+                anyString(), anyString(), anyString()))
                 .thenAnswer(call -> stored.stream()
                         .filter(h -> h.getUserInput().equalsIgnoreCase(call.getArgument(0)))
                         .filter(h -> h.getDatabaseType().equalsIgnoreCase(call.getArgument(1)))
+                        .filter(h -> call.getArgument(2).equals(h.getSchemaLabel()))
                         .findFirst());
 
         RuleBasedQueryBuilder rules = mock(RuleBasedQueryBuilder.class);

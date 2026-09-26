@@ -445,11 +445,14 @@ claims the choice was wrong; recommendations belong to the schema advisor.
 
 ## 5. MongoDB checks — 2 rules
 
-> **Scope, decided 2026-09-21:** these two text checks are all the MongoDB
-> analysis there will be. MongoDB is a named non-goal (PROJECT.md §5) — no live
-> connection, no upload support, no rule-engine Mongo path. Neither rule runs
-> the query, and the "known indexed fields" list they test against is a
-> hardcoded placeholder, not real index metadata.
+> **Scope, decided 2026-09-21 and reopened 2026-09-25:** these two text checks
+> are all the MongoDB analysis that exists — no live connection, no upload
+> support, no rule-engine Mongo path. Neither rule runs the query, and the
+> "known indexed fields" list they test against is a hardcoded placeholder, not
+> real index metadata. **Parity with the SQL pipeline is now being considered**;
+> PROJECT.md §5 carries both the original non-goal and an assessment of what
+> building it would take. If that goes ahead, these two rules are replaced by a
+> real `explain()` reader, not extended.
 
 MongoDB queries aren't run through MongoDB's `explain()`. These two checks
 read the query text instead.
@@ -536,6 +539,12 @@ Schemas are now uploaded directly, so no workload is ever declared; the
 picker, and the two sets only it could reach, were removed. Transactional
 was already what a missing domain, or `Other`, used, so a run that never
 picked a domain behaves as before.
+
+The section keeps the word because the code does: these suggestions still
+arrive tagged `source: "DOMAIN"`, through a class still called
+`DomainOptimizationService`. Those are names left standing so the response
+contract does not move — no rule below reads a domain, and nothing asks for
+one. See PROJECT.md §9.7 for the full list of what kept the name.
 
 ### Transactional — 7 rules (large = above 100 rows)
 
@@ -709,8 +718,17 @@ graph reveals this; only rendering the SQL and reading it does. Two of the 14
 
 ## Known gaps in these rules
 
-Found by reading the code. The first two were fixed on 2026-09-21 and are
-covered by unit tests; neither fix has been run against a live backend.
+Found by reading the code. The three dated ones were fixed on 2026-09-21 and
+are covered by unit tests; none of those fixes has been run against a live
+backend.
+
+- **UNCONFIRMED — a table name the schema cannot bind may be dropped in
+  silence.** Seen 2026-09-25 against a temporarily shrunken schema:
+  `customers and suppliers`, with no `suppliers` declared, built
+  `SELECT * FROM customers;` at 0.95 without mentioning the word it ignored —
+  the same shape as E15 before it was fixed. **Not reproduced against the real
+  schema**, where `suppliers` binds and the pair declines as unrelated. Worth a
+  test with a noun no schema has; not yet a defect. See PROJECT.md §9.10.
 
 - ~~**E14 keeps only the first filter value.**~~ **FIXED 2026-09-21.**
   `customers in mumbai and pune` built `WHERE city = 'mumbai'` at 0.95 and

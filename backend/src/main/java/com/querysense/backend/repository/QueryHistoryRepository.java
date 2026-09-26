@@ -12,4 +12,7 @@ public interface QueryHistoryRepository extends JpaRepository<QueryHistory, Long
 
     Optional<QueryHistory> findFirstByUserInputIgnoreCaseAndDatabaseTypeIgnoreCase(
             String userInput, String databaseType);
+
+    Optional<QueryHistory> findFirstByUserInputIgnoreCaseAndDatabaseTypeIgnoreCaseAndSchemaLabel(
+            String userInput, String databaseType, String schemaLabel);
 }

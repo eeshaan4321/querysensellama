@@ -123,7 +123,7 @@ claim and it is auditable rather than asserted.
 | Layer | Source label | Confidence | When it runs |
 |---|---|---|---|
 | 1. Rule engine | `RULE_ENGINE` | 0.95 | A template matches the phrasing |
-| 2. History cache | `CACHE` | 1.00 | Layer 1 declined, but this exact input was answered before |
+| 2. History cache | `CACHE` | 1.00 | Layer 1 declined, but this exact input was answered before **under the schema now active** — and that answer still fits it |
 | 3. Local LLM | `OLLAMA` | 0.65 | Both missed |
 | 3b. Local LLM, flagged | `OLLAMA` | 0.40 | As above, but the validator found the question implied more than the SQL expresses |
 
@@ -731,6 +731,12 @@ block is Copy.
 
 ### Not a gap: MongoDB is analysed, never connected
 
+> **REOPENED 2026-09-25 at the user's request** — parity with the SQL pipeline
+> is being considered. The decision below is kept in full, because it is still
+> the reason the code looks the way it does and still the argument against
+> doing this badly. What it forbids is now under review rather than settled.
+> The feasibility assessment is the section immediately after this one.
+
 **Decided 2026-09-21. This is a non-goal, not a TODO.** QuerySense will not
 grow a live MongoDB connection, a Mongo path in the rule engine, or Mongo
 support in schema upload. What exists is what will exist: two static text
@@ -778,6 +784,73 @@ screen's rewrite half shows "SQL only, for now" for a Mongo analysis, and the
 Analysis screen shows Mongo findings instead of a plan. Neither pretends a
 plan is coming.
 
+### What MongoDB parity would actually take — assessed 2026-09-25
+
+Asked directly: can MongoDB have the same structure the SQL side has? **Yes,
+and less of it is new work than the non-goal above assumes.** That assessment
+was written from scope, before anyone checked what MongoDB's own tooling
+offers. This section is the check. Nothing here is built.
+
+#### The fact that changes the argument: MongoDB has a real `explain()`
+
+`db.coll.find({…}).explain("executionStats")` returns a winning plan with
+stages, and its figures land on fields `QueryAnalysisResult` **already has**:
+
+| SQL today | MongoDB equivalent |
+|---|---|
+| `accessType: ALL`, `hasFullTableScan` | a `COLLSCAN` stage |
+| `usesIndex`, `keyUsed` | an `IXSCAN` stage, `indexName` |
+| `usesFilesort` | an in-memory `SORT` stage |
+| `estimatedRows` | `totalDocsExamined` |
+| `estimatedRowsReturned` | `nReturned` |
+| read amplification | the same ratio, the same meaning |
+
+So the verdict ladder (§9.6), the metric tiles, the wasted-work breakdown and
+most of the advisor's rule shapes **transfer rather than being reinvented**.
+The original reasoning treated Mongo analysis as something that would have to
+be invented; it does not.
+
+#### Stage by stage, against the pipeline in §2
+
+| Stage | What exists for MySQL | What MongoDB needs |
+|---|---|---|
+| 0 · Schema | DDL parsed into a `SchemaSnapshot` | **The one genuinely new concept.** No DDL to parse, so a `MongoSchemaProvider` samples N documents per collection to infer fields and reads **real** indexes via `listIndexes()`. That also retires `MongoSimpleAnalyzer`'s hardcoded `_id, email, userId` placeholder. |
+| 1 · Rule engine | `QueryIntent` → `SqlEmitter` | `QueryIntent` is nearly dialect-neutral already, **but SQL rendering is baked into the record** — `Predicate.render()` emits SQL and `Predicate.in` writes SQL quoting. Lift rendering out into `SqlEmitter`, then add a `MongoEmitter` for `find`/`aggregate`. `SchemaBinder` and `QueryIntentParser` work unchanged. Joins become `$lookup`. **Largest single chunk, and the least necessary for a credible demo.** |
+| 2 · Analysis | `MySqlExplainAnalyzer` | `MongoExplainAnalyzer` running the real `explain()` through a Mongo equivalent of `ExplainExecutor`. This is where "never runs the query, produces no plan" stops being true. |
+| 3 · Advisor | `CREATE INDEX` from plan flags | `db.coll.createIndex({field: 1})` from the same flags, against real index metadata instead of two regexes. The five-rule shape carries over. |
+| 4 · Rewrite + compare | `QueryRewriter`, 3 rules | The same semantics-preserving constraint, with Mongo rules: add a projection (the `SELECT *` analogue), collapse an `$or` chain on one field into `$in`, anchor a prefix regex. Then `explain()` both and compare `totalDocsExamined`. |
+| 5 · History | dialect-agnostic | Nothing. |
+| Frontend | every screen branches on `targetDb` | Mostly replacing the honest empty states with real content. |
+
+#### The four things that are hard rather than merely long
+
+1. **Inferred schema is sampling, not truth.** A field missing from the sample
+   is not missing from the collection. This has to be labelled on screen the
+   way "generated data" already is, or the system starts making claims it
+   cannot support — the exact failure the non-goal above was written to avoid.
+2. **`explain()` output shape varies by server version.** This is the MySQL 9
+   `explain_format` trap (§6) in a second dialect: pin the verbosity, assert
+   the shape in a test, and do not trust a bare call.
+3. **Grounding the prompt** with an inferred schema is new prompt work with its
+   own failure modes — though it does end the "ungrounded *and* unguarded"
+   state that makes Mongo the least protected path today.
+4. **There is nothing to test against on this machine.** `27017` is not
+   listening, and §7's 2026-09-09 session records it never having been up
+   here. mongod running and seeded is a precondition, not a detail.
+
+#### Recommended order, if this goes ahead
+
+**Stages 2 and 3 first** — real `explain()`, real index metadata. Highest value
+per unit of work, each demoable alone, and together they retire the weakest
+claim in the project: that `MongoSimpleAnalyzer` never runs the query and its
+index list is a placeholder. Stage 1 last.
+
+**The trade-off, stated rather than buried:** this is the largest remaining
+build in the project, comparable to everything done in the fortnight to
+2026-09-21, and it competes for time with the live verification run — which is
+currently the larger risk, since nothing from that fortnight has met a running
+backend. Scope and deadline were put back to the user; no decision recorded yet.
+
 ### Missing endpoints
 
 | Endpoint | Status | What is needed |
@@ -805,16 +878,35 @@ plan is coming.
    query alone; the rewriter changes the *query* and leaves the database alone.
    The amber "Simulated" badge is gone, along with `mockSimulateOptimizedQuery`.
 
-2. **`KnownSchema` and the seeded MySQL tables disagree about columns.**
-   Found 2026-09-21. `KnownSchema.CUSTOMERS` declares a `phone` column that
-   `mysql/schema.sql` never creates, and its `orders` declares
-   `(id, customer_id, employee_id, order_date, status)` where the script
-   creates `(order_id, customer_id, order_date, amount, status)`. Harmless
-   while nothing turned the declared list into SQL; `QueryRewriter`'s RW1
-   does, which is why the compare endpoint withdraws a rewrite whose EXPLAIN
-   failed (§7). **Uploaded schemas are not affected** — they are parsed from
-   the DDL that provisioned the tables. Fixing it means deciding which side is
-   authoritative for the demo schema, which is a bigger call than this note.
+2. **`mysql/schema.sql` and `h2/schema.sql` are two tables behind the database
+   they are supposed to create.** Restated 2026-09-25 **against the live
+   MySQL**, which reverses what this entry said from 2026-09-21 to that date.
+   It read "`KnownSchema` and the seeded MySQL tables disagree about columns",
+   naming `KnownSchema` as the wrong side because `mysql/schema.sql` creates
+   only `customers` and `orders` and neither carries `phone` or `employee_id`.
+
+   **`SHOW TABLES FROM querysense` settles it the other way.** The database
+   holds all nine — `categories, customers, departments, employees,
+   order_items, orders, payments, products, suppliers` — plus `query_history`,
+   and `SHOW COLUMNS` gives `customers(id, name, email, city, phone)` and
+   `orders(id, customer_id, employee_id, order_date, status)`, matching
+   `KnownSchema` exactly, self-join and all. **`KnownSchema` is right. The two
+   `schema.sql` files are stale**, left behind when the schema grew from the
+   two-table version §7's 2026-09-09 session created.
+
+   Which makes this a documentation-and-fixtures defect, not a rule-engine one:
+   nothing at runtime reads those scripts. They matter for a teammate setting
+   up a fresh machine, who would get a two-table database and a rule engine
+   describing nine. §5's earlier claim that RW1's `phone` expansion is what
+   makes compare withdraw a rewrite was reasoning from the same error and
+   should not be repeated without a live check.
+
+   **Fix:** bring both scripts up to the nine tables the database has, with
+   seed data, and keep them there with `KnownSchemaMatchesSeedScriptsTest` —
+   which parses both with the upload path's own `DdlSchemaParser` and asserts
+   the tables, columns and foreign keys match `KnownSchema`. That test exists
+   and **currently fails**, naming the missing tables. It needs no database.
+   Nothing had ever compared the two sides, which is how the drift lasted.
 
 3. **Limited consistency checking in the schema advisor.** Each rule still
    reads one `EXPLAIN` signal and cannot see what the others emitted. **Since
@@ -835,16 +927,26 @@ plan is coming.
    extra round trip and the tabular reader stays the authority on the plan.
    A failed probe costs the tree and the cost, never the plan.
 
-5. **No optimiser cost figure.** The backend reads `EXPLAIN`'s `rows` estimate
-   and computes no cost. The UI therefore says "Estimated rows" — labelling a
-   row count as a cost would invent a unit.
+5. **QuerySense computes no cost of its own.** Corrected 2026-09-25 — this
+   entry used to say there was no cost figure at all, which stopped being true
+   on 2026-09-10 and contradicted §8 item 3. What is there:
+   `QueryAnalysisResult.queryCost` carries **MySQL's own** `query_cost`, read
+   out of the `EXPLAIN FORMAT=JSON` side probe, and the Analysis screen renders
+   it as its own tile. What is not there is any cost model QuerySense computes:
+   the `rows` estimate stays labelled "Estimated rows" on a separate tile,
+   because calling a row count a cost would invent a unit. A failed probe drops
+   the cost and the plan tree, never the plan.
 
-6. **MongoDB stays a text-level check — a decision, not a backlog item.**
-   See "Not a gap: MongoDB is analysed, never connected" above. The one real
-   defect on that path was fixed 2026-09-21: `MongoSimpleAnalyzer` was called
-   with `collectionName = null`, so Mongo recommendations could not name their
-   collection. It now reads the collection out of `db.<name>.find(...)` itself,
-   and an explicit name still wins.
+6. **MongoDB is still a text-level check — and as of 2026-09-25 that is under
+   review rather than decided.** See "Not a gap: MongoDB is analysed, never
+   connected" above for the original reasoning, and "What MongoDB parity would
+   actually take" after it for what building the SQL structure on this side
+   would cost. Until something is built, the state is unchanged: two regex
+   checks, no connection, no plan. The one real defect on that path was fixed
+   2026-09-21: `MongoSimpleAnalyzer` was called with `collectionName = null`,
+   so Mongo recommendations could not name their collection. It now reads the
+   collection out of `db.<name>.find(...)` itself, and an explicit name still
+   wins.
 
 7. **`EXPLAIN` runs twice per pipeline run**, because the schema advisor re-runs
    the whole analysis. Accepted at this scale; worth revisiting if the analysis
@@ -1053,6 +1155,44 @@ Mongo accuracy as its own figure; folding it into a blended number hides this.
    and creating one is the four-feature build that decision rules out. The
    consequence — Mongo generation is ungrounded and unguarded — is now stated
    in §5 and on screen rather than left to be discovered.
+
+   **Qualified 2026-09-25.** "There is no Mongo schema" is true only of a
+   *declared* one. Sampling documents and reading `listIndexes()` produces an
+   inferred schema good enough to ground a prompt and to check output against,
+   which is stage 0 of the parity assessment in §5. If that is built, this
+   no-op stops being defensible and both the grounding and the validator gain
+   a Mongo path. Until then the entry stands as written.
+
+### Correctness defect: the cache did not know which schema answered
+
+**Status: FIXED 2026-09-25.** `SchemaScopedCacheTest` is the regression
+guard. The account is kept because the shape recurs: a key that was right
+when it was written, and wrong once a second dimension appeared.
+
+The Layer 2 lookup was `findFirstByUserInputIgnoreCaseAndDatabaseTypeIgnoreCase`
+— keyed on the question and the dialect, and on nothing else. Schema upload
+added a third dimension in 2026-09-10 and the key did not follow it. So a
+client who tried a question against the built-in demo schema, uploaded their
+own, and asked the same question in the same words got **the demo schema's
+SQL back at confidence 1.0**, against their tables. The practice run poisoned
+the real one, and the more confident the label, the more convincing the wrong
+answer.
+
+Two things made it worse. The cache branch never called
+`namesUnknownIdentifiers`, so the 2026-09-21 off-schema guard — which exists
+to stop exactly this — ran on the LLM path only and never saw a cached row.
+And `schemaLabel` had been stored on every history row since the run-context
+work, so the column needed to prevent it was already populated and simply
+never read.
+
+**The fix, both halves.** The lookup is now
+`…AndSchemaLabel(input, databaseType, activeSchema.active().label())`, so a
+row written under another schema is not a hit. On top of that,
+`servableCacheHit` re-runs `namesUnknownIdentifiers` over the row it found
+and treats a failure as a miss — a label can be reused by a second upload of
+the same filename, and the key alone would trust it. Rows written before the
+change carry a null `schemaLabel` and stop matching, which is the right
+default: a miss costs one LLM call, a false hit costs a wrong answer at 1.0.
 
 ### Schema upload — where the code lives
 
@@ -2016,8 +2156,9 @@ with it:
 
 Every analysis now runs `TransactionalOptimizationRules` — the set a missing
 profile or "Other" already fell back to, so a run that never picked a domain
-behaves as before. Rule count 70 → 59 (§9). The `source: "DOMAIN"` tag kept
-its name, and the transactional messages still say "transactional".
+behaves as before. Rule count 70 → 59 on the day (§9 reads 62 now — the three
+rewrite rules arrived on 2026-09-21). The `source: "DOMAIN"` tag kept its name,
+and the transactional messages still say "transactional".
 
 #### Verified
 
@@ -2218,6 +2359,75 @@ asserts the note survives in both.
 would-be features and kept two bug fixes and one honesty fix. That split is the
 point: a non-goal bounds what gets built, not what gets to be wrong.
 
+### Session of 2026-09-25 — the cache learns which schema answered
+
+Came out of a reading pass, not a failure: the question was whether the
+built-in `KnownSchema` matching the demo database still mattered once uploads
+became the real path. It does, but the sharper finding was next to it — the
+cache key had never been told that a second schema could exist.
+
+Written first, and watched fail: three cases in `SchemaScopedCacheTest`. The
+red was honest, not vacuous — the fake repository answers the schema-blind
+lookup exactly as the database does, so a service that kept calling it failed
+the tests instead of passing them against an empty stub. Two returned `CACHE`
+where the test demanded `OLLAMA`, which is the defect reproduced; the third,
+the regression guard that caching still works within one schema, passed from
+the start.
+
+The fix is in §5, "the cache did not know which schema answered". Three
+existing tests failed on the change — `OffSchemaCacheRoundTripTest`,
+`QueryGenerationServiceImplTest`, `QueryHistoryRunContextTest` — all three
+because their fake repositories stubbed the old finder only. The stubs were
+repointed; no assertion was weakened to make anything pass.
+
+**Verified:** `./mvnw test`, **318 tests, 0 failures**. Nothing else — no
+backend was started, and no upload was performed in a browser. The behaviour
+this changes is exactly the kind a unit test can pin down and a demo cannot:
+it only shows up when the same question is asked twice across a schema swap.
+
+Also corrected in the docs the same day: §8's summary still called the query
+rewrite simulated, §9's table was missing the three rewrite rules and totalled
+59 against `RULES.md`'s 62, and §5 item 5 claimed there was no cost figure at
+all, which stopped being true on 2026-09-10.
+
+### Session of 2026-09-25 — the schema mismatch was pointing the wrong way
+
+A drift guard was written first, as `KnownSchemaMatchesSeedScriptsTest`: parse
+`mysql/schema.sql` and `h2/schema.sql` with `DdlSchemaParser` and assert the
+tables, columns and foreign keys match `KnownSchema`. All six cases failed, as
+intended.
+
+**Then `KnownSchema` was shrunk to two tables to make them pass, and that was
+wrong.** The premise — held in §5 since 2026-09-21 and never checked against
+the database — was that the scripts described reality and the declaration had
+drifted. `SHOW TABLES FROM querysense` on the live MySQL says the opposite: all
+nine tables are there, `customers` has `phone`, `orders` has `id` and
+`employee_id`, and `KnownSchema` matches column for column. The scripts are the
+stale side. The shrink and its 14 follow-on test edits were reverted whole.
+
+**What the detour is worth keeping for:** the guard was the right instrument
+and found real drift on its first run; the diagnosis of *which side* had
+drifted came from reading two files that agreed with each other and never
+asking the database. `KnownSchemaTest` had a case named "orders matches the
+real table: id/employee_id" — correct, and it was treated as the suspect rather
+than the witness. One `SHOW TABLES` would have settled it before any code moved.
+
+**Left in place:** the failing `KnownSchemaMatchesSeedScriptsTest`, deliberately
+red, naming the tables the scripts do not create. §5 item 2 now states the
+direction correctly. Bringing the scripts up to nine tables is the fix and has
+not been done.
+
+**Also this day: the MongoDB non-goal was reopened.** Asked whether the SQL
+structure could exist on the Mongo side, the answer is yes, and §5 now carries
+the assessment. The part worth keeping in view is that the 2026-09-21 decision
+reasoned from scope without checking what MongoDB offers: `explain(
+"executionStats")` returns `COLLSCAN`/`IXSCAN` stages, `totalDocsExamined` and
+`nReturned`, which land on `QueryAnalysisResult` fields that already exist — so
+the verdict ladder and most advisor rule shapes transfer rather than needing
+invention. The decision was not wrong about the cost of doing it badly; it was
+working from an incomplete picture of the cost of doing it well. **Nothing is
+built, and no decision is recorded** — scope and deadline sit with the user.
+
 ### Not verified
 
 - ~~**No screen of the current frontend has been exercised against the live
@@ -2285,6 +2495,10 @@ complexity gate along with it. Questions like "products in a category" or
 where before neither table existed and they were handled or declined on other
 grounds. **More traffic depends on Ollama than it used to.** With Ollama down,
 more questions now fail with a 503 than did under the two-table schema.
+
+The same effect scales with an upload: the gate counts tables in whatever
+schema is active, so a client who uploads a twelve-table schema gets more of
+their questions routed to the LLM than a small schema would.
 
 ---
 
@@ -2467,8 +2681,10 @@ Built: schema upload with all rule layers following it, the three-tier
 routing (rule engine / cache / LLM) with the tier shown and auditable,
 optimisation DDL on screen, and — since 2026-09-10 — MySQL's `query_cost`
 alongside a plain-English verdict and a rows-examined/rows-returned/wasted-work
-breakdown on the Analysis screen. Simulated and clearly labelled as such: the
-query rewrite and its before/after numbers.
+breakdown on the Analysis screen. Since 2026-09-21 the query rewrite is built
+too — `QueryRewriter` behind `POST /api/query/compare`, with both versions
+EXPLAINed — so **nothing on screen is simulated any more.** The amber
+"Simulated" badge and the browser regex behind it are deleted.
 
 Every figure the Analysis screen shows is an optimiser **estimate**. The
 analyzer runs `EXPLAIN` and never executes the query — a decision reaffirmed
@@ -2478,8 +2694,9 @@ on 2026-09-10 when `EXPLAIN ANALYZE` was considered and declined (§8 item 3).
 
 ## 9. Every rule, and how many there are
 
-Checked 2026-09-11 by reading `backend/src/main`. Nothing here was run. It
-lists every rule the backend applies, in the order it applies them.
+Checked 2026-09-11 by reading `backend/src/main`, and again on 2026-09-21 when
+§9.11 was added. Nothing here was run. It lists every rule the backend applies,
+in the order it applies them.
 
 | Module | Rules | Where |
 |---|---|---|
@@ -2492,7 +2709,8 @@ lists every rule the backend applies, in the order it applies them.
 | Domain optimisation | 7 (transactional — the only set left) | `optimization/TransactionalOptimizationRules` |
 | Resource optimisation | 5 | `optimization/ResourceConsciousService` |
 | Schema advisor | 5 | `service/impl/SchemaAdvisorServiceImpl` |
-| **Total** | **59** | |
+| Query rewrite | 3 | `optimization/QueryRewriter` |
+| **Total** | **62** | |
 
 Only the first row is the rule engine in the strict sense: layer 1 of query
 generation (§2). The rest are the other rule-based modules. They are
@@ -2601,6 +2819,10 @@ They report what MySQL chose; they don't claim it was wrong.
 | 1 | the first filter field that isn't a `$` operator is missing from the **placeholder** index list (`_id`, `email`, `userId`) |
 | 2 | a `$regex` value doesn't start with `^`, so no index can serve it |
 
+Both read the query text and neither runs it. **Under review since 2026-09-25**
+— if MongoDB parity is built, `listIndexes()` replaces the placeholder in rule
+1 and a real `explain()` reader replaces both. See §5.
+
 ### 9.6 Analysis verdict — 9 rules (`VerdictService`)
 
 The rules are tried in order and the first match becomes the headline. "Large" means at least
@@ -2632,6 +2854,18 @@ now uploaded directly, so no workload is declared. The dropdown, the
 the dropdown could reach were deleted. Transactional was already the fallback
 for no profile or `Other`, so it is what remains. The deleted classes are in
 git history.
+
+**What still carries the word, verified by grep on 2026-09-25 — names, not
+behaviour.** `DomainOptimizationService` (which now hardcodes
+`new TransactionalOptimizationRules()`), the `DomainOptimizationRules`
+interface it runs, `OptimizationSuggestion.Source.DOMAIN` and its
+`domain(...)` factory, and the `DOMAIN: 'Optimization'` label in
+`SuggestionsList.jsx`. Renaming them would churn the response contract and the
+frontend for no behavioural gain, so they stay. **The only other `domain` in
+the tree is unrelated:** `ValueGenerator.DOMAINS`, the list of e-mail hosts the
+seeder picks from. No `domainProfile`, `DomainProfile`,
+`EcommerceOptimizationRules` or `AnalyticalOptimizationRules` survives
+anywhere in `backend/src` or `frontend/src`.
 
 **Transactional — 7 rules (threshold 100):**
 
@@ -2672,8 +2906,19 @@ The advisor never executes its own DDL (§5).
 
 ### 9.10 What reading the rules turned up
 
-Both came from reading the code. **Both were fixed on 2026-09-21**; the
-accounts are kept because the shape recurs.
+All of these came from reading the code. **The three dated 2026-09-21 were
+fixed**; the accounts are kept because the shape recurs. The fourth is a lead,
+not yet a finding.
+
+- **UNCONFIRMED: a table name that cannot be bound may be dropped without a
+  word.** Seen on 2026-09-25 while the built-in schema was temporarily shrunk
+  to two tables: `customers and suppliers`, with no `suppliers` in the schema,
+  built `SELECT * FROM customers;` at 0.95 and never said it had ignored a
+  noun — the same silence as the `with <column> <value>` defect below. **It has
+  not been reproduced against the real nine-table schema**, where `suppliers`
+  binds and the pair declines as unrelated instead, so the honest statement is
+  that an unbindable *second* noun is worth a test, not that the defect is
+  established. Confirm before acting on it.
 
 - ~~**Only the first filter value is kept, and the rest is dropped without a
   word.**~~ **FIXED.** Rule 14 captured one word after the preposition and

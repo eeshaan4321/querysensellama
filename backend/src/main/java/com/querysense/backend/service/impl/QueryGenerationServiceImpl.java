@@ -67,8 +67,7 @@ public class QueryGenerationServiceImpl implements QueryGenerationService {
             confidence = CONFIDENCE_RULE_ENGINE;
 
         } else {
-            Optional<QueryHistory> cached = queryHistoryRepository
-                    .findFirstByUserInputIgnoreCaseAndDatabaseTypeIgnoreCase(input, databaseType);
+            Optional<QueryHistory> cached = servableCacheHit(input, databaseType);
 
             if (cached.isPresent()) {
                 generatedSql = cached.get().getGeneratedQuery();
@@ -99,6 +98,16 @@ public class QueryGenerationServiceImpl implements QueryGenerationService {
         }
 
         return new QueryResponse(generatedSql, databaseType, source, confidence, trace, schemaWarning);
+    }
+
+    /** A cached answer serves only if it was written for the active schema and still fits it. */
+    private Optional<QueryHistory> servableCacheHit(String input, String databaseType) {
+        return queryHistoryRepository
+                .findFirstByUserInputIgnoreCaseAndDatabaseTypeIgnoreCaseAndSchemaLabel(
+                        input, databaseType, activeSchema.active().label())
+                .filter(row -> generatedQueryValidator
+                        .namesUnknownIdentifiers(row.getGeneratedQuery(), databaseType)
+                        .isEmpty());
     }
 
     private void saveToHistory(String input, String generatedSql, String databaseType,

@@ -43,7 +43,8 @@ class QueryGenerationServiceImplTest {
 
         when(validator.looksIncomplete(anyString(), anyString(), anyString())).thenReturn(false);
         when(validator.namesUnknownIdentifiers(anyString(), anyString())).thenReturn(Optional.empty());
-        when(history.findFirstByUserInputIgnoreCaseAndDatabaseTypeIgnoreCase(anyString(), anyString()))
+        when(history.findFirstByUserInputIgnoreCaseAndDatabaseTypeIgnoreCaseAndSchemaLabel(
+                anyString(), anyString(), anyString()))
                 .thenReturn(Optional.empty());
         when(history.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -89,7 +90,8 @@ class QueryGenerationServiceImplTest {
 
         when(rules.build(anyString(), anyString()))
                 .thenReturn(RuleBuildResult.declined("The question names three tables.", List.of()));
-        when(history.findFirstByUserInputIgnoreCaseAndDatabaseTypeIgnoreCase(anyString(), anyString()))
+        when(history.findFirstByUserInputIgnoreCaseAndDatabaseTypeIgnoreCaseAndSchemaLabel(
+                anyString(), anyString(), anyString()))
                 .thenReturn(Optional.of(cached));
 
         QueryResponse response = service.generateQuery("something complex", "MySQL");
