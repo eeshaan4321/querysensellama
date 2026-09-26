@@ -5,6 +5,7 @@ import com.querysense.backend.model.QueryHistory;
 import com.querysense.backend.querybuilder.GeneratedQueryValidator;
 import com.querysense.backend.querybuilder.RuleBasedQueryBuilder;
 import com.querysense.backend.querybuilder.RuleBuildResult;
+import com.querysense.backend.dialect.Dialect;
 import com.querysense.backend.repository.QueryHistoryRepository;
 import com.querysense.backend.schema.ActiveSchemaProvider;
 import com.querysense.backend.schema.KnownSchema;
@@ -59,7 +60,7 @@ class QueryHistoryRunContextTest {
         when(validator.namesUnknownIdentifiers(anyString(), anyString())).thenReturn(Optional.empty());
 
         activeSchema = mock(ActiveSchemaProvider.class);
-        when(activeSchema.active()).thenReturn(KnownSchema.builtIn());
+        when(activeSchema.active(Dialect.MYSQL)).thenReturn(KnownSchema.builtIn());
 
         service = new QueryGenerationServiceImpl(rules, history, llm, validator, activeSchema);
     }
@@ -113,7 +114,7 @@ class QueryHistoryRunContextTest {
     @DisplayName("the schema that was live is recorded, since uploads swap it between runs")
     void storesActiveSchemaLabel() {
         ruleEngineAnswers();
-        when(activeSchema.active()).thenReturn(new SchemaSnapshot(
+        when(activeSchema.active(Dialect.MYSQL)).thenReturn(new SchemaSnapshot(
                 "upload-1", "shop.sql", "querysense_uploads",
                 List.of(new KnownSchema.Table("customers", List.of("id"))),
                 List.of(), Map.of("customers", 500), Instant.now()));

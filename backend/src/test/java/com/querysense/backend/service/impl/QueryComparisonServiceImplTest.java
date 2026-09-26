@@ -2,6 +2,7 @@ package com.querysense.backend.service.impl;
 
 import com.querysense.backend.dto.CompareResponse;
 import com.querysense.backend.dto.QueryAnalysisResult;
+import com.querysense.backend.dialect.Dialect;
 import com.querysense.backend.optimization.QueryRewriter;
 import com.querysense.backend.schema.ActiveSchemaProvider;
 import com.querysense.backend.schema.KnownSchema;
@@ -26,10 +27,10 @@ class QueryComparisonServiceImplTest {
     @BeforeEach
     void setUp() {
         ActiveSchemaProvider activeSchema = mock(ActiveSchemaProvider.class);
-        when(activeSchema.tables()).thenReturn(KnownSchema.TABLES);
-        when(activeSchema.findTable(anyString())).thenAnswer(call ->
+        when(activeSchema.tables(Dialect.MYSQL)).thenReturn(KnownSchema.TABLES);
+        when(activeSchema.findTable(eq(Dialect.MYSQL), anyString())).thenAnswer(call ->
                 KnownSchema.TABLES.stream()
-                        .filter(t -> t.name().equalsIgnoreCase(call.getArgument(0)))
+                        .filter(t -> t.name().equalsIgnoreCase(call.getArgument(1)))
                         .findFirst());
 
         analysis = mock(QueryAnalysisService.class);

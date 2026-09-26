@@ -1,5 +1,6 @@
 package com.querysense.backend.schema.upload;
 
+import com.querysense.backend.dialect.Dialect;
 import com.querysense.backend.exception.SchemaUploadException;
 import com.querysense.backend.schema.ActiveSchemaProvider;
 import com.querysense.backend.schema.SchemaSnapshot;
@@ -86,7 +87,7 @@ public class SchemaUploadService {
 
     public SchemaSnapshot reset() {
         this.lastWarnings = List.of();
-        return activeSchema.resetToBuiltIn();
+        return activeSchema.resetToBuiltIn(Dialect.MYSQL);
     }
 
     public List<String> lastWarnings() {

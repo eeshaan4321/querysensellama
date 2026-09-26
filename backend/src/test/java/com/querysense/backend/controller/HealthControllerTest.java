@@ -1,5 +1,6 @@
 package com.querysense.backend.controller;
 
+import com.querysense.backend.dialect.Dialect;
 import com.querysense.backend.dto.HealthResponse;
 import com.querysense.backend.schema.ActiveSchemaProvider;
 import com.querysense.backend.schema.KnownSchema;
@@ -20,7 +21,7 @@ class HealthControllerTest {
     @DisplayName("the probe reports up, so a caller can branch on a field not a string")
     void reportsUp() {
         ActiveSchemaProvider schema = mock(ActiveSchemaProvider.class);
-        when(schema.active()).thenReturn(KnownSchema.builtIn());
+        when(schema.active(Dialect.MYSQL)).thenReturn(KnownSchema.builtIn());
 
         HealthResponse response = controllerWith(schema).health();
 
@@ -31,7 +32,7 @@ class HealthControllerTest {
     @DisplayName("the live schema is named, so a probe says which schema is answering")
     void namesActiveSchema() {
         ActiveSchemaProvider schema = mock(ActiveSchemaProvider.class);
-        when(schema.active()).thenReturn(KnownSchema.builtIn());
+        when(schema.active(Dialect.MYSQL)).thenReturn(KnownSchema.builtIn());
 
         HealthResponse response = controllerWith(schema).health();
 
@@ -43,7 +44,7 @@ class HealthControllerTest {
     @DisplayName("the legacy string endpoint still answers, so old probes do not break")
     void legacyStringEndpointSurvives() {
         ActiveSchemaProvider schema = mock(ActiveSchemaProvider.class);
-        when(schema.active()).thenReturn(KnownSchema.builtIn());
+        when(schema.active(Dialect.MYSQL)).thenReturn(KnownSchema.builtIn());
 
         assertThat(controllerWith(schema).test()).isEqualTo("QuerySense Running");
     }

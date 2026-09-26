@@ -5,6 +5,7 @@ import com.querysense.backend.model.QueryHistory;
 import com.querysense.backend.querybuilder.GeneratedQueryValidator;
 import com.querysense.backend.querybuilder.RuleBasedQueryBuilder;
 import com.querysense.backend.querybuilder.RuleBuildResult;
+import com.querysense.backend.dialect.Dialect;
 import com.querysense.backend.repository.QueryHistoryRepository;
 import com.querysense.backend.schema.ActiveSchemaProvider;
 import com.querysense.backend.schema.KnownSchema;
@@ -20,6 +21,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -43,12 +45,12 @@ class OffSchemaCacheRoundTripTest {
         stored = new ArrayList<>();
 
         ActiveSchemaProvider activeSchema = mock(ActiveSchemaProvider.class);
-        when(activeSchema.tables()).thenReturn(KnownSchema.TABLES);
-        when(activeSchema.findTable(anyString())).thenAnswer(call ->
+        when(activeSchema.tables(Dialect.MYSQL)).thenReturn(KnownSchema.TABLES);
+        when(activeSchema.findTable(eq(Dialect.MYSQL), anyString())).thenAnswer(call ->
                 KnownSchema.TABLES.stream()
-                        .filter(t -> t.name().equalsIgnoreCase(call.getArgument(0)))
+                        .filter(t -> t.name().equalsIgnoreCase(call.getArgument(1)))
                         .findFirst());
-        when(activeSchema.detectTablesMentioned(anyString())).thenReturn(List.of());
+        when(activeSchema.detectTablesMentioned(eq(Dialect.MYSQL), anyString())).thenReturn(List.of());
 
         QueryHistoryRepository history = mock(QueryHistoryRepository.class);
         when(history.save(any())).thenAnswer(call -> {
@@ -69,7 +71,7 @@ class OffSchemaCacheRoundTripTest {
 
         llm = mock(LlmFallbackService.class);
 
-        when(activeSchema.active()).thenReturn(KnownSchema.builtIn());
+        when(activeSchema.active(Dialect.MYSQL)).thenReturn(KnownSchema.builtIn());
 
         service = new QueryGenerationServiceImpl(
                 rules, history, llm, new GeneratedQueryValidator(activeSchema), activeSchema);

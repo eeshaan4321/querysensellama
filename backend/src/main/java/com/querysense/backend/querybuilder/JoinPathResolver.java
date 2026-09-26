@@ -1,5 +1,6 @@
 package com.querysense.backend.querybuilder;
 
+import com.querysense.backend.dialect.Dialect;
 import com.querysense.backend.schema.ActiveSchemaProvider;
 import com.querysense.backend.schema.KnownSchema;
 import org.springframework.stereotype.Component;
@@ -29,7 +30,7 @@ public class JoinPathResolver {
             return new None();
         }
 
-        List<KnownSchema.ForeignKey> edges = activeSchema.foreignKeys().stream()
+        List<KnownSchema.ForeignKey> edges = activeSchema.foreignKeys(Dialect.MYSQL).stream()
                 .filter(fk -> !fk.fromTable().equalsIgnoreCase(fk.toTable()))
                 .filter(fk -> relates(fk, tableA, tableB))
                 .toList();

@@ -1,5 +1,6 @@
 package com.querysense.backend.controller;
 
+import com.querysense.backend.dialect.Dialect;
 import com.querysense.backend.dto.SchemaUploadRequest;
 import com.querysense.backend.dto.SchemaUploadResponse;
 import com.querysense.backend.exception.SchemaUploadException;
@@ -68,7 +69,7 @@ public class SchemaController {
 
     @GetMapping("/active")
     public SchemaUploadResponse active() {
-        return SchemaUploadResponse.from(activeSchema.active(), uploadService.lastWarnings());
+        return SchemaUploadResponse.from(activeSchema.active(Dialect.MYSQL), uploadService.lastWarnings());
     }
 
     @PostMapping("/reset")

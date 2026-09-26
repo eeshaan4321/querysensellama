@@ -1,7 +1,7 @@
 package com.querysense.backend.analysis;
 
+import com.querysense.backend.dialect.Dialect;
 import com.querysense.backend.schema.ActiveSchemaProvider;
-import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -25,10 +25,15 @@ public class SchemaMetadataService {
     public SchemaMetadataService(ExplainExecutor explainExecutor, ActiveSchemaProvider activeSchema) {
         this.explainExecutor = explainExecutor;
         this.activeSchema = activeSchema;
+        activeSchema.onSchemaChanged(dialect -> {
+            if (dialect == Dialect.MYSQL) {
+                clearCaches();
+            }
+        });
     }
 
-    void registerSchemaChangeListener() {
-        activeSchema.onSchemaChanged(this::clearCaches);
+    public Dialect dialect() {
+        return Dialect.MYSQL;
     }
 
     public void clearCaches() {
@@ -64,7 +69,7 @@ public class SchemaMetadataService {
     }
 
     private List<String> loadDistinctValues(String tableName, String columnName) {
-        boolean recognized = activeSchema.findTable(tableName)
+        boolean recognized = activeSchema.findTable(Dialect.MYSQL, tableName)
                 .map(table -> table.columns().stream().anyMatch(col -> col.equalsIgnoreCase(columnName)))
                 .orElse(false);
         if (!recognized) {

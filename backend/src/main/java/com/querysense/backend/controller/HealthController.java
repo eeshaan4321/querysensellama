@@ -1,5 +1,6 @@
 package com.querysense.backend.controller;
 
+import com.querysense.backend.dialect.Dialect;
 import com.querysense.backend.dto.HealthResponse;
 import com.querysense.backend.schema.ActiveSchemaProvider;
 import com.querysense.backend.schema.SchemaSnapshot;
@@ -18,7 +19,7 @@ public class HealthController {
 
     @GetMapping("/api/health")
     public HealthResponse health() {
-        SchemaSnapshot active = activeSchema.active();
+        SchemaSnapshot active = activeSchema.active(Dialect.MYSQL);
         return new HealthResponse("UP", active.label(), active.builtIn());
     }
 

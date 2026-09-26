@@ -1,5 +1,6 @@
 package com.querysense.backend.querybuilder;
 
+import com.querysense.backend.dialect.Dialect;
 import com.querysense.backend.schema.ActiveSchemaProvider;
 import com.querysense.backend.schema.KnownSchema;
 import net.sf.jsqlparser.JSQLParserException;
@@ -54,7 +55,7 @@ public class GeneratedQueryValidator {
 
         String sql = generatedQuery.toLowerCase();
 
-        List<KnownSchema.Table> mentionedTables = activeSchema.detectTablesMentioned(userInput);
+        List<KnownSchema.Table> mentionedTables = activeSchema.detectTablesMentioned(Dialect.MYSQL, userInput);
         if (mentionedTables.size() > 1) {
             boolean sqlReferencesEveryMentionedTable = mentionedTables.stream()
                     .allMatch(t -> sql.contains(t.name()) || sql.contains(t.singularName()));
@@ -79,7 +80,7 @@ public class GeneratedQueryValidator {
         if (!"MySQL".equalsIgnoreCase(databaseType) || generatedQuery == null) {
             return Optional.empty();
         }
-        if (activeSchema.tables().isEmpty()) {
+        if (activeSchema.tables(Dialect.MYSQL).isEmpty()) {
             return Optional.empty();
         }
 
@@ -98,7 +99,7 @@ public class GeneratedQueryValidator {
         List<KnownSchema.Table> resolved = new ArrayList<>();
 
         for (Table table : tablesOf(select)) {
-            Optional<KnownSchema.Table> known = activeSchema.findTable(table.getName());
+            Optional<KnownSchema.Table> known = activeSchema.findTable(Dialect.MYSQL, table.getName());
             if (known.isEmpty()) {
                 return Optional.of("'" + table.getName() + "' is not a table in the schema that is "
                         + "currently active, so this query cannot run against it.");

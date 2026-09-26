@@ -1,5 +1,6 @@
 package com.querysense.backend.analysis;
 
+import com.querysense.backend.dialect.Dialect;
 import com.querysense.backend.schema.ActiveSchemaProvider;
 import org.springframework.jdbc.core.ConnectionCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -22,7 +23,7 @@ public class ExplainExecutor {
     }
 
     public <T> T withActiveCatalog(Function<JdbcTemplate, T> work) {
-        String target = activeSchema.catalog();
+        String target = activeSchema.catalog(Dialect.MYSQL);
         return jdbcTemplate.execute((ConnectionCallback<T>) connection -> {
             if (target == null) {
                 return work.apply(scoped(connection));

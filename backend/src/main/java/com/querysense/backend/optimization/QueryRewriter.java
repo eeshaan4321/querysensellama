@@ -1,5 +1,6 @@
 package com.querysense.backend.optimization;
 
+import com.querysense.backend.dialect.Dialect;
 import com.querysense.backend.schema.ActiveSchemaProvider;
 import com.querysense.backend.schema.KnownSchema;
 import net.sf.jsqlparser.expression.Expression;
@@ -155,6 +156,6 @@ public class QueryRewriter {
 
     private Optional<KnownSchema.Table> singleTable(FromItem fromItem) {
         if (!(fromItem instanceof Table table)) return Optional.empty();
-        return activeSchema.findTable(table.getName());
+        return activeSchema.findTable(Dialect.MYSQL, table.getName());
     }
 }

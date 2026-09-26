@@ -1,5 +1,6 @@
 package com.querysense.backend.service.impl;
 
+import com.querysense.backend.dialect.Dialect;
 import com.querysense.backend.dto.QueryResponse;
 import com.querysense.backend.dto.RuleTrace;
 import com.querysense.backend.model.QueryHistory;
@@ -104,7 +105,7 @@ public class QueryGenerationServiceImpl implements QueryGenerationService {
     private Optional<QueryHistory> servableCacheHit(String input, String databaseType) {
         return queryHistoryRepository
                 .findFirstByUserInputIgnoreCaseAndDatabaseTypeIgnoreCaseAndSchemaLabel(
-                        input, databaseType, activeSchema.active().label())
+                        input, databaseType, activeSchema.active(Dialect.from(databaseType)).label())
                 .filter(row -> generatedQueryValidator
                         .namesUnknownIdentifiers(row.getGeneratedQuery(), databaseType)
                         .isEmpty());
@@ -119,7 +120,7 @@ public class QueryGenerationServiceImpl implements QueryGenerationService {
         history.setSource(source);
         history.setConfidence(confidence);
         history.setDurationMs(durationMs);
-        history.setSchemaLabel(activeSchema.active().label());
+        history.setSchemaLabel(activeSchema.active(Dialect.from(databaseType)).label());
         history.setCreatedAt(LocalDateTime.now());
 
         queryHistoryRepository.save(history);

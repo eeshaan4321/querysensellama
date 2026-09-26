@@ -1,5 +1,6 @@
 package com.querysense.backend.querybuilder;
 
+import com.querysense.backend.dialect.Dialect;
 import com.querysense.backend.schema.ActiveSchemaProvider;
 import com.querysense.backend.schema.KnownSchema;
 import org.junit.jupiter.api.BeforeEach;
@@ -11,6 +12,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -22,10 +24,10 @@ class GeneratedQueryValidatorTest {
     void setUp() {
         ActiveSchemaProvider activeSchema = mock(ActiveSchemaProvider.class);
 
-        when(activeSchema.tables()).thenReturn(KnownSchema.TABLES);
-        when(activeSchema.findTable(anyString())).thenAnswer(invocation ->
+        when(activeSchema.tables(Dialect.MYSQL)).thenReturn(KnownSchema.TABLES);
+        when(activeSchema.findTable(eq(Dialect.MYSQL), anyString())).thenAnswer(invocation ->
                 KnownSchema.TABLES.stream()
-                        .filter(t -> t.name().equalsIgnoreCase(invocation.getArgument(0)))
+                        .filter(t -> t.name().equalsIgnoreCase(invocation.getArgument(1)))
                         .findFirst());
 
         validator = new GeneratedQueryValidator(activeSchema);
@@ -111,8 +113,8 @@ class GeneratedQueryValidatorTest {
     @DisplayName("an empty active schema cannot disprove anything")
     void emptySchemaPasses() {
         ActiveSchemaProvider empty = mock(ActiveSchemaProvider.class);
-        when(empty.tables()).thenReturn(List.of());
-        when(empty.findTable(anyString())).thenReturn(Optional.empty());
+        when(empty.tables(Dialect.MYSQL)).thenReturn(List.of());
+        when(empty.findTable(eq(Dialect.MYSQL), anyString())).thenReturn(Optional.empty());
 
         Optional<String> reason = new GeneratedQueryValidator(empty)
                 .namesUnknownIdentifiers("SELECT id FROM customers;", "MySQL");

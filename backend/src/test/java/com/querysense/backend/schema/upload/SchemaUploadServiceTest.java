@@ -1,5 +1,6 @@
 package com.querysense.backend.schema.upload;
 
+import com.querysense.backend.dialect.Dialect;
 import com.querysense.backend.exception.SchemaUploadException;
 import com.querysense.backend.schema.ActiveSchemaProvider;
 import com.querysense.backend.schema.SchemaSnapshot;
@@ -61,7 +62,7 @@ class SchemaUploadServiceTest {
         assertThat(snapshot.tableNames()).containsExactly("customers", "orders");
         assertThat(snapshot.rowCountFor("customers")).isEqualTo(500);
         assertThat(snapshot.foreignKeys()).hasSize(1);
-        assertThat(activeSchema.active()).isEqualTo(snapshot);
+        assertThat(activeSchema.active(Dialect.MYSQL)).isEqualTo(snapshot);
     }
 
     @Test
@@ -85,7 +86,7 @@ class SchemaUploadServiceTest {
 
         verify(provisioner, never()).provision(any());
         verify(seeder, never()).seed(any());
-        assertThat(activeSchema.isBuiltIn()).isTrue();
+        assertThat(activeSchema.isBuiltIn(Dialect.MYSQL)).isTrue();
     }
 
     @Test
@@ -95,7 +96,7 @@ class SchemaUploadServiceTest {
                 .isInstanceOf(SchemaUploadException.class);
 
         verify(provisioner, never()).provision(any());
-        assertThat(activeSchema.isBuiltIn()).isTrue();
+        assertThat(activeSchema.isBuiltIn(Dialect.MYSQL)).isTrue();
     }
 
     @Test
@@ -115,7 +116,7 @@ class SchemaUploadServiceTest {
         SchemaSnapshot snapshot = service.reset();
 
         assertThat(snapshot.builtIn()).isTrue();
-        assertThat(activeSchema.isBuiltIn()).isTrue();
+        assertThat(activeSchema.isBuiltIn(Dialect.MYSQL)).isTrue();
     }
 
     @Test

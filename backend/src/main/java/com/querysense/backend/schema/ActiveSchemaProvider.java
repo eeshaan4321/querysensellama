@@ -1,68 +1,79 @@
 package com.querysense.backend.schema;
 
+import com.querysense.backend.dialect.Dialect;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Consumer;
 
-/** Holds the schema currently in use, built-in or uploaded. */
+/** Holds the schema currently in use for each dialect, built-in or uploaded. */
 @Component
 public class ActiveSchemaProvider {
 
     private static final Logger log = LoggerFactory.getLogger(ActiveSchemaProvider.class);
 
-    private volatile SchemaSnapshot active = KnownSchema.builtIn();
-    private final List<Runnable> schemaChangedListeners = new CopyOnWriteArrayList<>();
+    private final Map<Dialect, SchemaSnapshot> active = new EnumMap<>(Dialect.class);
+    private final List<Consumer<Dialect>> schemaChangedListeners = new CopyOnWriteArrayList<>();
 
-    public SchemaSnapshot active() {
-        return active;
+    public ActiveSchemaProvider() {
+        active.put(Dialect.MYSQL, KnownSchema.builtIn());
+        active.put(Dialect.MONGODB, KnownMongoSchema.builtIn());
     }
 
-    public boolean isBuiltIn() {
-        return active.builtIn();
+    public synchronized SchemaSnapshot active(Dialect dialect) {
+        return active.get(dialect);
     }
 
-    public String catalog() {
-        return active.catalog();
+    public boolean isBuiltIn(Dialect dialect) {
+        return active(dialect).builtIn();
     }
 
-    public List<KnownSchema.Table> tables() {
-        return active.tables();
+    public String catalog(Dialect dialect) {
+        return active(dialect).catalog();
     }
 
-    public List<KnownSchema.ForeignKey> foreignKeys() {
-        return active.foreignKeys();
+    public List<KnownSchema.Table> tables(Dialect dialect) {
+        return active(dialect).tables();
     }
 
-    public List<String> tableNames() {
-        return active.tableNames();
+    public List<KnownSchema.ForeignKey> foreignKeys(Dialect dialect) {
+        return active(dialect).foreignKeys();
     }
 
-    public Optional<KnownSchema.Table> findTable(String name) {
-        return SchemaLookup.findTable(active.tables(), name);
+    public List<String> tableNames(Dialect dialect) {
+        return active(dialect).tableNames();
     }
 
-    public List<KnownSchema.Table> detectTablesMentioned(String text) {
-        return SchemaLookup.detectTablesMentioned(active.tables(), text);
+    public Optional<KnownSchema.Table> findTable(Dialect dialect, String name) {
+        return SchemaLookup.findTable(tables(dialect), name);
     }
 
-    public void onSchemaChanged(Runnable listener) {
+    public List<KnownSchema.Table> detectTablesMentioned(Dialect dialect, String text) {
+        return SchemaLookup.detectTablesMentioned(tables(dialect), text);
+    }
+
+    public void onSchemaChanged(Consumer<Dialect> listener) {
         schemaChangedListeners.add(listener);
     }
 
     public SchemaSnapshot publish(SchemaSnapshot snapshot) {
-        this.active = snapshot;
-        log.info("Active schema is now '{}' — {} tables, catalog {}",
-                snapshot.label(), snapshot.tables().size(),
+        synchronized (this) {
+            active.put(snapshot.dialect(), snapshot);
+        }
+        log.info("Active {} schema is now '{}' — {} tables, catalog {}",
+                snapshot.dialect().label(), snapshot.label(), snapshot.tables().size(),
                 snapshot.catalog() == null ? "(connected database)" : snapshot.catalog());
-        schemaChangedListeners.forEach(Runnable::run);
+        schemaChangedListeners.forEach(l -> l.accept(snapshot.dialect()));
         return snapshot;
     }
 
-    public SchemaSnapshot resetToBuiltIn() {
-        return publish(KnownSchema.builtIn());
+    public SchemaSnapshot resetToBuiltIn(Dialect dialect) {
+        return publish(dialect == Dialect.MONGODB ? KnownMongoSchema.builtIn() : KnownSchema.builtIn());
     }
 }

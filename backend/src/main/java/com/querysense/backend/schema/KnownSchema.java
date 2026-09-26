@@ -8,7 +8,11 @@ import java.util.Optional;
 /** The built-in demo schema: tables, columns and foreign keys. */
 public final class KnownSchema {
 
-    public record Table(String name, List<String> columns) {
+    public record Table(String name, List<String> columns, List<String> embeddedArrays) {
+        public Table(String name, List<String> columns) {
+            this(name, columns, List.of());
+        }
+
         public String singularName() {
             if (name.endsWith("ies")) {
                 return name.substring(0, name.length() - 3) + "y";

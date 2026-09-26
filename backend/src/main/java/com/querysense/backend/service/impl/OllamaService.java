@@ -1,5 +1,6 @@
 package com.querysense.backend.service.impl;
 
+import com.querysense.backend.dialect.Dialect;
 import com.querysense.backend.exception.LlmUnavailableException;
 import com.querysense.backend.schema.ActiveSchemaProvider;
 import com.querysense.backend.schema.KnownSchema;
@@ -128,8 +129,8 @@ public class OllamaService implements LlmFallbackService {
             return "";
         }
 
-        List<KnownSchema.Table> mentioned = activeSchema.detectTablesMentioned(userInput);
-        List<KnownSchema.Table> tables = mentioned.isEmpty() ? activeSchema.tables() : mentioned;
+        List<KnownSchema.Table> mentioned = activeSchema.detectTablesMentioned(Dialect.MYSQL, userInput);
+        List<KnownSchema.Table> tables = mentioned.isEmpty() ? activeSchema.tables(Dialect.MYSQL) : mentioned;
         if (tables.isEmpty()) {
             return "";
         }
@@ -141,7 +142,7 @@ public class OllamaService implements LlmFallbackService {
                     .append("(").append(String.join(", ", table.columns())).append(")\n");
         }
 
-        for (KnownSchema.ForeignKey fk : activeSchema.foreignKeys()) {
+        for (KnownSchema.ForeignKey fk : activeSchema.foreignKeys(Dialect.MYSQL)) {
             boolean fromMentioned = tables.stream().anyMatch(t -> t.name().equals(fk.fromTable()));
             boolean toMentioned = tables.stream().anyMatch(t -> t.name().equals(fk.toTable()));
             if (fromMentioned && toMentioned) {

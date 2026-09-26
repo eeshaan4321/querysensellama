@@ -1,5 +1,6 @@
 package com.querysense.backend.querybuilder;
 
+import com.querysense.backend.dialect.Dialect;
 import com.querysense.backend.schema.ActiveSchemaProvider;
 import com.querysense.backend.schema.KnownSchema;
 import org.springframework.stereotype.Component;
@@ -38,7 +39,7 @@ public class SchemaBinder {
 
     public List<KnownSchema.Table> bindTables(String normalizedText) {
         List<Span> spans = new ArrayList<>();
-        for (KnownSchema.Table table : activeSchema.tables()) {
+        for (KnownSchema.Table table : activeSchema.tables(Dialect.MYSQL)) {
             longestSpanFor(normalizedText, table).ifPresent(spans::add);
         }
 
@@ -98,10 +99,10 @@ public class SchemaBinder {
     }
 
     public List<KnownSchema.Table> tables() {
-        return activeSchema.tables();
+        return activeSchema.tables(Dialect.MYSQL);
     }
 
     public Optional<KnownSchema.Table> tableNamed(String name) {
-        return activeSchema.findTable(name);
+        return activeSchema.findTable(Dialect.MYSQL, name);
     }
 }

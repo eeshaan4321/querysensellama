@@ -1,5 +1,6 @@
 package com.querysense.backend.optimization;
 
+import com.querysense.backend.dialect.Dialect;
 import com.querysense.backend.schema.ActiveSchemaProvider;
 import com.querysense.backend.schema.KnownSchema;
 import org.junit.jupiter.api.BeforeEach;
@@ -8,6 +9,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -18,10 +20,10 @@ class QueryRewriterTest {
     @BeforeEach
     void setUp() {
         ActiveSchemaProvider activeSchema = mock(ActiveSchemaProvider.class);
-        when(activeSchema.tables()).thenReturn(KnownSchema.TABLES);
-        when(activeSchema.findTable(anyString())).thenAnswer(call ->
+        when(activeSchema.tables(Dialect.MYSQL)).thenReturn(KnownSchema.TABLES);
+        when(activeSchema.findTable(eq(Dialect.MYSQL), anyString())).thenAnswer(call ->
                 KnownSchema.TABLES.stream()
-                        .filter(t -> t.name().equalsIgnoreCase(call.getArgument(0)))
+                        .filter(t -> t.name().equalsIgnoreCase(call.getArgument(1)))
                         .findFirst());
         rewriter = new QueryRewriter(activeSchema);
     }
