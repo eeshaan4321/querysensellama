@@ -3,6 +3,7 @@ package com.querysense.backend.service.impl;
 import com.querysense.backend.dialect.Dialect;
 import com.querysense.backend.dto.QueryResponse;
 import com.querysense.backend.dto.RuleTrace;
+import com.querysense.backend.enums.ResourceLevel;
 import com.querysense.backend.model.QueryHistory;
 import com.querysense.backend.querybuilder.GeneratedQueryValidator;
 import com.querysense.backend.querybuilder.RuleBasedQueryBuilder;
@@ -50,7 +51,7 @@ public class QueryGenerationServiceImpl implements QueryGenerationService {
     }
 
     @Override
-    public QueryResponse generateQuery(String input, String databaseType) {
+    public QueryResponse generateQuery(String input, String databaseType, ResourceLevel resourceLevel) {
 
         long startedAt = System.nanoTime();
         String generatedSql;
@@ -95,7 +96,7 @@ public class QueryGenerationServiceImpl implements QueryGenerationService {
         long durationMs = (System.nanoTime() - startedAt) / 1_000_000;
 
         if (schemaWarning == null) {
-            saveToHistory(input, generatedSql, databaseType, source, confidence, durationMs);
+            saveToHistory(input, generatedSql, databaseType, source, confidence, durationMs, resourceLevel);
         }
 
         return new QueryResponse(generatedSql, databaseType, source, confidence, trace, schemaWarning);
@@ -112,7 +113,7 @@ public class QueryGenerationServiceImpl implements QueryGenerationService {
     }
 
     private void saveToHistory(String input, String generatedSql, String databaseType,
-                               String source, double confidence, long durationMs) {
+                               String source, double confidence, long durationMs, ResourceLevel resourceLevel) {
         QueryHistory history = new QueryHistory();
         history.setUserInput(input);
         history.setGeneratedQuery(generatedSql);
@@ -121,6 +122,7 @@ public class QueryGenerationServiceImpl implements QueryGenerationService {
         history.setConfidence(confidence);
         history.setDurationMs(durationMs);
         history.setSchemaLabel(activeSchema.active(Dialect.from(databaseType)).label());
+        history.setResourceLevel(resourceLevel);
         history.setCreatedAt(LocalDateTime.now());
 
         queryHistoryRepository.save(history);

@@ -16,6 +16,10 @@ function formatDuration(ms) {
   return ms == null ? EMPTY : `${ms.toLocaleString()} ms`;
 }
 
+function formatResourceLevel(level) {
+  return level ? level.charAt(0) + level.slice(1).toLowerCase() : EMPTY;
+}
+
 export function HistoryTable({ records }) {
   return (
     <table className="history-table">
@@ -26,6 +30,7 @@ export function HistoryTable({ records }) {
           <th>Handled by</th>
           <th>Confidence</th>
           <th>Schema</th>
+          <th>Resources</th>
           <th>Took</th>
           <th>When</th>
         </tr>
@@ -38,6 +43,7 @@ export function HistoryTable({ records }) {
             <td><EngineBadge handledBy={r.source} size="sm" /></td>
             <td className="history-table__meta">{formatConfidence(r.confidence)}</td>
             <td className="history-table__meta">{r.schemaLabel || EMPTY}</td>
+            <td className="history-table__meta">{formatResourceLevel(r.resourceLevel)}</td>
             <td className="history-table__meta">{formatDuration(r.durationMs)}</td>
             <td className="history-table__time">{formatTime(r.createdAt)}</td>
           </tr>

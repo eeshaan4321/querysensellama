@@ -1,5 +1,6 @@
 package com.querysense.backend.dto;
 
+import com.querysense.backend.enums.ResourceLevel;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
@@ -13,6 +14,8 @@ public class QueryRequest {
     @NotBlank(message = "Database type must not be blank")
     private String databaseType;
 
+    private ResourceLevel resourceLevel;
+
     public QueryRequest() {}
 
     public QueryRequest(String query, String databaseType) {
@@ -25,4 +28,7 @@ public class QueryRequest {
 
     public String getDatabaseType() { return databaseType; }
     public void setDatabaseType(String databaseType) { this.databaseType = databaseType; }
+
+    public ResourceLevel getResourceLevel() { return resourceLevel; }
+    public void setResourceLevel(ResourceLevel resourceLevel) { this.resourceLevel = resourceLevel; }
 }

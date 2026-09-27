@@ -29,7 +29,8 @@ public class QueryController {
     public QueryResponse generate(@Valid @RequestBody QueryRequest request) {
         return service.generateQuery(
                 request.getQuery(),
-                request.getDatabaseType()
+                request.getDatabaseType(),
+                request.getResourceLevel()
         );
     }
 

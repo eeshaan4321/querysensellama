@@ -1,6 +1,7 @@
 package com.querysense.backend.service.impl;
 
 import com.querysense.backend.dto.RuleTrace;
+import com.querysense.backend.enums.ResourceLevel;
 import com.querysense.backend.model.QueryHistory;
 import com.querysense.backend.querybuilder.GeneratedQueryValidator;
 import com.querysense.backend.querybuilder.RuleBasedQueryBuilder;
@@ -156,5 +157,29 @@ class QueryHistoryRunContextTest {
                 .generateQuery("top buyers by spend", "MySQL");
 
         assertThat(stored).isEmpty();
+    }
+
+    @Test
+    @DisplayName("the resource level the run was made under is stored")
+    void storesResourceLevel() {
+        ruleEngineAnswers();
+
+        service.generateQuery("Show all customers", "MySQL", ResourceLevel.LOW);
+
+        assertThat(stored).singleElement()
+                .extracting(QueryHistory::getResourceLevel)
+                .isEqualTo(ResourceLevel.LOW);
+    }
+
+    @Test
+    @DisplayName("a caller that sends no resource level stores none, rather than a guessed default")
+    void noResourceLevelStoresNull() {
+        ruleEngineAnswers();
+
+        service.generateQuery("Show all customers", "MySQL");
+
+        assertThat(stored).singleElement()
+                .extracting(QueryHistory::getResourceLevel)
+                .isNull();
     }
 }

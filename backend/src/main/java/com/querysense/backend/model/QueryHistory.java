@@ -1,5 +1,6 @@
 package com.querysense.backend.model;
 
+import com.querysense.backend.enums.ResourceLevel;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -35,6 +36,9 @@ public class QueryHistory {
     private Long durationMs;
 
     private String schemaLabel;
+
+    @Enumerated(EnumType.STRING)
+    private ResourceLevel resourceLevel;
 
     private LocalDateTime createdAt;
 }

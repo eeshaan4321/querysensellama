@@ -21,7 +21,7 @@ export function WorkbenchPage() {
     setLoading(true);
     setError(null);
     try {
-      const response = await buildQuery({ naturalLanguageQuery, targetDb });
+      const response = await buildQuery({ naturalLanguageQuery, targetDb, resourceLevel });
       setBuild({ naturalLanguageQuery, ...response });
       setAnalysis(null);
       setSuggestions(null);

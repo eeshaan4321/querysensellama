@@ -42,4 +42,13 @@ describe('HistoryTable', () => {
   it('does not round a low confidence up to a reassuring number', () => {
     expect(within(rowFor({ ...RECORD, confidence: 0.2 })).getByText('20%')).toBeInTheDocument();
   });
+
+  it('shows the resource level the run was made under', () => {
+    expect(within(rowFor({ ...RECORD, resourceLevel: 'LOW' })).getByText('Low')).toBeInTheDocument();
+  });
+
+  it('shows a dash for a run recorded before resource level was stored', () => {
+    const row = rowFor({ ...RECORD, resourceLevel: null, confidence: null, durationMs: null, schemaLabel: null });
+    expect(within(row).getAllByText('—').length).toBeGreaterThanOrEqual(4);
+  });
 });
