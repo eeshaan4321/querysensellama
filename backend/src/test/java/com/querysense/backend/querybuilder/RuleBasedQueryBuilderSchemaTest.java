@@ -1,6 +1,7 @@
 package com.querysense.backend.querybuilder;
 
-import com.querysense.backend.analysis.SchemaMetadataService;
+import com.querysense.backend.analysis.SchemaMetadata;
+import com.querysense.backend.dialect.Dialect;
 import com.querysense.backend.schema.ActiveSchemaProvider;
 import com.querysense.backend.schema.KnownSchema;
 import com.querysense.backend.schema.SchemaSnapshot;
@@ -24,16 +25,15 @@ class RuleBasedQueryBuilderSchemaTest {
 
     @BeforeEach
     void setUp() {
-        SchemaMetadataService metadata = mock(SchemaMetadataService.class);
+        SchemaMetadata metadata = mock(SchemaMetadata.class);
+        when(metadata.dialect()).thenReturn(Dialect.MYSQL);
+        SchemaMetadata mongoMetadata = mock(SchemaMetadata.class);
+        when(mongoMetadata.dialect()).thenReturn(Dialect.MONGODB);
         when(metadata.getDistinctValues(anyString(), anyString())).thenReturn(List.of());
         when(metadata.getColumnNames(anyString())).thenReturn(List.of());
         activeSchema = new ActiveSchemaProvider();
         builder = new RuleBasedQueryBuilder(
-                new QueryIntentParser(
-                        new SchemaBinder(activeSchema),
-                        new JoinPathResolver(activeSchema),
-                        metadata,
-                        new SqlEmitter()));
+                TestParsers.parser(activeSchema, metadata, mongoMetadata));
     }
 
     @Test

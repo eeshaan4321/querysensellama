@@ -37,9 +37,9 @@ public class SchemaBinder {
         }
     }
 
-    public List<KnownSchema.Table> bindTables(String normalizedText) {
+    public List<KnownSchema.Table> bindTables(String normalizedText, Dialect dialect) {
         List<Span> spans = new ArrayList<>();
-        for (KnownSchema.Table table : activeSchema.tables(Dialect.MYSQL)) {
+        for (KnownSchema.Table table : activeSchema.tables(dialect)) {
             longestSpanFor(normalizedText, table).ifPresent(spans::add);
         }
 
@@ -74,35 +74,40 @@ public class SchemaBinder {
             return Optional.empty();
         }
         String underscored = token.replace(' ', '_');
-
-        for (String col : table.columns()) {
-            if (col.equalsIgnoreCase(token) || col.equalsIgnoreCase(underscored)) {
-                return Optional.of(col);
-            }
-        }
-
         String singular = underscored.endsWith("s") && underscored.length() > 1
                 ? underscored.substring(0, underscored.length() - 1)
                 : underscored;
-        for (String col : table.columns()) {
-            if (col.equalsIgnoreCase(singular)) {
-                return Optional.of(col);
+
+        for (String candidate : List.of(underscored, singular)) {
+            for (String col : table.columns()) {
+                String snake = snakeCase(col);
+                if (col.equalsIgnoreCase(candidate) || snake.equals(candidate)
+                        || snake.equals("_" + candidate)) {
+                    return Optional.of(col);
+                }
             }
         }
 
         List<String> suffixMatches = table.columns().stream()
-                .filter(col -> col.toLowerCase(Locale.ROOT).endsWith("_" + singular)
-                        || col.toLowerCase(Locale.ROOT).endsWith("_" + underscored))
+                .filter(col -> {
+                    String snake = snakeCase(col);
+                    return snake.endsWith("_" + singular) || snake.endsWith("_" + underscored)
+                            || snake.endsWith("." + singular) || snake.endsWith("." + underscored);
+                })
                 .distinct()
                 .toList();
         return suffixMatches.size() == 1 ? Optional.of(suffixMatches.get(0)) : Optional.empty();
     }
 
-    public List<KnownSchema.Table> tables() {
-        return activeSchema.tables(Dialect.MYSQL);
+    static String snakeCase(String column) {
+        return column.replaceAll("([a-z0-9])([A-Z])", "$1_$2").toLowerCase(Locale.ROOT);
     }
 
-    public Optional<KnownSchema.Table> tableNamed(String name) {
-        return activeSchema.findTable(Dialect.MYSQL, name);
+    public List<KnownSchema.Table> tables(Dialect dialect) {
+        return activeSchema.tables(dialect);
+    }
+
+    public Optional<KnownSchema.Table> tableNamed(String name, Dialect dialect) {
+        return activeSchema.findTable(dialect, name);
     }
 }

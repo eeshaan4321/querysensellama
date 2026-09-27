@@ -1,6 +1,7 @@
 package com.querysense.backend.querybuilder;
 
-import com.querysense.backend.analysis.SchemaMetadataService;
+import com.querysense.backend.analysis.SchemaMetadata;
+import com.querysense.backend.dialect.Dialect;
 import com.querysense.backend.schema.ActiveSchemaProvider;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -20,17 +21,16 @@ class DeclineBoundaryTest {
 
     @BeforeEach
     void setUp() {
-        SchemaMetadataService metadata = mock(SchemaMetadataService.class);
+        SchemaMetadata metadata = mock(SchemaMetadata.class);
+        when(metadata.dialect()).thenReturn(Dialect.MYSQL);
+        SchemaMetadata mongoMetadata = mock(SchemaMetadata.class);
+        when(mongoMetadata.dialect()).thenReturn(Dialect.MONGODB);
         when(metadata.getDistinctValues(anyString(), anyString())).thenReturn(List.of());
         when(metadata.getColumnNames(anyString())).thenReturn(List.of());
 
         ActiveSchemaProvider activeSchema = new ActiveSchemaProvider();
         builder = new RuleBasedQueryBuilder(
-                new QueryIntentParser(
-                        new SchemaBinder(activeSchema),
-                        new JoinPathResolver(activeSchema),
-                        metadata,
-                        new SqlEmitter()));
+                TestParsers.parser(activeSchema, metadata, mongoMetadata));
     }
 
     @ParameterizedTest
@@ -55,10 +55,10 @@ class DeclineBoundaryTest {
     }
 
     @ParameterizedTest
-    @DisplayName("MongoDB always declines, however simple the question is")
-    @ValueSource(strings = {"Show all customers", "how many orders are there"})
-    void mongoAlwaysDeclines(String input) {
-        assertThat(builder.build(input, "MongoDB").built()).isFalse();
+    @DisplayName("MongoDB declines the same questions MySQL does")
+    @ValueSource(strings = {"orders from last month", "customers and suppliers", "delete all customers"})
+    void mongoDeclinesWhatMysqlDeclines(String input) {
+        assertThat(builder.build(input, "MongoDB").built()).as("input: %s", input).isFalse();
     }
 
     @ParameterizedTest

@@ -1,5 +1,6 @@
 package com.querysense.backend.querybuilder;
 
+import com.querysense.backend.dialect.Dialect;
 import com.querysense.backend.schema.ActiveSchemaProvider;
 import com.querysense.backend.schema.KnownSchema;
 import com.querysense.backend.schema.SchemaSnapshot;
@@ -27,17 +28,17 @@ class JoinPathResolverTest {
     @Test
     @DisplayName("one declared FK resolves, whichever order the tables are given")
     void singleEdgeResolvesInEitherDirection() {
-        assertThat(resolver.resolve("orders", "customers"))
+        assertThat(resolver.resolve("orders", "customers", Dialect.MYSQL))
                 .isInstanceOfSatisfying(JoinPathResolver.Resolved.class, r ->
                         assertThat(r.edge().fromColumn()).isEqualTo("customer_id"));
-        assertThat(resolver.resolve("customers", "orders"))
+        assertThat(resolver.resolve("customers", "orders", Dialect.MYSQL))
                 .isInstanceOf(JoinPathResolver.Resolved.class);
     }
 
     @Test
     @DisplayName("no declared relationship means None — a name convention is not a join")
     void unrelatedTablesResolveToNone() {
-        assertThat(resolver.resolve("customers", "suppliers"))
+        assertThat(resolver.resolve("customers", "suppliers", Dialect.MYSQL))
                 .isInstanceOf(JoinPathResolver.None.class);
     }
 
@@ -46,7 +47,7 @@ class JoinPathResolverTest {
     void twoEdgesAreAmbiguous() {
         activeSchema.publish(twoPathSchema());
 
-        assertThat(resolver.resolve("orders", "addresses"))
+        assertThat(resolver.resolve("orders", "addresses", Dialect.MYSQL))
                 .isInstanceOfSatisfying(JoinPathResolver.Ambiguous.class, a ->
                         assertThat(a.edges()).hasSize(2));
     }
@@ -54,7 +55,7 @@ class JoinPathResolverTest {
     @Test
     @DisplayName("a self-referencing FK never produces a join")
     void selfReferencingEdgeExcluded() {
-        assertThat(resolver.resolve("employees", "employees"))
+        assertThat(resolver.resolve("employees", "employees", Dialect.MYSQL))
                 .isInstanceOf(JoinPathResolver.None.class);
     }
 

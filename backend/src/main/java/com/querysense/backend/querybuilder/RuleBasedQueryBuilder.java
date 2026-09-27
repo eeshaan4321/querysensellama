@@ -1,11 +1,12 @@
 package com.querysense.backend.querybuilder;
 
+import com.querysense.backend.dialect.Dialect;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
 import java.util.Optional;
 
-/** Rule engine entry point: builds SQL from a question or declines. */
+/** Rule engine entry point: builds a query in the requested dialect from a question, or declines. */
 @Component
 public class RuleBasedQueryBuilder {
 
@@ -16,15 +17,11 @@ public class RuleBasedQueryBuilder {
     }
 
     public RuleBuildResult build(String input, String databaseType) {
+        Dialect dialect = Dialect.from(databaseType);
         if (input == null || input.isBlank()) {
             return RuleBuildResult.declined("The question was empty.", List.of());
         }
-        if ("MongoDB".equalsIgnoreCase(databaseType)) {
-            return RuleBuildResult.declined(
-                    "This engine builds SQL only, so MongoDB questions go to the language model.",
-                    List.of());
-        }
-        return parser.parse(input);
+        return parser.parse(input, dialect);
     }
 
     public Optional<String> tryBuild(String input, String databaseType) {

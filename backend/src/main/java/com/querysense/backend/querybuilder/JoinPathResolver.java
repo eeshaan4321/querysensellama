@@ -25,12 +25,12 @@ public class JoinPathResolver {
         this.activeSchema = activeSchema;
     }
 
-    public JoinResolution resolve(String tableA, String tableB) {
+    public JoinResolution resolve(String tableA, String tableB, Dialect dialect) {
         if (tableA == null || tableB == null) {
             return new None();
         }
 
-        List<KnownSchema.ForeignKey> edges = activeSchema.foreignKeys(Dialect.MYSQL).stream()
+        List<KnownSchema.ForeignKey> edges = activeSchema.foreignKeys(dialect).stream()
                 .filter(fk -> !fk.fromTable().equalsIgnoreCase(fk.toTable()))
                 .filter(fk -> relates(fk, tableA, tableB))
                 .toList();

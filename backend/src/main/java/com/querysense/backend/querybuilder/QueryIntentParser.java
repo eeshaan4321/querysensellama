@@ -1,6 +1,8 @@
 package com.querysense.backend.querybuilder;
 
-import com.querysense.backend.analysis.SchemaMetadataService;
+import com.querysense.backend.analysis.SchemaMetadata;
+import com.querysense.backend.dialect.Dialect;
+import com.querysense.backend.dialect.DialectRegistry;
 import com.querysense.backend.dto.RuleTrace;
 import com.querysense.backend.schema.KnownSchema;
 import org.springframework.stereotype.Component;
@@ -102,20 +104,21 @@ public class QueryIntentParser {
 
     private final SchemaBinder binder;
     private final JoinPathResolver joins;
-    private final SchemaMetadataService metadata;
-    private final SqlEmitter emitter;
+    private final DialectRegistry<SchemaMetadata> metadataByDialect;
+    private final DialectRegistry<QueryEmitter> emitters;
 
     public QueryIntentParser(SchemaBinder binder, JoinPathResolver joins,
-                             SchemaMetadataService metadata, SqlEmitter emitter) {
+                             List<SchemaMetadata> metadata, List<QueryEmitter> emitters) {
         this.binder = binder;
         this.joins = joins;
-        this.metadata = metadata;
-        this.emitter = emitter;
+        this.metadataByDialect = new DialectRegistry<>(metadata, "schema metadata");
+        this.emitters = new DialectRegistry<>(emitters, "query emitter");
     }
 
-    public RuleBuildResult parse(String rawInput) {
+    public RuleBuildResult parse(String rawInput, Dialect dialect) {
         String text = SchemaBinder.normalize(rawInput);
         List<RuleTrace.Binding> bindings = new ArrayList<>();
+        SchemaMetadata metadata = metadataByDialect.get(dialect);
 
         if (TEMPORAL.matcher(text).find()) {
             return RuleBuildResult.declined(
@@ -124,7 +127,7 @@ public class QueryIntentParser {
                     bindings);
         }
 
-        List<KnownSchema.Table> tables = binder.bindTables(text);
+        List<KnownSchema.Table> tables = binder.bindTables(text, dialect);
         if (tables.isEmpty()) {
             return RuleBuildResult.declined(
                     "Nothing in the question matches a table in the schema that is currently active.",
@@ -143,7 +146,7 @@ public class QueryIntentParser {
         QueryIntent.JoinSpec joinSpec = null;
         RuleTrace.JoinEdge joinEdge = null;
         if (related != null) {
-            JoinPathResolver.JoinResolution resolution = joins.resolve(subject.name(), related.name());
+            JoinPathResolver.JoinResolution resolution = joins.resolve(subject.name(), related.name(), dialect);
             if (resolution instanceof JoinPathResolver.None) {
                 return RuleBuildResult.declined(
                         "The schema declares no relationship between " + subject.name() + " and "
@@ -209,7 +212,7 @@ public class QueryIntentParser {
         }
 
         if (!projectionRequested && !countRequested) {
-            Optional<String> tail = extractTrailingColumnPhrase(text, subject);
+            Optional<String> tail = extractTrailingColumnPhrase(text, subject, dialect);
             if (tail.isPresent()) {
                 List<String> resolved = resolveChunks(tail.get(), subject);
                 if (resolved == null) {
@@ -309,11 +312,11 @@ public class QueryIntentParser {
 
             for (String candidate : preposition.group(1).split("\s+and\s+")) {
                 if (VALUE_STOPWORDS.contains(candidate)
-                        || binder.tableNamed(candidate).isPresent()
+                        || binder.tableNamed(candidate, dialect).isPresent()
                         || isColumnOfEither(candidate, subject, related)) {
                     break;
                 }
-                Optional<ValueMatch> match = columnHolding(subject, candidate);
+                Optional<ValueMatch> match = columnHolding(subject, candidate, metadata);
                 if (match.isEmpty()) {
                     if (!values.isEmpty()) {
                         break;
@@ -365,7 +368,7 @@ public class QueryIntentParser {
             Optional<Integer> number = numberFrom(value);
             QueryIntent.Literal literalValue = number.isPresent()
                     ? new QueryIntent.Literal(value, true, number.get())
-                    : QueryIntent.Literal.text(value, storedValueOf(subject, column.get(), value));
+                    : QueryIntent.Literal.text(value, storedValueOf(subject, column.get(), value, metadata));
             where.add(new QueryIntent.Predicate(qualify(column.get(), subject, joined),
                     QueryIntent.Op.EQ, List.of(literalValue)));
             bindings.add(new RuleTrace.Binding(with.group(1) + " " + value, "FILTER",
@@ -444,7 +447,12 @@ public class QueryIntentParser {
                 List.copyOf(selectItems), List.copyOf(where), List.copyOf(having),
                 List.copyOf(orderBy), limit);
 
-        String sql = emitter.emit(intent);
+        String sql;
+        try {
+            sql = emitters.get(dialect).emit(intent);
+        } catch (UnexpressibleIntentException e) {
+            return RuleBuildResult.declined(e.getMessage(), bindings);
+        }
         RuleTrace trace = new RuleTrace(
                 RuleTrace.BUILT,
                 shapeOf(intent),
@@ -491,7 +499,8 @@ public class QueryIntentParser {
 
     private record ValueMatch(String column, String stored) {}
 
-    private Optional<ValueMatch> columnHolding(KnownSchema.Table table, String value) {
+    private Optional<ValueMatch> columnHolding(KnownSchema.Table table, String value,
+                                              SchemaMetadata metadata) {
         for (String column : table.columns()) {
             Optional<String> stored = metadata.getDistinctValues(table.name(), column).stream()
                     .filter(v -> v != null && v.equalsIgnoreCase(value))
@@ -503,7 +512,8 @@ public class QueryIntentParser {
         return Optional.empty();
     }
 
-    private String storedValueOf(KnownSchema.Table table, String column, String value) {
+    private String storedValueOf(KnownSchema.Table table, String column, String value,
+                                 SchemaMetadata metadata) {
         return metadata.getDistinctValues(table.name(), column).stream()
                 .filter(v -> v != null && v.equalsIgnoreCase(value))
                 .findFirst()
@@ -562,7 +572,8 @@ public class QueryIntentParser {
         }
     }
 
-    private Optional<String> extractTrailingColumnPhrase(String text, KnownSchema.Table table) {
+    private Optional<String> extractTrailingColumnPhrase(String text, KnownSchema.Table table,
+                                                         Dialect dialect) {
         Pattern pattern = Pattern.compile(
                 "\\b(?:" + Pattern.quote(SchemaBinder.normalize(table.name()))
                         + "|" + Pattern.quote(SchemaBinder.normalize(table.singularName()))
@@ -582,7 +593,7 @@ public class QueryIntentParser {
             return Optional.empty();
         }
         for (String word : words) {
-            if (NON_COLUMN_WORDS.contains(word) || binder.tableNamed(word).isPresent()) {
+            if (NON_COLUMN_WORDS.contains(word) || binder.tableNamed(word, dialect).isPresent()) {
                 return Optional.empty();
             }
         }
