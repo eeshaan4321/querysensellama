@@ -163,9 +163,10 @@ public class MongoEmitter implements QueryEmitter {
 
     private void requireFilterable(QueryIntent intent, QueryIntent.ColumnRef ref) {
         if (ref.table() != null && !ref.table().equals(intent.fromTable())) {
-            throw new UnexpressibleIntentException("A filter on " + ref.table() + "." + ref.column()
-                    + " needs the joined collection, which does not exist yet at $match time;"
-                    + " MongoDB cannot match on it before the $lookup that produces it.");
+            throw new UnexpressibleIntentException("The question filters on " + ref.table() + "."
+                    + ref.column() + ", a field of the connected " + ref.table() + ", but MongoDB would"
+                    + " apply that filter before the " + ref.table() + " are brought in, so this engine"
+                    + " won't build it.");
         }
         if (!intent.hasAggregate()) {
             return;
@@ -173,9 +174,9 @@ public class MongoEmitter implements QueryEmitter {
         String field = field(intent, ref);
         for (String array : embeddedArrays(intent)) {
             if (field.startsWith(array + ".")) {
-                throw new UnexpressibleIntentException("A filter on " + field
-                        + " targets an element inside the embedded array '" + array
-                        + "', which MongoDB cannot match per-element before the $unwind that separates them.");
+                throw new UnexpressibleIntentException("The question filters on " + field
+                        + " inside the list of " + array + " while totalling it, which MongoDB would apply"
+                        + " to whole " + intent.fromTable() + " rather than to each item.");
             }
         }
     }

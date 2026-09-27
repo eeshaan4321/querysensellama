@@ -304,6 +304,32 @@ class MongoEmitterTest {
     }
 
     @Test
+    @DisplayName("no emitter refusal names a pipeline stage")
+    void refusalsAreJargonFree() {
+        List<QueryIntent> refused = List.of(
+                select("orders",
+                        List.of(new SelectItem(col("status")), new SelectItem(new Aggregate(Fn.COUNT, null))),
+                        List.of(), List.of(new OrderItem(col("order_date"), Direction.ASC)), null),
+                new QueryIntent(QueryIntent.Verb.SELECT, "customers",
+                        new JoinSpec("orders", col("customers", "_id"), col("orders", "customer_id")),
+                        List.of(new SelectItem(Star.INSTANCE)),
+                        List.of(new Predicate(col("orders", "status"), Op.EQ,
+                                List.of(Literal.text("shipped", "SHIPPED")))),
+                        List.of(), List.of(), null),
+                select("orders",
+                        List.of(new SelectItem(new Aggregate(Fn.SUM, col("items.quantity")))),
+                        List.of(new Predicate(col("items.product_id"), Op.EQ, List.of(Literal.number(3)))),
+                        List.of(), null));
+
+        for (QueryIntent intent : refused) {
+            assertThatThrownBy(() -> emitter.emit(intent))
+                    .isInstanceOf(UnexpressibleIntentException.class)
+                    .satisfies(e -> assertThat(e.getMessage())
+                            .doesNotContain("$match", "$lookup", "$unwind", "$group", "aggregate("));
+        }
+    }
+
+    @Test
     @DisplayName("a non-aggregating find may still filter on an embedded array's field")
     void whereOnEmbeddedArrayFieldWithoutAggregateStillBuilds() {
         QueryIntent intent = select("orders", List.of(new SelectItem(Star.INSTANCE)),

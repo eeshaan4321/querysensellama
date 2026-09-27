@@ -1,6 +1,9 @@
 package com.querysense.backend.analysis;
 
+import com.mongodb.MongoException;
+import com.mongodb.MongoSocketOpenException;
 import com.mongodb.MongoTimeoutException;
+import com.mongodb.ServerAddress;
 import com.mongodb.client.DistinctIterable;
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoCollection;
@@ -21,6 +24,7 @@ import org.bson.types.ObjectId;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -133,6 +137,42 @@ class MongoSchemaMetadataTest {
         assertThat(metadata.getDistinctValues("customers", "city")).isEmpty();
         now.set(30_001L);
         assertThat(metadata.getDistinctValues("customers", "city")).containsExactly("Mumbai");
+    }
+
+    @Test
+    @DisplayName("a failure that isn't about reaching the server doesn't silence other fields, and isn't cached")
+    void nonConnectivityFailureDoesNotOpenWindow() {
+        List<String> calls = new ArrayList<>();
+        MongoSchemaMetadata metadata = new MongoSchemaMetadata(
+                mock(MongoClient.class), new ActiveSchemaProvider(), () -> 0L) {
+            @Override
+            List<String> readDistinct(String tableName, String columnName) {
+                calls.add(columnName);
+                if (calls.size() == 1) {
+                    throw new MongoException("not authorized on querysense");
+                }
+                return List.of("value-of-" + columnName);
+            }
+        };
+
+        assertThat(metadata.getDistinctValues("customers", "city")).isEmpty();
+        assertThat(metadata.getDistinctValues("customers", "phone")).containsExactly("value-of-phone");
+        assertThat(metadata.getDistinctValues("customers", "city")).containsExactly("value-of-city");
+        assertThat(calls).containsExactly("city", "phone", "city");
+    }
+
+    @Test
+    @DisplayName("a socket failure opens the unavailable window like a timeout does")
+    void socketFailureOpensWindow() {
+        MongoClient client = mock(MongoClient.class);
+        when(client.getDatabase(anyString())).thenThrow(
+                new MongoSocketOpenException("refused", new ServerAddress("localhost", 27017)));
+        MongoSchemaMetadata metadata = new MongoSchemaMetadata(client, new ActiveSchemaProvider(), () -> 0L);
+
+        assertThat(metadata.getDistinctValues("customers", "city")).isEmpty();
+        assertThat(metadata.getDistinctValues("customers", "phone")).isEmpty();
+
+        verify(client, times(1)).getDatabase(anyString());
     }
 
     @Test

@@ -22,6 +22,9 @@ class RuleTraceWordingTest {
             "accesstype", "explain", "possible_keys", "filesort", "eq_ref",
             "anant", "vedant", "eeshaan", "nullpointer", "optional.empty");
 
+    private static final List<String> MONGO_BANNED = List.of(
+            "$match", "$lookup", "$unwind", "$group", "aggregate(");
+
     private RuleBasedQueryBuilder builder;
 
     @BeforeEach
@@ -56,6 +59,31 @@ class RuleTraceWordingTest {
             assertThat(reason).as("input: %s", input).isNotBlank();
 
             String lower = reason.toLowerCase(Locale.ROOT);
+            for (String banned : BANNED) {
+                assertThat(lower).as("input: %s", input).doesNotContain(banned);
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("no MongoDB decline reason names a pipeline stage")
+    void mongoDeclineReasonsAreJargonFree() {
+        List<String> inputs = List.of(
+                "sum of quantity of orders with quantity 2",
+                "how many customers per city sorted by name",
+                "orders with status shipped",
+                "total amount of payments per method",
+                "show all order items",
+                "customers and suppliers",
+                "delete all customers");
+
+        for (String input : inputs) {
+            var result = builder.build(input, "MongoDB");
+            assertThat(result.built()).as("input: %s", input).isFalse();
+            String lower = result.trace().declineReason().toLowerCase(Locale.ROOT);
+            for (String banned : MONGO_BANNED) {
+                assertThat(lower).as("input: %s", input).doesNotContain(banned);
+            }
             for (String banned : BANNED) {
                 assertThat(lower).as("input: %s", input).doesNotContain(banned);
             }

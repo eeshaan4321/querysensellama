@@ -1,5 +1,7 @@
 package com.querysense.backend.analysis;
 
+import com.mongodb.MongoSocketException;
+import com.mongodb.MongoTimeoutException;
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoCursor;
 import com.querysense.backend.dialect.Dialect;
@@ -83,10 +85,14 @@ public class MongoSchemaMetadata implements SchemaMetadata {
             List<String> values = List.copyOf(readDistinct(tableName, columnName));
             distinctValueCache.put(key, values);
             return values;
+        } catch (MongoTimeoutException | MongoSocketException e) {
+            log.warn("MongoDB unreachable loading distinct values for {}.{}; not retrying for {} ms: {}",
+                    tableName, columnName, UNAVAILABLE_MS, e.getMessage());
+            unavailableUntil = nowMillis.getAsLong() + UNAVAILABLE_MS;
+            return List.of();
         } catch (Exception e) {
             log.warn("Could not load distinct values for {}.{} from MongoDB: {}",
                     tableName, columnName, e.getMessage());
-            unavailableUntil = nowMillis.getAsLong() + UNAVAILABLE_MS;
             return List.of();
         }
     }
