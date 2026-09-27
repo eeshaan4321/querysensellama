@@ -1,6 +1,7 @@
 package com.querysense.backend.analysis;
 
 import com.querysense.backend.dto.QueryAnalysisResult;
+import com.querysense.backend.mongo.MongoShellParser;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -12,7 +13,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class MongoCollectionNameTest {
 
-    private final MongoSimpleAnalyzer analyzer = new MongoSimpleAnalyzer();
+    private final MongoSimpleAnalyzer analyzer = new MongoSimpleAnalyzer(new MongoShellParser());
 
     @Test
     @DisplayName("the collection is read from db.<name>.find(...)")
