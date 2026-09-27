@@ -219,8 +219,19 @@ resolved against the active schema, and the engine gives up when
   *any* sentence with the word "may" in it was declined.
 
 `who`, `which`, `more than`, `average`, `sum` and single-hop joins are now
-handled. **It still declines every MongoDB request outright**, so with the
-target set to MongoDB every question goes to the LLM.
+handled.
+
+**Updated 2026-09-26 — MongoDB is no longer a blanket decline.** The rule
+engine now resolves `databaseType` to a dialect and, for MongoDB, binds and
+writes the query the same way it does for SQL, against `KnownMongoSchema` or
+an uploaded Mongo schema, through a `MongoEmitter` instead of `SqlEmitter`.
+See §7's 2026-09-26 session and `RULES.md` E2. It still declines the same
+binder failures as SQL (no table, ambiguous join, unbound column, unbound
+value, a temporal expression), plus a few Mongo-specific ones the emitter
+declines rather than approximate — a `WHERE` on the joined collection, and a
+`WHERE` on an embedded-array field while aggregating (§7). An unrecognised
+`databaseType` is now a 400, not a decline. **Not yet verified against a
+live `mongod`** — every Mongo behaviour above is unit-tested only.
 
 Its live-data safety net was rebuilt at the same time. It used to emit a
 literal `city = …` and then check that against `customers.city` — a table and
@@ -736,6 +747,19 @@ block is Copy.
 > the reason the code looks the way it does and still the argument against
 > doing this badly. What it forbids is now under review rather than settled.
 > The feasibility assessment is the section immediately after this one.
+>
+> **DECIDED 2026-09-26: full parity, including upload.** The design is
+> `docs/superpowers/specs/2026-09-26-mongodb-parity-design.md`. The build is in
+> progress, and this section is deleted when it is finished (spec step 9).
+> Until then the code still behaves as described below, except for what §7's
+> 2026-09-26 session lists as done.
+>
+> **SUPERSEDED 2026-09-26 for stage 1 (the rule engine) only.** The rule
+> engine now builds MongoDB questions instead of declining every one of
+> them — see §7's 2026-09-26 session and `RULES.md` E2/E23. Spec steps 4–9
+> (analysis, advisor, rewrite, upload) are still exactly as this section and
+> the next one describe; only the first bullet under "What follows from the
+> decision" below is out of date.
 
 **Decided 2026-09-21. This is a non-goal, not a TODO.** QuerySense will not
 grow a live MongoDB connection, a Mongo path in the rule engine, or Mongo
@@ -762,8 +786,10 @@ half-supported database.
 
 **What follows from the decision, stated rather than discovered:**
 
-- **The rule engine declines every MongoDB question**, so 100% of Mongo
-  generation is the LLM. With Ollama down, every Mongo question 503s.
+- ~~**The rule engine declines every MongoDB question**, so 100% of Mongo
+  generation is the LLM. With Ollama down, every Mongo question 503s.~~
+  **No longer true as of 2026-09-26** — see the note above. Every other
+  bullet below is still current.
 - **Mongo LLM generation is ungrounded and unguarded.**
   `buildSchemaContext` returns `""` for any non-MySQL dialect and
   `GeneratedQueryValidator` returns clean for one. Both are deliberate:
@@ -850,6 +876,18 @@ build in the project, comparable to everything done in the fortnight to
 2026-09-21, and it competes for time with the live verification run — which is
 currently the larger risk, since nothing from that fortnight has met a running
 backend. Scope and deadline were put back to the user; no decision recorded yet.
+
+**Decision, 2026-09-26: full parity, upload included.** Four choices were
+settled in conversation:
+- A Mongo upload takes collections with a `$jsonSchema` validator, indexes and
+  an optional `references` block. It does not take sample documents.
+- MongoDB runs as a local Community Server on `27017`.
+- Each database has its own active schema.
+- The architecture is one pipeline with a per-dialect implementation of each
+  stage, not a parallel Mongo pipeline.
+
+Sampling a schema from documents (stage 0 above) is out of scope. The rule
+engine (stage 1) is now required. The order of work is in the spec's §12.
 
 ### Missing endpoints
 
@@ -965,18 +1003,23 @@ backend. Scope and deadline were put back to the user; no decision recorded yet.
    the whole analysis. Accepted at this scale; worth revisiting if the analysis
    gets expensive.
 
-8. **History run context — mostly built 2026-09-21.** `QueryHistory` gained
+8. **History run context — built 2026-09-21, completed 2026-09-26.** `QueryHistory` gained
    `confidence`, `durationMs` and `schemaLabel`, all set in `saveToHistory` and
    shown as columns on the History screen. `schemaLabel` is the one that
    matters most in practice: uploads swap the active schema between runs, so
    without it an old row cannot be interpreted at all.
 
-   **`resourceLevel` is still not stored, and cannot be** without a contract
+   ~~**`resourceLevel` is still not stored, and cannot be** without a contract
    change — it is a parameter of `/api/query/analyze`, and history is written
-   by `/api/query/generate`, which never sees it. Storing it means either
-   widening the generate request or writing history from the analyze path.
-   Neither was done silently. Rows written before this change carry nulls, and
-   the table renders those as `—` rather than inventing a value.
+   by `/api/query/generate`, which never sees it.~~ **DONE 2026-09-26.**
+   `QueryRequest` gained an optional `resourceLevel` field; `saveToHistory`
+   now writes it straight onto `QueryHistory`, and the History screen shows it
+   as its own column. Callers that don't send one store null, and rows written
+   before this change render `—` rather than a guessed value — same discipline
+   as `schemaLabel` above. A caller sending an unrecognised `resourceLevel`
+   string, or a body that doesn't parse as JSON at all, now gets a 400 naming
+   the field and its allowed values, not the 500 that `HttpMessageNotReadableException`
+   used to fall through to. See §7's 2026-09-26 session.
 
 9. ~~**`TestController` (`GET /test`)** is a debug endpoint…~~ **RESOLVED
    2026-09-21.** It became load-bearing the moment the shell's health banner
@@ -2441,6 +2484,142 @@ invention. The decision was not wrong about the cost of doing it badly; it was
 working from an incomplete picture of the cost of doing it well. **Nothing is
 built, and no decision is recorded** — scope and deadline sit with the user.
 
+### Session of 2026-09-26 — seed scripts, and MongoDB parity, steps 1–3
+
+**Seed scripts.** Both `schema.sql` files now create all nine tables column
+for column with `KnownSchema`. Both `data.sql` files seed every table, and
+`KnownSchemaMatchesSeedScriptsTest` is green. See §5 item 2. The H2 scripts
+were executed through H2's `RunScript`. The MySQL `data.sql` was not run,
+because that would write to the live database.
+
+**MongoDB parity was decided and designed.** See the decision note in §5.
+- Spec: `docs/superpowers/specs/2026-09-26-mongodb-parity-design.md`, 9 steps.
+- Plan for steps 1–3: `docs/superpowers/plans/2026-09-26-mongodb-parity-steps-1-3.md`,
+  11 tasks. Each was implemented by a subagent and checked by a separate
+  reviewer.
+
+**Done (tasks 1–11 of 11 — steps 1–3 of the spec are complete), 424 backend
+tests, 0 failures, frontend 66 tests / lint clean:**
+
+| Task | What exists now | Commits |
+|---|---|---|
+| 1 | `dialect/Dialect` (MYSQL, MONGODB) and `DialectRegistry`, which fails at construction if a dialect has no implementation | `0216fbf` |
+| 2 | `ActiveSchemaProvider` holds one schema per dialect; every accessor takes a `Dialect`. `KnownMongoSchema` is the built-in Mongo demo: 8 collections, snake_case, `order_items` embedded as `orders.items[]` | `aad568a` |
+| 3 | `QueryIntent` carries structure (`ColumnRef`, `Aggregate`, `Literal`, …) instead of SQL text; `SqlEmitter` does all the rendering. Every SQL expectation is byte-identical | `cdcaa0d`, `206b0ce` |
+| 4 | `mongo/MongoShellParser` reads mongosh `find` / `aggregate` / `countDocuments` / `deleteMany` into a `MongoQuery`, and refuses anything else with a position | `3f6838e`, `8d1070a` |
+| 5 | `querybuilder/MongoEmitter` writes the same intent as mongosh. Every output reads back through the parser | `40eeaf6`, `b516f84` |
+| 6 | Stored values are read per dialect. MongoDB's come from `distinct()` on the live collection through `MongoSchemaMetadata`, cached, with a 30 s "Mongo unavailable" window after a failed read | `fcab5e7`, `d957eaa` |
+| 7 | `RuleBasedQueryBuilder` threads `Dialect` through `QueryIntentParser`. **Rule E2 no longer declines MongoDB** — a bound question is built and written by `MongoEmitter` instead of going to the LLM | `18ac2f0` |
+| 8 | A second table-shaped noun that binds to nothing declines, naming it, instead of being silently dropped (new rule E23) | `dfe2777` |
+| 9 | `QueryHistory` stores the `resourceLevel` each run was made under. An unknown `resourceLevel` or a malformed request body is a 400, not a 500 | `59aa243`, `2de18ea` |
+| 10 | `DialectParityTest` holds 18 of the app's questions to the same built/declined outcome in MySQL and MongoDB, plus one documented difference | `a2329d6` |
+| 11 | This entry, and the matching updates to `RULES.md` | — |
+
+**Wired, as of task 7.** The rule engine no longer declines every MongoDB
+question. `RuleBasedQueryBuilder` resolves `databaseType` to a `Dialect` and
+passes it through `QueryIntentParser`; a MongoDB question is bound against
+`KnownMongoSchema` (or an uploaded Mongo schema) exactly as a SQL one is
+bound against `KnownSchema`, and written by `MongoEmitter` instead of
+`SqlEmitter`. It declines on the same binder failures SQL does (no table,
+ambiguous join, an unbound column or value, a temporal expression, the new
+task 8 rule), plus two things the emitter declines rather than approximate:
+a `WHERE` on the joined collection, and a `WHERE` on an embedded-array field
+while aggregating. `DialectParityTest` (task 10) checks 18 questions come out
+the same way in both dialects, with one documented, deliberate difference:
+`show all order items` builds on MySQL (`order_items` is a real table) and
+declines on MongoDB (`order_items` is embedded under `orders.items[]`, no
+such collection exists). This is user-visible the moment MongoDB is chosen
+as the target — nothing else is needed to reach it, only a live `mongod` to
+demo it against.
+
+**Defects found and fixed along the way:**
+- **`SchemaMetadataService`'s schema-change listener was never registered.**
+  `registerSchemaChangeListener()` had no `@PostConstruct` and no caller. So
+  the column and distinct-value caches survived an upload, and the rule
+  engine could check values against the previous schema's data. The listener
+  is now registered in the constructor. `SchemaMetadataCacheTest` guards it.
+- **The task 3 refactor briefly stopped the live column-drift check from
+  covering columns inside aggregates.** Two examples: the `price` in
+  `AVG(price)`, and the HAVING count target. Caught in review and fixed with
+  two tests. The plan's code was the cause.
+- **The parser silently dropped extra arguments** (`limit(3, 5)`) and let an
+  unmatched `}` drive its depth negative. Both are now refused.
+- **Two silently wrong MongoDB results in the emitter.**
+  - A HAVING aggregate that is not in the select list was matched on a field
+    `$group` never created.
+  - A joined `COUNT(*)` had `$limit` placed before `$count`, which capped the
+    count.
+  Both are fixed, along with three cases that would only go wrong after a
+  future parser change.
+- **Task 6 — ObjectId and date values came back as unreadable text, and a
+  failed Mongo read was cached forever.** `MongoSchemaMetadata.asText` fell
+  back to raw `BsonObjectId{...}`/`BsonDateTime{...}` text for those two BSON
+  types, and a failed `distinct()` call was cached as `[]` until the next
+  schema change — an outage looked identical to "this column has no values."
+  Fixed: an ObjectId renders as its hex string, a date as ISO-8601; a failure
+  is never cached, and a 30 s "Mongo unavailable" window replaces it instead,
+  so an outage costs one 2 s timeout per 30 s rather than one per field per
+  request.
+- **Task 8 — a second noun that binds to nothing was silently dropped,
+  confirming the 2026-09-25 "UNCONFIRMED" entry in `RULES.md`.**
+  `customers and suppliers` (no `suppliers` table) built
+  `SELECT * FROM customers;` at 0.95 without mentioning "suppliers" anywhere
+  in the trace. Fixed with rule E23: it now declines, naming the word. See
+  `RULES.md`'s Known gaps and `UnboundNounTest`.
+- **Task 9 — an unknown `resourceLevel` or a malformed request body returned
+  500.** `HttpMessageNotReadableException` had no handler, so a bad enum
+  value or unparsable JSON fell through the catch-all as a generic 500.
+  Fixed: it's now a 400 that names the field and, for a bad enum, the values
+  it will accept.
+
+**Decisions taken during execution:**
+- MongoDB filters use the stored value (`"Mumbai"`); SQL keeps the typed one
+  (`'mumbai'`). MongoDB matches case exactly.
+- A count across a join ignores sort and limit, which matches SQL's
+  single-row result.
+- The emitter declines two things rather than approximate them:
+  - a WHERE on the joined collection
+  - a WHERE on an embedded-array field while aggregating
+- `COUNT(column)` excludes nulls through `$cond`, except on `_id`.
+- **Task 7:** `SchemaBinder.bindColumn`'s exact-name match is
+  case-insensitive (`equalsIgnoreCase`), a deviation from the task's brief
+  needed because the brief's own version broke mixed-case uploaded MySQL
+  columns. **Deferred minor, not fixed:** the same change can now bind
+  differently on a mixed-case upload — "id" can bind `OrderID`, and "date"
+  can turn ambiguous between `ShipDate` and `order_date`. The built-in
+  schema is unaffected either way. The same matcher also matches `_id` for
+  "id", the last segment of a dotted embedded-field path, and a camelCase
+  column read as snake_case — see `RULES.md` E5.
+- **Task 9:** `resourceLevel` is stored via an optional field on the
+  generate request, not by widening `/analyze` or writing history from that
+  path. A caller that doesn't send one stores null, and older rows render
+  `—` rather than a guessed value. See §5 item 8.
+
+**Differences from SQL, to state on screen once Mongo is live:**
+- An aggregate over no documents returns nothing, where SQL returns one
+  0/NULL row.
+- Grouped keys come back under `_id`.
+- A HAVING filter on an embedded-array field would sum to zero with no
+  error. The parser cannot produce one today.
+
+**Not verified:** no `mongod` exists on this machine, so every Mongo
+behaviour above — including `distinct`, the stored-value cache and the 30 s
+outage window — is unit-tested only. Nothing here was run against a live
+backend.
+
+**Live checklist, once `mongod` is running and seeded (spec step 4):** ask
+the rule engine `customers in mumbai` with the target set to MongoDB, and
+confirm it answers built, with `"Mumbai"` — the stored value, not the
+lowercased input — inside the `$match` filter.
+
+**Next:** steps 1–3 of the plan (tasks 1–11) are complete. Spec step 4 is
+next — MongoDB upload, taking collections with a `$jsonSchema` validator,
+indexes and an optional `references` block — and needs a local `mongod`
+listening on `27017` to build and test against; nothing above has one. The
+progress ledger is at
+`.superpowers/sdd/2026-09-26-mongodb-parity-steps-1-3/progress.md`, which is
+git-ignored.
+
 ### Not verified
 
 - ~~**No screen of the current frontend has been exercised against the live
@@ -2707,13 +2886,14 @@ on 2026-09-10 when `EXPLAIN ANALYZE` was considered and declined (§8 item 3).
 
 ## 9. Every rule, and how many there are
 
-Checked 2026-09-11 by reading `backend/src/main`, and again on 2026-09-21 when
-§9.11 was added. Nothing here was run. It lists every rule the backend applies,
-in the order it applies them.
+Checked 2026-09-11 by reading `backend/src/main`, again on 2026-09-21 when
+§9.11 was added, and again on 2026-09-26 when rule 2 changed and rule 23 was
+added. Nothing here was run. It lists every rule the backend applies, in the
+order it applies them.
 
 | Module | Rules | Where |
 |---|---|---|
-| **Rule engine** (natural language → SQL) | **22** (18 of them can decline) | `querybuilder/` |
+| **Rule engine** (natural language → SQL) | **23** (19 of them can decline) | `querybuilder/` |
 | Routing between the three layers | 3 | `QueryGenerationServiceImpl`, `GeneratedQueryValidator` |
 | Pre-EXPLAIN checks | 2 | `analysis/SqlPreflightValidator` |
 | EXPLAIN warnings | 4 | `analysis/MySqlExplainAnalyzer` |
@@ -2723,13 +2903,13 @@ in the order it applies them.
 | Resource optimisation | 5 | `optimization/ResourceConsciousService` |
 | Schema advisor | 5 | `service/impl/SchemaAdvisorServiceImpl` |
 | Query rewrite | 3 | `optimization/QueryRewriter` |
-| **Total** | **62** | |
+| **Total** | **63** | |
 
 Only the first row is the rule engine in the strict sense: layer 1 of query
 generation (§2). The rest are the other rule-based modules. They are
 listed too, because none of them uses a model either.
 
-### 9.1 The rule engine — 22 rules
+### 9.1 The rule engine — 23 rules
 
 The entry point is `RuleBasedQueryBuilder`. The parsing is done by `QueryIntentParser`, tables
 and columns are matched by `SchemaBinder` and `JoinPathResolver`, and SQL is
@@ -2747,7 +2927,7 @@ English word list except the date check (rule 3).
 | # | Rule | What it does | Declines when |
 |---|---|---|---|
 | 1 | Empty question | — | the question is blank |
-| 2 | SQL only | — | the target is MongoDB. Everything downstream writes SQL syntax, so claiming a Mongo request would return the wrong dialect at confidence 0.95 |
+| 2 | Dialect | Resolves `databaseType` to `MYSQL` or `MONGODB` and passes it to every rule after it — rules 4 onward bind against that dialect's schema, and at rule 21 the result is written out by a dialect-specific emitter. **Updated 2026-09-26**, replacing the old MongoDB catch-all | nothing, once the dialect resolves. An unrecognised `databaseType` is a **400** from `GlobalExceptionHandler`, not a decline that falls to the LLM |
 | 3 | No date arithmetic | Looks for a date *expression*: `last/this/next/past` + a unit, `today/yesterday/tomorrow/recently`, a preposition + a month name, `before/after/since/until` + a year, `date range`, `last N days` | any of those appears. It declines on the expression, not on a single word, so the word `may` no longer counts as a month |
 
 #### Binding the question to the schema
@@ -2757,6 +2937,7 @@ English word list except the date check (rule 3).
 | 4 | Table binding | Finds every table named in the question. Underscores and spaces are treated as the same, so `order items` matches `order_items`. The plural is tried before the singular. A match sitting inside a longer match is dropped, so `orders` cannot win on the word "order" inside "order items". Tables keep sentence order, and **the first one named is the subject** | no table matches, or **more than two** do |
 | 5 | Column binding (used by rules 9–15 and 19) | Tries an exact match (spaces read as underscores), then the singular (trailing `s` removed), then a suffix match (`order date` → `order_date`), but only if exactly one column ends that way | — itself; a phrase that matches nothing, or matches two columns equally well, comes back empty and the rule that asked for it declines |
 | 6 | Join from a declared foreign key | With two tables, finds the foreign keys that link them. The `ON` clause is read from that key, never guessed from a name like `client_id`. Self-referencing keys (`employees.manager_id`) are ignored | the schema declares **no** key between the two tables, or **more than one** (for example, billing and shipping addresses). The trace names the columns involved |
+| 23 | A second unbound noun declines, naming it — **added 2026-09-26**, runs here (right after table binding); it's numbered last, out of order, because it was added last | Looks for `and <word>` / `plus <word>`; if `<word>` doesn't name a table, column, known non-column word or a value a column actually holds, and it ends in `s`, the question declines instead of quietly building against only the first table | the pattern matches an unbound, plural-shaped word. Example: `customers and suppliers` with no `suppliers` table declines naming "suppliers", instead of silently building `SELECT * FROM customers;` |
 
 #### Reading what is being asked
 
@@ -2789,11 +2970,13 @@ English word list except the date check (rule 3).
 | 21 | Writing the SQL | Fixed clause order: `SELECT` / `DELETE` → `FROM` → `JOIN … ON` → `WHERE` (conditions joined by `AND`) → `GROUP BY` → `HAVING` → `ORDER BY` → `LIMIT` → `;`. **`GROUP BY` isn't matched from the question; it's derived** as every column in the SELECT list that isn't aggregated. That always satisfies MySQL's `ONLY_FULL_GROUP_BY`. So a bare `COUNT(*)` gets no `GROUP BY` at all | — |
 | 22 | Rule trace | Every result, built or declined, carries what each phrase matched, the query shape (`SELECT + JOIN + GROUP BY + HAVING`), the foreign key used, the checks it passed, or the decline reason | — |
 
-**The 18 ways to decline,** grouped: 3 gates (rules 1–3), 4 about tables and
-joins (none, too many, no key, two keys), 1 delete across a join, 7 where a
-named thing doesn't match a column (explicit projection, implicit projection, aggregate,
-grouping, comparison, filter value, sort), 1 comparison against something
-that isn't a number, and 2 safety checks (unconditional delete, a column missing from the database).
+**The 19 ways to decline,** grouped: 3 gates (rules 1–3), 4 about tables and
+joins (none, too many, no key, two keys), 1 second noun binding to nothing
+(rule 23), 1 delete across a join, 7 where a named thing doesn't match a
+column (explicit projection, implicit projection, aggregate, grouping,
+comparison, filter value, sort), 1 comparison against something that isn't a
+number, and 2 safety checks (unconditional delete, a column missing from the
+database).
 
 ### 9.2 Routing between the three layers — 3 rules
 

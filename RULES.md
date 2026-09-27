@@ -12,7 +12,7 @@ lowercased before it is read.
 
 | Module | Rules | IDs | Source |
 |---|---|---|---|
-| **Rule engine** (question → SQL) | **22** | E1–E22 | `querybuilder/` |
+| **Rule engine** (question → SQL) | **23** | E1–E23 | `querybuilder/` |
 | Routing between the three layers | 3 | R1–R3 | `QueryGenerationServiceImpl`, `GeneratedQueryValidator` |
 | Checks before EXPLAIN | 2 | P1–P2 | `analysis/SqlPreflightValidator` |
 | EXPLAIN warnings | 4 | W1–W4 | `analysis/MySqlExplainAnalyzer` |
@@ -22,18 +22,20 @@ lowercased before it is read.
 | Resource optimisation | 5 | RS1–RS5 | `optimization/ResourceConsciousService` |
 | Schema advisor | 5 | SA1–SA5 | `service/impl/SchemaAdvisorServiceImpl` |
 | Query rewrite | 3 | RW1–RW3 | `optimization/QueryRewriter` |
-| **Total** | **62** | | |
+| **Total** | **63** | | |
 
-**The rule engine has 22 rules.** Of those, 18 are conditions under which it
+**The rule engine has 23 rules.** Of those, 19 are conditions under which it
 refuses a question and hands it to the language model. The other 40 rules
 belong to the modules that analyse and optimise a query after it has been
-generated. None of the 62 uses a model.
+generated. None of the 63 uses a model.
 
-Read again on 2026-09-21, when section 10 was added.
+Read again on 2026-09-21, when section 10 was added, and again on
+2026-09-26, when the rule engine became dialect-aware, gained a MongoDB
+emitter (E2) and a decline for a second unbound noun (E23).
 
 ---
 
-## 1. The rule engine — 22 rules
+## 1. The rule engine — 23 rules
 
 The rule engine is layer 1 of query generation. It turns a plain-English
 question into SQL without a model, or it declines, and the question moves
@@ -60,15 +62,24 @@ The rules run in the order below. The first decline stops the build.
 - **Why:** there's nothing to match.
 - **Declines with:** "The question was empty."
 
-#### E2 · SQL only
-- **What it does:** declines every question whose target is MongoDB, before
-  any matching is attempted.
-- **Why:** every later rule writes SQL syntax. Claiming a MongoDB request
-  would return a query in the wrong language, labelled as a confident
-  rule-engine answer. It stays this way until a MongoDB builder exists, so
-  today **every MongoDB question goes to the LLM.**
-- **Declines with:** "This engine builds SQL only, so MongoDB questions go to
-  the language model."
+#### E2 · Dialect
+- **What it does:** resolves `databaseType` to a `Dialect` (`MYSQL` or
+  `MONGODB`, `Dialect.from`) before any matching is attempted, and passes it
+  down to every rule that follows. **Updated 2026-09-26 — no longer a
+  MongoDB catch-all.** Rules E4 onward now bind against whichever schema the
+  resolved dialect has active, and at E21 the result is written out by a
+  dialect-specific emitter (`SqlEmitter` or `MongoEmitter`), so a MongoDB
+  question is built, not deferred.
+- **Why:** SQL and MongoDB need different tables, different columns and a
+  different output writer; resolving the dialect once, at the gate, is what
+  lets every rule after it read `dialect` rather than assume SQL. What
+  doesn't belong here is a request the engine can't even address — that's
+  not a business decline, it's a malformed request.
+- **Declines with:** nothing, once the dialect resolves. An unrecognised
+  `databaseType` throws in `Dialect.from` and is caught by
+  `GlobalExceptionHandler` as a **400** naming the value it couldn't
+  resolve — a request error, not a rule-trace decline, and it never reaches
+  the LLM.
 
 #### E3 · No date arithmetic
 - **What it does:** declines any question containing a date *expression*:
@@ -119,6 +130,13 @@ The rules run in the order below. The first decline stops the build.
   would be a guess that looks certain.
 - **Declines when:** this rule never declines on its own. When it comes back
   empty, the rule that asked (E9–E15, E19) declines.
+- **MongoDB, added 2026-09-26:** the same matcher (`SchemaBinder.bindColumn`)
+  also matches `_id` for the word "id", the **last segment of a dotted
+  path** (`items.product_id` matches "product id", for an embedded array
+  field), and a **camelCase column name** against its snake_case reading
+  (`orderId` matches "order id") — all by snake-casing the column before
+  comparing, so the SQL-side matching above needs no change to also serve
+  Mongo's field-naming conventions.
 
 #### E6 · Joins come from a declared foreign key
 - **What it does:** when two tables are named, looks for the declared foreign
@@ -140,6 +158,29 @@ The rules run in the order below. The first decline stops the build.
 - **Example:** `which customers placed more than three orders` → `customers
   JOIN orders ON customers.id = orders.customer_id`. `customers and products`
   → declined (no direct key).
+
+#### E23 · A second unbound noun declines, naming it
+- **Added 2026-09-26.** Runs here, right after table binding and before the
+  subject table is fixed — it is numbered 23, after the rules below it,
+  because it was added last; the order it runs in is where it sits in this
+  document, not its number.
+- **What it does:** looks for `and <word>` or `plus <word>` anywhere in the
+  question (`CONJOINED_NOUN`). If `<word>` doesn't name a table, a column of
+  any named table, a known non-column/stopword, or a value a column actually
+  holds — and it ends in `s` (has the shape of a plural table reference) —
+  the question declines instead of quietly building against only the first
+  table.
+- **Why:** before this rule, `customers and suppliers` on a schema with no
+  `suppliers` table built `SELECT * FROM customers;` at 0.95, never
+  mentioning "suppliers" anywhere in the trace — a confident answer to a
+  question the engine only half read. See "Known gaps" below.
+- **Declines with:** `"suppliers" isn't a table in the active schema, so
+  this engine can't tell what the question joins customers to.` — naming the
+  exact unbound word.
+- **Example:** `customers and suppliers` (no `suppliers` table) → declined,
+  naming "suppliers". `customers and orders` → still joins normally, since
+  `orders` binds. `customers and their orders` → still builds; "their"
+  doesn't end in `s` and is a stopword regardless.
 
 ### Working out what is being asked
 
@@ -337,12 +378,13 @@ The rules run in the order below. The first decline stops the build.
   layer passed. Without the trace, "rule-based and explainable" is a claim;
   with it, it can be checked. The Analysis screen shows it.
 
-### The 18 ways the rule engine declines
+### The 19 ways the rule engine declines
 
 | Group | Count | Rules |
 |---|---|---|
-| Gates | 3 | E1 empty · E2 MongoDB · E3 date expression |
+| Gates | 3 | E1 empty · E2 dialect · E3 date expression |
 | Tables and joins | 4 | E4 no table · E4 more than two tables · E6 no foreign key · E6 two or more foreign keys |
+| A second noun binds to nothing | 1 | E23 |
 | Delete across a join | 1 | E7 |
 | A named thing matches no column | 7 | E9 · E10 · E11 · E12 · E13 · E14 · E19 |
 | Comparison value isn't a number | 1 | E13 |
@@ -718,17 +760,22 @@ graph reveals this; only rendering the SQL and reading it does. Two of the 14
 
 ## Known gaps in these rules
 
-Found by reading the code. The three dated ones were fixed on 2026-09-21 and
-are covered by unit tests; none of those fixes has been run against a live
-backend.
+Found by reading the code. The four dated ones below were fixed on the dates
+given and are covered by unit tests; none of those fixes has been run against
+a live backend.
 
-- **UNCONFIRMED — a table name the schema cannot bind may be dropped in
-  silence.** Seen 2026-09-25 against a temporarily shrunken schema:
-  `customers and suppliers`, with no `suppliers` declared, built
-  `SELECT * FROM customers;` at 0.95 without mentioning the word it ignored —
-  the same shape as E15 before it was fixed. **Not reproduced against the real
-  schema**, where `suppliers` binds and the pair declines as unrelated. Worth a
-  test with a noun no schema has; not yet a defect. See PROJECT.md §9.10.
+- ~~**UNCONFIRMED — a table name the schema cannot bind may be dropped in
+  silence.**~~ **FIXED 2026-09-26 (E23).** Reproduced exactly as suspected,
+  for the "and"-conjoined case: with `suppliers` undeclared, both `customers
+  and suppliers` and `customers and widgets` built `SELECT * FROM customers;`
+  at 0.95, naming neither ignored word anywhere in the trace — the same shape
+  as E15 before it was fixed. (`show customers plus invoices` had already
+  declined before the fix, but for an unrelated reason — a trailing-phrase
+  match against `customers` — and without isolating "invoices" in its
+  message.) E23 now declines all of these uniformly:
+  `"suppliers" isn't a table in the active schema, so this engine can't tell
+  what the question joins customers to.` See `UnboundNounTest` and
+  PROJECT.md §9.10.
 
 - ~~**E14 keeps only the first filter value.**~~ **FIXED 2026-09-21.**
   `customers in mumbai and pune` built `WHERE city = 'mumbai'` at 0.95 and
