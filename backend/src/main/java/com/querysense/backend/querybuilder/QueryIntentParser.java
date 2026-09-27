@@ -66,6 +66,8 @@ public class QueryIntentParser {
 
     private static final Pattern WITH_VALUE = Pattern.compile("\\bwith\\s+([a-z_]+)\\s+([a-z0-9_]+)\\b");
 
+    private static final Pattern CONJOINED_NOUN = Pattern.compile("\\b(?:and|plus)\\s+([a-z_]+)\\b");
+
     private static final Map<String, Integer> NUMBER_WORDS = Map.of(
             "one", 1, "two", 2, "three", 3, "four", 4, "five", 5,
             "six", 6, "seven", 7, "eight", 8, "nine", 9, "ten", 10);
@@ -139,6 +141,22 @@ public class QueryIntentParser {
                     bindings);
         }
         tables.forEach(t -> bindings.add(new RuleTrace.Binding(t.name(), "TABLE", t.name())));
+
+        Matcher conjoined = CONJOINED_NOUN.matcher(text);
+        while (conjoined.find()) {
+            String word = conjoined.group(1);
+            boolean known = binder.tableNamed(word, dialect).isPresent()
+                    || NON_COLUMN_WORDS.contains(word)
+                    || VALUE_STOPWORDS.contains(word)
+                    || tables.stream().anyMatch(t -> binder.bindColumn(t, word).isPresent())
+                    || tables.stream().anyMatch(t -> columnHolding(t, word, metadata).isPresent());
+            if (!known && word.endsWith("s")) {
+                return RuleBuildResult.declined(
+                        "\"" + word + "\" isn't a table in the active schema, so this engine can't tell "
+                                + "what the question joins " + tables.get(0).name() + " to.",
+                        bindings);
+            }
+        }
 
         KnownSchema.Table subject = tables.get(0);
         KnownSchema.Table related = tables.size() == 2 ? tables.get(1) : null;
