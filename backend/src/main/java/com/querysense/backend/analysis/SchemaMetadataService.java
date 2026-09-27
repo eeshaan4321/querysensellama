@@ -13,7 +13,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /** Reads live column names and distinct column values from the database. */
 @Component
-public class SchemaMetadataService {
+public class SchemaMetadataService implements SchemaMetadata {
 
     private static final Logger log = LoggerFactory.getLogger(SchemaMetadataService.class);
 
@@ -32,6 +32,7 @@ public class SchemaMetadataService {
         });
     }
 
+    @Override
     public Dialect dialect() {
         return Dialect.MYSQL;
     }
@@ -41,6 +42,7 @@ public class SchemaMetadataService {
         distinctValueCache.clear();
     }
 
+    @Override
     public List<String> getColumnNames(String tableName) {
         if (tableName == null || tableName.isBlank()) {
             return List.of();
@@ -60,6 +62,7 @@ public class SchemaMetadataService {
         }
     }
 
+    @Override
     public List<String> getDistinctValues(String tableName, String columnName) {
         if (tableName == null || columnName == null) {
             return List.of();
