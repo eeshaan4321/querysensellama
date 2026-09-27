@@ -105,6 +105,25 @@ class MongoRuleEngineTest {
     }
 
     @Test
+    @DisplayName("a breakdown with nothing to total or count declines on MongoDB")
+    void groupingWithoutAggregateDeclinesOnMongo() {
+        for (String question : List.of("total amount of payments per method",
+                "total quantity of orders per status")) {
+            RuleBuildResult result = builder.build(question, "MongoDB");
+            assertThat(result.built()).as("%s -> %s", question, result.sql()).isFalse();
+            assertThat(result.trace().declineReason()).as(question).contains("nothing to group");
+        }
+    }
+
+    @Test
+    @DisplayName("a counted breakdown still builds on MongoDB")
+    void countedBreakdownBuildsOnMongo() {
+        RuleBuildResult result = builder.build("how many customers are there per city", "MongoDB");
+        assertThat(result.built()).isTrue();
+        assertThat(result.sql()).contains("\"$group\"");
+    }
+
+    @Test
     @DisplayName("an unknown database type is refused")
     void unknownDatabaseType() {
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> builder.build("Show all customers", "Oracle"))

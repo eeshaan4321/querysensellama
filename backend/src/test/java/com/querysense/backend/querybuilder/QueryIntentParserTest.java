@@ -99,6 +99,26 @@ class QueryIntentParserTest {
     }
 
     @Test
+    @DisplayName("a breakdown with no total, average or count to break down declines")
+    void groupingWithoutAggregateDeclines() {
+        for (String question : List.of("total amount of payments per method",
+                "total quantity per status of orders")) {
+            RuleBuildResult result = parser.parse(question, Dialect.MYSQL);
+            assertThat(result.built()).as("%s -> %s", question, result.sql()).isFalse();
+            assertThat(result.trace().declineReason()).as(question).contains("nothing to group");
+        }
+    }
+
+    @Test
+    @DisplayName("a counted breakdown still builds")
+    void countedBreakdownStillBuilds() {
+        RuleBuildResult result = parser.parse("how many customers are there per city", Dialect.MYSQL);
+
+        assertThat(result.built()).isTrue();
+        assertThat(result.sql()).contains("GROUP BY city").contains("COUNT(");
+    }
+
+    @Test
     @DisplayName("a temporal expression declines, but the word 'may' alone does not")
     void temporalDeclinesButModalMayDoesNot() {
         assertThat(parser.parse("orders from last month", Dialect.MYSQL).built()).isFalse();

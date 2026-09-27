@@ -268,8 +268,10 @@ public class QueryIntentParser {
         }
 
         String groupColumn = null;
+        String groupPhrase = null;
         Matcher per = PER_GROUP.matcher(text);
         if (per.find()) {
+            groupPhrase = per.group(1).trim();
             Optional<String> col = binder.bindColumn(subject, per.group(1));
             if (col.isEmpty()) {
                 return RuleBuildResult.declined(
@@ -320,6 +322,13 @@ public class QueryIntentParser {
                                 + "column of " + subject.name() + ".",
                         bindings);
             }
+        }
+
+        if (groupColumn != null && aggregateFunction == null && !countRequested && countTargetColumn == null) {
+            return RuleBuildResult.declined(
+                    "The question asks for a breakdown by \"" + groupPhrase + "\" but not for a total, "
+                            + "average or count of anything, so there is nothing to group.",
+                    bindings);
         }
 
         Matcher preposition = PREPOSITION_VALUE.matcher(text);

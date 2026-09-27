@@ -58,6 +58,8 @@ class DialectParityTest {
             "show me everything interesting",
             "customers sorted by flurb",
             "how many customers are there per city",
+            "total amount of payments per method",
+            "total quantity of orders per status",
     })
     void sameOutcome(String question) {
         RuleBuildResult mysql = parser.parse(question, Dialect.MYSQL);
