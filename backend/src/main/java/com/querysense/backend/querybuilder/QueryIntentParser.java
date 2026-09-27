@@ -384,9 +384,20 @@ public class QueryIntentParser {
             }
             String value = with.group(2);
             Optional<Integer> number = numberFrom(value);
-            QueryIntent.Literal literalValue = number.isPresent()
-                    ? new QueryIntent.Literal(value, true, number.get())
-                    : QueryIntent.Literal.text(value, storedValueOf(subject, column.get(), value, metadata));
+            QueryIntent.Literal literalValue;
+            if (number.isPresent()) {
+                literalValue = new QueryIntent.Literal(value, true, number.get());
+            } else {
+                Optional<String> stored = storedValueOf(subject, column.get(), value, metadata);
+                if (stored.isEmpty() && dialect == Dialect.MONGODB) {
+                    return RuleBuildResult.declined(
+                            "Couldn't confirm how \"" + value + "\" is stored in " + subject.name() + "."
+                                    + column.get() + ", and MongoDB matches text exactly, so this "
+                                    + "engine won't guess its capitalisation.",
+                            bindings);
+                }
+                literalValue = QueryIntent.Literal.text(value, stored.orElse(value));
+            }
             where.add(new QueryIntent.Predicate(qualify(column.get(), subject, joined),
                     QueryIntent.Op.EQ, List.of(literalValue)));
             bindings.add(new RuleTrace.Binding(with.group(1) + " " + value, "FILTER",
@@ -520,9 +531,7 @@ public class QueryIntentParser {
     private Optional<ValueMatch> columnHolding(KnownSchema.Table table, String value,
                                               SchemaMetadata metadata) {
         for (String column : table.columns()) {
-            Optional<String> stored = metadata.getDistinctValues(table.name(), column).stream()
-                    .filter(v -> v != null && v.equalsIgnoreCase(value))
-                    .findFirst();
+            Optional<String> stored = storedValueOf(table, column, value, metadata);
             if (stored.isPresent()) {
                 return Optional.of(new ValueMatch(column, stored.get()));
             }
@@ -530,12 +539,11 @@ public class QueryIntentParser {
         return Optional.empty();
     }
 
-    private String storedValueOf(KnownSchema.Table table, String column, String value,
-                                 SchemaMetadata metadata) {
+    private Optional<String> storedValueOf(KnownSchema.Table table, String column, String value,
+                                           SchemaMetadata metadata) {
         return metadata.getDistinctValues(table.name(), column).stream()
                 .filter(v -> v != null && v.equalsIgnoreCase(value))
-                .findFirst()
-                .orElse(value);
+                .findFirst();
     }
 
     private List<String> boundColumnsOf(KnownSchema.Table table,

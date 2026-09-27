@@ -84,6 +84,27 @@ class MongoRuleEngineTest {
     }
 
     @Test
+    @DisplayName("a with-value MongoDB can't confirm the stored form of declines instead of guessing its case")
+    void unconfirmedWithValueDeclinesOnMongo() {
+        RuleBuildResult result = builder.build("orders with status shipped", "MongoDB");
+        assertThat(result.built()).isFalse();
+        assertThat(result.trace().declineReason()).contains("shipped");
+    }
+
+    @Test
+    @DisplayName("the same unconfirmed with-value still builds on MySQL with the typed value")
+    void unconfirmedWithValueBuildsOnMySql() {
+        assertThat(builder.build("orders with status shipped", "MySQL").sql())
+                .isEqualTo("SELECT * FROM orders WHERE status = 'shipped';");
+    }
+
+    @Test
+    @DisplayName("a numeric with-value needs no stored form on MongoDB")
+    void numericWithValueBuildsOnMongo() {
+        assertThat(builder.build("orders with quantity 3", "MongoDB").built()).isTrue();
+    }
+
+    @Test
     @DisplayName("an unknown database type is refused")
     void unknownDatabaseType() {
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> builder.build("Show all customers", "Oracle"))
