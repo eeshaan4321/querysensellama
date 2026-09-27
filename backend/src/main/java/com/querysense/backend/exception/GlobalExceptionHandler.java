@@ -1,7 +1,9 @@
 package com.querysense.backend.exception;
 
+import com.fasterxml.jackson.databind.exc.InvalidFormatException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -9,8 +11,10 @@ import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.HttpServerErrorException;
 
 import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /** Maps exceptions to JSON error responses. */
 @RestControllerAdvice
@@ -48,6 +52,33 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(HttpStatus.SERVICE_UNAVAILABLE)
                 .body(buildError(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage()));
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<Map<String, Object>> handleUnreadableBody(
+            HttpMessageNotReadableException ex) {
+
+        String message = "The request body could not be read as JSON.";
+        Throwable cause = ex.getCause();
+
+        if (cause instanceof InvalidFormatException invalidFormat
+                && invalidFormat.getTargetType() != null
+                && invalidFormat.getTargetType().isEnum()) {
+
+            String field = invalidFormat.getPath().isEmpty()
+                    ? "field"
+                    : invalidFormat.getPath().get(invalidFormat.getPath().size() - 1).getFieldName();
+            String allowedValues = Arrays.stream(invalidFormat.getTargetType().getEnumConstants())
+                    .map(Object::toString)
+                    .collect(Collectors.joining(", "));
+
+            message = field + " must be one of " + allowedValues
+                    + " (got '" + invalidFormat.getValue() + "')";
+        }
+
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(buildError(HttpStatus.BAD_REQUEST, message));
     }
 
     @ExceptionHandler(SchemaUploadException.class)
