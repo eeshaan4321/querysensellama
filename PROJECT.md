@@ -2512,7 +2512,7 @@ tests, 0 failures, frontend 66 tests / lint clean:**
 | 7 | `RuleBasedQueryBuilder` threads `Dialect` through `QueryIntentParser`. **Rule E2 no longer declines MongoDB** — a bound question is built and written by `MongoEmitter` instead of going to the LLM | `18ac2f0` |
 | 8 | A second table-shaped noun that binds to nothing declines, naming it, instead of being silently dropped (new rule E23) | `dfe2777` |
 | 9 | `QueryHistory` stores the `resourceLevel` each run was made under. An unknown `resourceLevel` or a malformed request body is a 400, not a 500 | `59aa243`, `2de18ea` |
-| 10 | `DialectParityTest` holds 18 of the app's questions to the same built/declined outcome in MySQL and MongoDB, plus one documented difference | `a2329d6` |
+| 10 | `DialectParityTest` holds 18 of the app's questions to the same built/declined outcome in MySQL and MongoDB, plus three documented differences | `a2329d6`, extended after `face58c` |
 | 11 | This entry, and the matching updates to `RULES.md` | — |
 
 **Wired, as of task 7.** The rule engine no longer declines every MongoDB
@@ -2525,10 +2525,18 @@ ambiguous join, an unbound column or value, a temporal expression, the new
 task 8 rule), plus two things the emitter declines rather than approximate:
 a `WHERE` on the joined collection, and a `WHERE` on an embedded-array field
 while aggregating. `DialectParityTest` (task 10) checks 18 questions come out
-the same way in both dialects, with one documented, deliberate difference:
-`show all order items` builds on MySQL (`order_items` is a real table) and
-declines on MongoDB (`order_items` is embedded under `orders.items[]`, no
-such collection exists). This is user-visible the moment MongoDB is chosen
+the same way in both dialects, with three documented, deliberate
+differences, all from `order_items` being a table in MySQL but embedded
+under `orders.items[]` in MongoDB:
+- `show all order items` builds on MySQL and declines on MongoDB, where no
+  such collection exists.
+- `show orders with products` and `show products and orders` build on
+  MongoDB through `orders.items.product_id`, and decline on MySQL, which
+  has no direct relationship between the two tables.
+- `show unit price of orders` projects `items.unit_price` on MongoDB and
+  declines on MySQL, where the column lives on `order_items`.
+
+This is user-visible the moment MongoDB is chosen
 as the target — nothing else is needed to reach it, only a live `mongod` to
 demo it against.
 

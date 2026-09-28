@@ -79,4 +79,23 @@ class DialectParityTest {
         assertThat(parser.parse(question, Dialect.MYSQL).built()).isTrue();
         assertThat(parser.parse(question, Dialect.MONGODB).built()).isFalse();
     }
+
+    @ParameterizedTest(name = "{0}")
+    @DisplayName("documented difference: MongoDB reaches products through orders.items.product_id,"
+            + " a reference MySQL has only via the order_items table, so MySQL finds no direct relationship")
+    @ValueSource(strings = {"show orders with products", "show products and orders"})
+    void embeddedReferenceJoinsDiffer(String question) {
+        assertThat(parser.parse(question, Dialect.MYSQL).built()).isFalse();
+        assertThat(parser.parse(question, Dialect.MONGODB).sql()).contains("items.product_id");
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @DisplayName("documented difference: an order's item fields are embedded in MongoDB orders,"
+            + " but live in MySQL's order_items table, so only MongoDB can project them from orders")
+    @ValueSource(strings = {"show unit price of orders"})
+    void embeddedFieldProjectionsDiffer(String question) {
+        assertThat(parser.parse(question, Dialect.MYSQL).built()).isFalse();
+        assertThat(parser.parse(question, Dialect.MONGODB).sql())
+                .isEqualTo("db.orders.find({}, {\"items.unit_price\": 1, \"_id\": 0})");
+    }
 }
