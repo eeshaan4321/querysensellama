@@ -2622,11 +2622,40 @@ lowercased input — inside the `$match` filter.
 
 **Next:** steps 1–3 of the plan (tasks 1–11) are complete. Spec step 4 is
 next — MongoDB upload, taking collections with a `$jsonSchema` validator,
-indexes and an optional `references` block — and needs a local `mongod`
-listening on `27017` to build and test against; nothing above has one. The
-progress ledger is at
-`.superpowers/sdd/2026-09-26-mongodb-parity-steps-1-3/progress.md`, which is
-git-ignored.
+indexes and an optional `references` block. The progress ledger for steps
+1–3 is at `.superpowers/sdd/2026-09-26-mongodb-parity-steps-1-3/progress.md`,
+which is git-ignored.
+
+**2026-09-28 — step 4 planned, not started.**
+- `3e701e8` adds two more documented differences to `DialectParityTest`
+  (see task 10 above), bringing the total to three.
+- A `mongod` now listens on `127.0.0.1:27017`. It has not been confirmed as
+  MongoDB Community Server, and nothing has been run against it yet.
+- The step 4 plan is written:
+  `docs/superpowers/plans/2026-09-28-mongodb-parity-step-4-upload.md`,
+  10 tasks. It has not been reviewed or executed, and no code from it
+  exists. The tasks:
+  - Tasks 1–3: per-dialect upload interfaces, `JsonSchemaUploadParser`,
+    and the Mongo validation rules.
+  - Tasks 4–5: `MongoProvisioner` and `MongoSeeder`, with an unreachable
+    MongoDB returned as a 503.
+  - Task 6: `SchemaUploadService` per dialect.
+  - Task 7: the built-in demo as `mongo/demo-collections.json`, seeded
+    into an empty `querysense` database at startup.
+  - Task 8: `dialect` on the schema endpoints.
+  - Task 9: a `@Tag("mongo")` integration test against the local `mongod`.
+  - Task 10: docs.
+- The plan departs from the spec in five places, all listed at its top:
+  1. It seeds by generating every collection first and filling references
+     afterwards, not in dependency order.
+  2. The H2 profile refuses MySQL uploads only.
+  3. The demo is seeded by a startup listener, only when the demo
+     database is empty.
+  4. References must share a `bsonType` with their target and point
+     outside embedded arrays.
+  5. The demo indexes every reference field, as InnoDB does for foreign
+     keys.
+- Next: review the plan, pick an execution method, then run it.
 
 ### Not verified
 
