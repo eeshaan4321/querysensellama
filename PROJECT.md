@@ -2620,12 +2620,9 @@ the rule engine `customers in mumbai` with the target set to MongoDB, and
 confirm it answers built, with `"Mumbai"` — the stored value, not the
 lowercased input — inside the `$match` filter.
 
-**Next:** steps 1–5 are complete; steps 4 and 5 are recorded in the two
-2026-10-01 sessions below. Step 6 is next: `MongoQueryRewriter`, compare for
-MongoDB, and `optimizedQuery` written into history. Its plan is written and
-not yet executed: `docs/superpowers/plans/2026-10-01-mongodb-parity-step-6-rewrite.md`
-(7 tasks, six departures listed at its top). The progress ledger for
-steps 1–3 is at
+**Next:** steps 1–6 are complete; steps 4–6 are recorded in the 2026-10-01
+sessions below. Step 7 is next: LLM grounding for MongoDB, and the Mongo path
+of `GeneratedQueryValidator`. The progress ledger for steps 1–3 is at
 `.superpowers/sdd/2026-09-26-mongodb-parity-steps-1-3/progress.md`, which is
 git-ignored.
 
@@ -2823,6 +2820,59 @@ not started.
    naming MongoDB within a few seconds.
 5. A MySQL analysis is unchanged: same verdict text and suggestions, plus a
    new `suggestedChange` on TX1, TX2, RS1 and RS3 when a column is known.
+
+### Session of 2026-10-01 — MongoDB parity, step 6 (rewrite and compare)
+
+Plan: `docs/superpowers/plans/2026-10-01-mongodb-parity-step-6-rewrite.md`,
+executed inline, task by task, test first.
+
+| Task | Delivered | Commit |
+|---|---|---|
+| 1 | `MongoShellWriter`: a parsed query back to mongosh text, round-trip exact, types intact. | `da3e09e` |
+| 2 | `Rewriter` per dialect (`QueryRewriter` unchanged for MySQL); `MongoQueryRewriter` with RW2 (`$or` → `$in`). | `b978b1c` |
+| 3 | RW1 (projection of declared fields) and RW3 (drop a sort after a unique exact match). | `634239a` |
+| 4 | RW4 (`$match` ahead of `$lookup`/`$unwind`). | `a9afd5e` |
+| 5 | Compare per dialect; MongoDB summary in documents examined and plan stages, `estimate: false`; `OptimizedQueryRecorder` writes an accepted rewrite into history for both dialects; optional `userInput` on the request. | `731e647`, `d4a37ab` |
+| 6 | `MongoCompareIntegrationTest` against the real `mongod`. | `3c1d610` |
+
+**Departures from the spec, on purpose:**
+1. RW1 applies to `find` only; aggregation already fetches only what it uses.
+2. RW1's identical-documents guarantee rests on the declared schema, from
+   which QuerySense's databases are seeded.
+3. RW3 applies to `find` only and reads unique indexes from the active
+   schema, not a live `listIndexes()`.
+4. History is matched by `userInput` when sent, else by the compared query
+   text over the last 50 rows (in Java, because `generatedQuery` is `TEXT`).
+5. MongoDB comparisons are measured: `estimate` is `false`.
+6. `MongoShellWriter` writes mongosh syntax (`ObjectId("…")`, `ISODate("…")`).
+
+**One slip, recorded:** Task 5's first commit went in with
+`QueryComparisonControllerTest` red. The plan hadn't listed that test, which
+stubbed the old 2-argument `compare`. The next commit fixes it and adds a
+`userInput` pass-through test.
+
+**Verified against the real `mongod`:** `MongoCompareIntegrationTest` ran 3/3,
+not skipped:
+- RW3 removed a real `SORT` stage from the plan;
+- RW4's moved `$match` led the pipeline, and no more documents were
+  examined;
+- RW2's `$in` version was planned and compared.
+
+Afterwards the server listed only `admin`, `config` and `local`. The full
+backend suite is 674/674.
+
+**Unit-tested only:** the history write (repository mocked), the rejected-
+rewrite path, and the live checklist below. The app was not started.
+
+**Live checklist (step 6):**
+1. `curl -X POST localhost:8080/api/query/compare -H "Content-Type: application/json" -d '{"query": "db.customers.find({\"$or\": [{\"city\": \"Pune\"}, {\"city\": \"Delhi\"}]}, {\"name\": 1})", "databaseType": "MongoDB"}'`
+   returns `rewritten: true`, an `$in`, `estimate: false`, and a summary
+   naming documents examined.
+2. Generate `customers in pune` with MongoDB in the Workbench. Then compare
+   its generated query with `userInput` set to the same question. The History
+   screen's row now has an optimized query.
+3. A MySQL compare returns the same summary text as before, with
+   `estimate: true`.
 
 ### Not verified
 

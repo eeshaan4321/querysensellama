@@ -21,15 +21,15 @@ lowercased before it is read.
 | Domain optimisation | 7 | TX1–TX7 (TX6 folded into TX1) | `optimization/TransactionalOptimizationRules` |
 | Resource optimisation | 5 | RS1–RS5 (RS4 folded into RS3) | `optimization/ResourceConsciousService` |
 | Schema advisor | 5 | SA1–SA5 (SA4, SA5 folded into SA1) | `advisor/MySqlIndexAdvisor`, `advisor/MongoIndexAdvisor` |
-| Query rewrite | 3 | RW1–RW3 | `optimization/QueryRewriter` |
-| **Total** | **63** | | |
+| Query rewrite | 4 | RW1–RW4 (RW4 MongoDB only) | `optimization/QueryRewriter`, `optimization/MongoQueryRewriter` |
+| **Total** | **64** | | |
 
 **The rule engine has 23 rules.** Of those, 19 are conditions under which it
 refuses a question and hands it to the language model. The other 40 rules
 belong to the modules that analyse and optimise a query after it has been
 generated. None of the 63 uses a model.
 
-Since 2026-10-01, 59 of the 63 IDs still fire. The four folded IDs (TX6,
+Since 2026-10-01, 60 of the 64 IDs still fire. The four folded IDs (TX6,
 RS4, SA4, SA5) are kept below with a note saying where they went.
 
 Read again on 2026-09-21, when section 10 was added, and again on
@@ -752,7 +752,7 @@ one pair known to contradict; it is not general consistency checking.
 
 ---
 
-## 10. Query rewrite — 3 rules
+## 10. Query rewrite — 4 rules
 
 Added 2026-09-21, behind `POST /api/query/compare`. These are the only rules
 in QuerySense that produce a **new query** rather than advice about one.
@@ -764,8 +764,10 @@ guarantee an identical result set declines rather than fires. The practical
 consequence: there is no "add a LIMIT" rule, even though capping an unbounded
 scan is the most obvious cheap win available, because it changes the answer.
 
-All three are MySQL-only and SELECT-only. A write statement, an unparseable
-string, or a MongoDB query comes back exactly as it arrived.
+MySQL has RW1–RW3, for SELECT only. MongoDB has RW1–RW4 (added 2026-10-01,
+`MongoQueryRewriter`). An unparseable query, a write statement in SQL, or a
+table or collection that isn't in the active schema comes back exactly as it
+arrived.
 
 #### RW1 · Name the columns
 - **Fires when:** `SELECT *`, one table, no join, and the table is in the
@@ -779,6 +781,14 @@ string, or a MongoDB query comes back exactly as it arrived.
   expansion would have to guess at column ordering and duplicate names.
   **Declines on a table it does not know** — the case that would otherwise
   invent columns, which is the same failure the LLM guard exists for.
+- **MongoDB:** a `find` with no projection gets one naming the collection's
+  declared top-level fields (`_id` is returned by default). It declines when
+  the filter or sort names an undeclared field, and on pipelines, where
+  MongoDB already fetches only the fields the pipeline uses. The "identical
+  documents" guarantee rests on the declared schema: QuerySense's databases
+  are provisioned and seeded from it, so they hold no other fields.
+  `db.orders.find({"status": "PAID"})` →
+  `db.orders.find({"status": "PAID"}, {"customer_id": 1, "employee_id": 1, "order_date": 1, "status": 1, "items": 1})`
 
 #### RW2 · Collapse an OR chain into IN
 - **Fires when:** the `WHERE` clause is an `OR` chain of equality tests
@@ -794,6 +804,11 @@ string, or a MongoDB query comes back exactly as it arrived.
   `column = constant`, so an `AND` nested inside, or a column-to-column
   comparison, stops the rule rather than being quietly dropped — the same
   "keep every condition or decline" principle as E14.
+- **MongoDB:** an `$or` whose branches are all exact matches on one field
+  (plain values or `$eq`) becomes `{field: {$in: [...]}}`, in a `find`,
+  `countDocuments`, `deleteMany` filter or any `$match`. Declines across two
+  fields, on operators, regexes, arrays or embedded documents, on a single
+  branch, and when the filter already names the field outside the `$or`.
 
 #### RW3 · Drop a sort that cannot sort anything
 - **Fires when:** `ORDER BY` is present on a bare aggregate
@@ -806,6 +821,35 @@ string, or a MongoDB query comes back exactly as it arrived.
 - **Keeps `ORDER BY` when a `GROUP BY` is present**, where it orders the
   groups and is load-bearing, and on any non-aggregate query, where sorting
   is the point.
+- **MongoDB:** a `find`'s `.sort()` is dropped when its filter matches `_id`,
+  or the sole key of a unique index declared on the collection, exactly. At
+  most one document can match, so the sort can't change anything; it only
+  cost an in-memory sort. A range on a unique field, or an exact match on a
+  non-unique one, keeps the sort.
+
+#### RW4 · Filter before the join (MongoDB only)
+- **Fires when:** a `$match` comes straight after a run of `$lookup` and/or
+  `$unwind` stages, and every field it filters on is a declared field of the
+  base collection.
+- **Rewrites to:** the same pipeline with the `$match` moved ahead of that
+  run, which keeps its own order.
+- **Why:** the same documents survive, but they are filtered before the
+  join, so fewer are joined.
+- **Declines when** the `$match` filters on a `$lookup`'s `as` field, on an
+  `$unwind`'s path or `includeArrayIndex`, or uses an operator such as
+  `$expr`. Moving `{"items.quantity": {"$gt": 2}}` ahead of
+  `{"$unwind": "$items"}` would keep whole orders instead of matching items —
+  a different answer — so it stays where it is.
+
+#### Compare, for both databases (2026-10-01)
+`POST /api/query/compare` rewrites with the dialect's rules and analyses both
+versions. For MongoDB the figures come from `explain` at `executionStats`,
+which runs the plan, so `estimate` is `false`, and the summary reports
+documents examined and any change of plan stage (for example COLLSCAN →
+IXSCAN). A rewrite the database rejects is withheld. An accepted rewrite is
+written into `QueryHistory.optimizedQuery` on the newest history row for the
+same question (the request's optional `userInput`) or, without one, the same
+generated query, database type and schema label.
 
 #### An implementation trap worth recording
 JSQLParser 5.3's plain `ExpressionList` renders an `IN` list **without
