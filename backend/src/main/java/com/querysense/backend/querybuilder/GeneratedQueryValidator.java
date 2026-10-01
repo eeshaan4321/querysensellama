@@ -1,6 +1,11 @@
 package com.querysense.backend.querybuilder;
 
+import com.querysense.backend.analysis.MongoPreflightValidator;
+import com.querysense.backend.analysis.MongoQueryFields;
 import com.querysense.backend.dialect.Dialect;
+import com.querysense.backend.mongo.MongoQuery;
+import com.querysense.backend.mongo.MongoShellParseException;
+import com.querysense.backend.mongo.MongoShellParser;
 import com.querysense.backend.schema.ActiveSchemaProvider;
 import com.querysense.backend.schema.KnownSchema;
 import net.sf.jsqlparser.JSQLParserException;
@@ -20,6 +25,7 @@ import net.sf.jsqlparser.statement.select.OrderByElement;
 import net.sf.jsqlparser.statement.select.PlainSelect;
 import net.sf.jsqlparser.statement.select.Select;
 import net.sf.jsqlparser.statement.select.SelectItem;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -36,9 +42,20 @@ import java.util.regex.Pattern;
 public class GeneratedQueryValidator {
 
     private final ActiveSchemaProvider activeSchema;
+    private final MongoShellParser mongoParser;
+    private final MongoPreflightValidator mongoPreflight;
+
+    @Autowired
+    public GeneratedQueryValidator(ActiveSchemaProvider activeSchema,
+                                   MongoShellParser mongoParser,
+                                   MongoPreflightValidator mongoPreflight) {
+        this.activeSchema = activeSchema;
+        this.mongoParser = mongoParser;
+        this.mongoPreflight = mongoPreflight;
+    }
 
     public GeneratedQueryValidator(ActiveSchemaProvider activeSchema) {
-        this.activeSchema = activeSchema;
+        this(activeSchema, new MongoShellParser(), new MongoPreflightValidator(activeSchema));
     }
 
     private static final Pattern MULTI_CONDITION_LANGUAGE = Pattern.compile(
@@ -49,6 +66,9 @@ public class GeneratedQueryValidator {
     );
 
     public boolean looksIncomplete(String userInput, String generatedQuery, String databaseType) {
+        if ("MongoDB".equalsIgnoreCase(databaseType)) {
+            return userInput != null && generatedQuery != null && mongoLooksIncomplete(userInput, generatedQuery);
+        }
         if (!"MySQL".equalsIgnoreCase(databaseType) || userInput == null || generatedQuery == null) {
             return false;
         }
@@ -77,6 +97,9 @@ public class GeneratedQueryValidator {
     }
 
     public Optional<String> namesUnknownIdentifiers(String generatedQuery, String databaseType) {
+        if ("MongoDB".equalsIgnoreCase(databaseType)) {
+            return generatedQuery == null ? Optional.empty() : mongoIssue(generatedQuery);
+        }
         if (!"MySQL".equalsIgnoreCase(databaseType) || generatedQuery == null) {
             return Optional.empty();
         }
@@ -137,6 +160,51 @@ public class GeneratedQueryValidator {
         }
 
         return Optional.empty();
+    }
+
+    private Optional<String> mongoIssue(String generatedQuery) {
+        MongoQuery query;
+        try {
+            query = mongoParser.parse(generatedQuery);
+        } catch (MongoShellParseException e) {
+            return Optional.of("This is not a MongoDB query QuerySense can read: " + e.getMessage());
+        }
+        return mongoPreflight.validate(query);
+    }
+
+    private boolean mongoLooksIncomplete(String userInput, String generatedQuery) {
+        List<KnownSchema.Table> mentioned = activeSchema.detectTablesMentioned(Dialect.MONGODB, userInput);
+        if (mentioned.size() < 2) {
+            return false;
+        }
+        Set<String> names = new LinkedHashSet<>();
+        mentioned.forEach(t -> names.add(t.name()));
+        boolean related = activeSchema.foreignKeys(Dialect.MONGODB).stream()
+                .anyMatch(fk -> !fk.fromTable().equals(fk.toTable())
+                        && names.contains(fk.fromTable()) && names.contains(fk.toTable()));
+        if (!related) {
+            return false;
+        }
+
+        MongoQuery query;
+        try {
+            query = mongoParser.parse(generatedQuery);
+        } catch (MongoShellParseException e) {
+            return false;
+        }
+        boolean joins = query.pipeline() != null
+                && query.pipeline().stream().anyMatch(stage -> stage.containsKey("$lookup"));
+        if (joins) {
+            return false;
+        }
+        List<String> arrays = activeSchema.tables(Dialect.MONGODB).stream()
+                .filter(t -> t.name().equals(query.collection()))
+                .findFirst()
+                .map(KnownSchema.Table::embeddedArrays)
+                .orElse(List.of());
+        boolean readsEmbedded = MongoQueryFields.referencedPaths(query).stream()
+                .anyMatch(path -> arrays.stream().anyMatch(a -> path.equals(a) || path.startsWith(a + ".")));
+        return !readsEmbedded;
     }
 
     private List<Table> tablesOf(PlainSelect select) {

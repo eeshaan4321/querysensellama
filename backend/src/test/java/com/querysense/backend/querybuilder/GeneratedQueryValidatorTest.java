@@ -101,15 +101,6 @@ class GeneratedQueryValidatorTest {
     }
 
     @Test
-    @DisplayName("MongoDB output is not checked — the schema here describes relational tables")
-    void mongoIsNotChecked() {
-        Optional<String> reason = validator.namesUnknownIdentifiers(
-                "db.transactions.find({ buyer: 1 })", "MongoDB");
-
-        assertThat(reason).isEmpty();
-    }
-
-    @Test
     @DisplayName("an empty active schema cannot disprove anything")
     void emptySchemaPasses() {
         ActiveSchemaProvider empty = mock(ActiveSchemaProvider.class);
