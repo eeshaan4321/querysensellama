@@ -1,5 +1,8 @@
 package com.querysense.backend.service.impl;
 
+import com.querysense.backend.advisor.MongoIndexAdvisor;
+import com.querysense.backend.advisor.MySqlIndexAdvisor;
+import com.querysense.backend.dto.MongoQueryShape;
 import com.querysense.backend.dto.QueryAnalysisResult;
 import com.querysense.backend.dto.SchemaRecommendation;
 import org.junit.jupiter.api.BeforeEach;
@@ -17,7 +20,7 @@ class SchemaAdvisorServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        advisor = new SchemaAdvisorServiceImpl();
+        advisor = new SchemaAdvisorServiceImpl(List.of(new MySqlIndexAdvisor(), new MongoIndexAdvisor()));
     }
 
     @Test
@@ -77,14 +80,9 @@ class SchemaAdvisorServiceImplTest {
     }
 
     @Test
-    @DisplayName("an unindexed Mongo filter recommends createIndex on the field")
+    @DisplayName("a scanned Mongo filter recommends createIndex on the field")
     void recommendsMongoIndex() {
-        QueryAnalysisResult result = base();
-        result.setDatabaseType("MongoDB");
-        result.setHasUnindexedFilter(true);
-        result.setFilteredColumn("status");
-
-        List<SchemaRecommendation> recommendations = advisor.recommend(result);
+        List<SchemaRecommendation> recommendations = advisor.recommend(mongoScan());
 
         assertThat(recommendations).hasSize(1);
         assertThat(recommendations.get(0).getSuggestedAction()).contains("createIndex");
@@ -104,11 +102,7 @@ class SchemaAdvisorServiceImplTest {
     @Test
     @DisplayName("an unanchored Mongo regex is flagged as structural")
     void recommendsAnchoringRegex() {
-        QueryAnalysisResult result = base();
-        result.setDatabaseType("MongoDB");
-        result.setHasUnanchoredRegex(true);
-
-        List<SchemaRecommendation> recommendations = advisor.recommend(result);
+        List<SchemaRecommendation> recommendations = advisor.recommend(mongoRegex());
 
         assertThat(recommendations).hasSize(1);
         assertThat(recommendations.get(0).getType()).isEqualTo("STRUCTURAL");
@@ -184,16 +178,7 @@ class SchemaAdvisorServiceImplTest {
         QueryAnalysisResult temp = base();
         temp.setUsesTemporaryTable(true);
 
-        QueryAnalysisResult mongoFilter = base();
-        mongoFilter.setDatabaseType("MongoDB");
-        mongoFilter.setHasUnindexedFilter(true);
-        mongoFilter.setFilteredColumn("status");
-
-        QueryAnalysisResult mongoRegex = base();
-        mongoRegex.setDatabaseType("MongoDB");
-        mongoRegex.setHasUnanchoredRegex(true);
-
-        return List.of(fullScan(), filesort, temp, mongoFilter, mongoRegex);
+        return List.of(fullScan(), filesort, temp, mongoScan(), mongoRegex());
     }
 
     private QueryAnalysisResult fullScan() {
@@ -202,6 +187,24 @@ class SchemaAdvisorServiceImplTest {
         result.setAccessType("ALL");
         result.setFilteredColumn("status");
         result.setEstimatedRows(100L);
+        return result;
+    }
+
+    private QueryAnalysisResult mongoScan() {
+        QueryAnalysisResult result = base();
+        result.setDatabaseType("MongoDB");
+        result.setHasFullTableScan(true);
+        result.setAccessType("COLLSCAN");
+        result.setMongoShape(new MongoQueryShape("user_details", List.of("status"), List.of(), List.of(), List.of(), false));
+        return result;
+    }
+
+    private QueryAnalysisResult mongoRegex() {
+        QueryAnalysisResult result = base();
+        result.setDatabaseType("MongoDB");
+        result.setUsesIndex(true);
+        result.setHasUnanchoredRegex(true);
+        result.setMongoShape(new MongoQueryShape("user_details", List.of(), List.of(), List.of(), List.of("status"), false));
         return result;
     }
 
