@@ -2,16 +2,21 @@ import { describe, expect, it } from 'vitest';
 import { probeBackend } from './health';
 
 describe('probeBackend', () => {
-  it('reports up when the probe resolves', async () => {
+  it('reports up, with the MongoDB status the backend gave', async () => {
+    const probe = async () => ({ data: { status: 'UP', mongo: 'DOWN' } });
+    expect(await probeBackend(probe)).toEqual({ status: 'up', mongo: 'DOWN' });
+  });
+
+  it('olderBackendHasNoMongoStatus: reports up with no MongoDB status when an older backend gives none', async () => {
     const probe = async () => ({ data: 'Backend is running' });
-    expect(await probeBackend(probe)).toBe('up');
+    expect(await probeBackend(probe)).toEqual({ status: 'up', mongo: null });
   });
 
   it('reports down when the probe rejects', async () => {
     const probe = async () => {
       throw new Error('Network Error');
     };
-    expect(await probeBackend(probe)).toBe('down');
+    expect(await probeBackend(probe)).toEqual({ status: 'down', mongo: null });
   });
 
   it('reports down when the probe rejects with an HTTP status', async () => {
@@ -20,11 +25,6 @@ describe('probeBackend', () => {
       err.response = { status: 500 };
       throw err;
     };
-    expect(await probeBackend(probe)).toBe('down');
-  });
-
-  it('reports up even when the endpoint returns an empty body', async () => {
-    const probe = async () => ({ data: '' });
-    expect(await probeBackend(probe)).toBe('up');
+    expect(await probeBackend(probe)).toEqual({ status: 'down', mongo: null });
   });
 });

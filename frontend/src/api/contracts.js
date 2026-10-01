@@ -43,3 +43,11 @@ export const ENDPOINT_STATUS = {
   schemaUpload: 'REAL',
   comparison: 'REAL',
 };
+
+export function targetDbOf(schema) {
+  return schema?.dialect === 'MONGODB' ? TargetDb.MONGODB : TargetDb.SQL;
+}
+
+export function isMongoAnalysis(analysis) {
+  return String(analysis?.databaseType ?? '').toLowerCase() === 'mongodb';
+}

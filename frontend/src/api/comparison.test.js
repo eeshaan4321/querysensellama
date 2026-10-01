@@ -21,4 +21,9 @@ describe('toCompareRequest', () => {
     const query = "SELECT * FROM customers WHERE city = 'Mumbai';";
     expect(toCompareRequest({ query, targetDb: TargetDb.SQL }).query).toBe(query);
   });
+
+  it('carries the question, so the rewrite lands on the right history row', () => {
+    expect(toCompareRequest({ query: 'db.c.find({})', targetDb: 'MONGODB', userInput: 'all c' }))
+      .toEqual({ query: 'db.c.find({})', databaseType: 'MongoDB', userInput: 'all c' });
+  });
 });

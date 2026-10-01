@@ -67,44 +67,84 @@ export function mockAnalyzeQuery({ query, targetDb, resourceLevel }) {
   const table = guessTable(query);
 
   if (targetDb === 'MONGODB') {
-    const hasUnindexedFilter = !/_id|email|userId/i.test(query);
-    const hasUnanchoredRegex = /\$regex\s*:\s*"[^^]/.test(query);
-    const filteredColumn = (query.match(/(\w+)\s*:/) || [])[1] || null;
+    const collection = (query.match(/db\.(\w+)\./) || [])[1] || 'customers';
+    const field = (query.match(/\{\s*"?(\w+)"?\s*:/) || [])[1] || 'city';
+    const indexed = /_id|email/i.test(query);
+    const examined = indexed ? 1 : 12000;
+    const returned = indexed ? 1 : 1040;
+    const stage = indexed ? 'EXPRESS_IXSCAN' : 'COLLSCAN';
+    const keyUsed = indexed ? 'email_1' : null;
 
     const analysis = {
-      tableName: null,
-      queryType: 'FIND',
-      databaseType: targetDb,
-      usesIndex: !hasUnindexedFilter,
-      hasFullTableScan: false,
+      tableName: collection,
+      queryType: /aggregate/.test(query) ? 'AGGREGATE' : 'FIND',
+      databaseType: 'MongoDB',
+      estimatedRows: examined,
+      estimatedRowsReturned: returned,
+      filtered: indexed ? 100 : 8.7,
+      accessType: stage,
+      usesIndex: indexed,
+      hasFullTableScan: !indexed,
       usesFilesort: false,
       usesTemporaryTable: false,
-      hasUnindexedFilter,
-      hasUnanchoredRegex,
-      filteredColumn,
+      keyUsed,
+      hasUnindexedFilter: !indexed,
+      hasUnanchoredRegex: /\$regex\s*:\s*"[^^]/.test(query),
+      filteredColumn: field,
       orderByColumn: null,
       explainFailed: false,
-      warnings: [
-        hasUnindexedFilter && `Filtering on '${filteredColumn}' with no known index — this may cause a full collection scan.`,
-        hasUnanchoredRegex && "Unanchored $regex pattern detected — prefix with '^' to allow index usage, if an index exists on this field.",
-      ].filter(Boolean),
+      queryCost: null,
+      executionMillis: indexed ? 0 : 9,
+      tables: [{
+        tableName: collection,
+        accessType: stage,
+        keyUsed,
+        possibleKeys: null,
+        estimatedRows: examined,
+        estimatedRowsReturned: returned,
+        filtered: indexed ? 100 : 8.7,
+        fullTableScan: !indexed,
+        usesIndex: indexed,
+        usesFilesort: false,
+        usesTemporaryTable: false,
+      }],
+      planTree: {
+        kind: stage,
+        label: keyUsed || collection,
+        accessType: stage,
+        keyUsed,
+        estimatedRows: examined,
+        cost: null,
+        usesFilesort: false,
+        usesTemporaryTable: false,
+        children: [],
+      },
+      warnings: indexed
+        ? []
+        : [`Collection scan detected on '${collection}'. MongoDB read every document in this collection. If the query is slow, check whether an index on the filtered fields could reduce the documents examined.`],
+      verdict: indexed
+        ? {
+            severity: 'INFO',
+            label: 'Looks efficient',
+            headline: 'Uses the email_1 index to find documents instead of reading the whole collection.',
+            detail: 'About 1 documents were examined.',
+          }
+        : {
+            severity: 'CRITICAL',
+            label: 'Needs attention',
+            headline: `Reads the whole ${collection} collection — about 12,000 documents — then discards 91.3% of what it read.`,
+            detail: 'MongoDB reported no index it could have used for this collection.',
+          },
     };
 
-    const suggestions = [];
-    if (hasUnindexedFilter) {
-      suggestions.push({
-        message: `Filter on '${filteredColumn}' has no supporting index — every matching query forces a full collection scan. Add an index on the filtered field(s) as a priority.`,
-        severity: resourceLevel === 'LOW' ? 'CRITICAL' : 'WARNING',
-        source: 'DOMAIN',
-      });
-    }
-    if (hasUnanchoredRegex) {
-      suggestions.push({
-        message: 'Unanchored regex filter detected. This pattern cannot use an index — consider anchoring with ^ or switching to a text index.',
-        severity: 'WARNING',
-        source: 'DOMAIN',
-      });
-    }
+    const suggestions = indexed
+      ? []
+      : [{
+          message: `Collection scan on '${collection}' in a transactional query. This query path is expected to run frequently — a missing index here means this scan repeats on every call. Add an index on the filtered field(s) immediately.`,
+          severity: resourceLevel === 'HIGH' ? 'WARNING' : 'CRITICAL',
+          source: 'DOMAIN',
+          suggestedChange: `db.${collection}.createIndex({ "${field}": 1 });`,
+        }];
     return { analysis, suggestions };
   }
 
@@ -120,7 +160,7 @@ export function mockAnalyzeQuery({ query, targetDb, resourceLevel }) {
   const analysis = {
     tableName: table,
     queryType: /delete/i.test(query) ? 'DELETE' : 'SELECT',
-    databaseType: targetDb,
+    databaseType: 'MySQL',
     estimatedRows,
     accessType: hasFullTableScan ? 'ALL' : 'ref',
     usesIndex: !hasFullTableScan,
@@ -293,7 +333,29 @@ export function mockSchemaAdvise({ query, targetDb, resourceLevel }) {
   return recommendations;
 }
 
-export function mockCompare({ query }) {
+export function mockCompare({ query, targetDb }) {
+  if (targetDb === 'MONGODB') {
+    const original = query || 'db.customers.find({ "email": "a@b.c" }).sort({ "name": 1 })';
+    const rewritten = /\.sort\(/.test(original) && /email|_id/.test(original);
+    const optimized = rewritten ? original.replace(/\.sort\([^)]*\)/, '') : original;
+    return {
+      originalQuery: original,
+      optimizedQuery: optimized,
+      rewritten,
+      changes: rewritten
+        ? [{ ruleId: 'RW3', explanation: "Dropped .sort() because the filter matches 'email' exactly and a unique index on it allows at most one document. Sorting one document cannot change the result; it only cost an in-memory sort." }]
+        : [],
+      originalAnalysis: { estimatedRows: 1, accessType: 'IXSCAN' },
+      optimizedAnalysis: rewritten ? { estimatedRows: 1, accessType: 'EXPRESS_IXSCAN' } : null,
+      estimatedRowsDelta: rewritten ? 0 : null,
+      queryCostDelta: null,
+      estimate: false,
+      summary: rewritten
+        ? '1 rewrite rule applied. MongoDB examined the same number of documents either way, so the rewrite changes the shape of the query without changing what it reads. The plan changed from IXSCAN to EXPRESS_IXSCAN.'
+        : 'No rewrite rule applied to this query, so there is nothing to compare it against.',
+    };
+  }
+
   const original = query || "SELECT * FROM customers WHERE city = 'mumbai' OR city = 'pune';";
   const optimized = original
     .replace(/select\s+\*/i, 'SELECT id, name, email, city, phone')
@@ -381,7 +443,7 @@ const BUILT_IN_TABLES = [
   { name: 'payments', columns: ['id', 'order_id', 'amount', 'payment_date', 'method'], rowCount: 0 },
   { name: 'products', columns: ['id', 'name', 'price', 'category_id', 'supplier_id'], rowCount: 0 },
   { name: 'suppliers', columns: ['id', 'name', 'contact_email'], rowCount: 0 },
-];
+].map((table) => ({ ...table, embeddedArrays: [], fieldTypes: {} }));
 
 const BUILT_IN_FOREIGN_KEYS = [
   { fromTable: 'employees', fromColumn: 'department_id', toTable: 'departments', toColumn: 'id' },
@@ -395,6 +457,54 @@ const BUILT_IN_FOREIGN_KEYS = [
   { fromTable: 'products', fromColumn: 'supplier_id', toTable: 'suppliers', toColumn: 'id' },
 ];
 
+function collection(name, fieldTypes, embeddedArrays = []) {
+  return { name, columns: Object.keys(fieldTypes), rowCount: 0, embeddedArrays, fieldTypes };
+}
+
+const MONGO_BUILT_IN_TABLES = [
+  collection('categories', { _id: 'objectId', name: 'string' }),
+  collection('customers', { _id: 'objectId', name: 'string', email: 'string', city: 'string', phone: 'string' }),
+  collection('departments', { _id: 'objectId', name: 'string' }),
+  collection('employees', {
+    _id: 'objectId', name: 'string', email: 'string', department_id: 'objectId', manager_id: 'objectId', hire_date: 'date',
+  }),
+  collection('orders', {
+    _id: 'objectId', customer_id: 'objectId', employee_id: 'objectId', order_date: 'date', status: 'string',
+    'items.product_id': 'objectId', 'items.quantity': 'int', 'items.unit_price': 'decimal',
+  }, ['items']),
+  collection('payments', { _id: 'objectId', order_id: 'objectId', amount: 'decimal', payment_date: 'date', method: 'string' }),
+  collection('products', { _id: 'objectId', name: 'string', price: 'decimal', category_id: 'objectId', supplier_id: 'objectId' }),
+  collection('suppliers', { _id: 'objectId', name: 'string', contact_email: 'string' }),
+];
+
+const MONGO_BUILT_IN_REFERENCES = [
+  { fromTable: 'employees', fromColumn: 'department_id', toTable: 'departments', toColumn: '_id' },
+  { fromTable: 'employees', fromColumn: 'manager_id', toTable: 'employees', toColumn: '_id' },
+  { fromTable: 'orders', fromColumn: 'customer_id', toTable: 'customers', toColumn: '_id' },
+  { fromTable: 'orders', fromColumn: 'employee_id', toTable: 'employees', toColumn: '_id' },
+  { fromTable: 'orders', fromColumn: 'items.product_id', toTable: 'products', toColumn: '_id' },
+  { fromTable: 'payments', fromColumn: 'order_id', toTable: 'orders', toColumn: '_id' },
+  { fromTable: 'products', fromColumn: 'category_id', toTable: 'categories', toColumn: '_id' },
+  { fromTable: 'products', fromColumn: 'supplier_id', toTable: 'suppliers', toColumn: '_id' },
+];
+
+function index(table, column, unique = false) {
+  return { table, keys: [{ column, direction: 1 }], unique };
+}
+
+const MONGO_BUILT_IN_INDEXES = [
+  index('customers', 'email', true),
+  index('employees', 'email', true),
+  index('employees', 'department_id'),
+  index('employees', 'manager_id'),
+  index('orders', 'customer_id'),
+  index('orders', 'employee_id'),
+  index('orders', 'items.product_id'),
+  index('payments', 'order_id'),
+  index('products', 'category_id'),
+  index('products', 'supplier_id'),
+];
+
 function builtInSnapshot() {
   return {
     schemaId: 'builtin',
@@ -405,21 +515,41 @@ function builtInSnapshot() {
     foreignKeys: BUILT_IN_FOREIGN_KEYS,
     warnings: [],
     loadedAt: new Date(0).toISOString(),
+    dialect: 'MYSQL',
+    indexes: [],
   };
 }
 
-let mockActive = builtInSnapshot();
-
-export function mockActiveSchema() {
-  return mockActive;
+function mongoBuiltInSnapshot() {
+  return {
+    schemaId: 'builtin',
+    label: 'QuerySense MongoDB demo (built-in)',
+    catalog: 'querysense',
+    builtIn: true,
+    tables: MONGO_BUILT_IN_TABLES,
+    foreignKeys: MONGO_BUILT_IN_REFERENCES,
+    warnings: [],
+    loadedAt: new Date(0).toISOString(),
+    dialect: 'MONGODB',
+    indexes: MONGO_BUILT_IN_INDEXES,
+  };
 }
 
-export function mockResetSchema() {
-  mockActive = builtInSnapshot();
-  return mockActive;
+const slotOf = (targetDb) => (targetDb === 'MONGODB' ? 'MONGODB' : 'SQL');
+
+let mockActive = { SQL: builtInSnapshot(), MONGODB: mongoBuiltInSnapshot() };
+
+export function mockActiveSchema(targetDb = 'SQL') {
+  return mockActive[slotOf(targetDb)];
 }
 
-export function mockSchemaUpload({ ddl, label }) {
+export function mockResetSchema(targetDb = 'SQL') {
+  const slot = slotOf(targetDb);
+  mockActive = { ...mockActive, [slot]: slot === 'MONGODB' ? mongoBuiltInSnapshot() : builtInSnapshot() };
+  return mockActive[slot];
+}
+
+function sqlUpload({ ddl, label }) {
   const tables = [];
   const pattern = /create\s+table\s+`?(\w+)`?\s*\(([\s\S]*?)\)\s*(?:engine|;|$)/gi;
   let match = pattern.exec(ddl || '');
@@ -431,12 +561,12 @@ export function mockSchemaUpload({ ddl, label }) {
       .map((line) => line.replace(/^`?(\w+)`?[\s\S]*$/, '$1'))
       .filter(Boolean);
     if (columns.length) {
-      tables.push({ name: match[1], columns, rowCount: 12000 });
+      tables.push({ name: match[1], columns, rowCount: 12000, embeddedArrays: [], fieldTypes: {} });
     }
     match = pattern.exec(ddl || '');
   }
 
-  mockActive = {
+  return {
     schemaId: `upload-${Math.random().toString(16).slice(2, 10)}`,
     label: label || 'Uploaded schema',
     catalog: 'querysense_uploads',
@@ -445,6 +575,52 @@ export function mockSchemaUpload({ ddl, label }) {
     foreignKeys: [],
     warnings: tables.length ? [] : ['No CREATE TABLE statements were found.'],
     loadedAt: new Date().toISOString(),
+    dialect: 'MYSQL',
+    indexes: [],
   };
-  return mockActive;
+}
+
+function mongoUpload({ ddl, label }) {
+  let collections = [];
+  try {
+    const parsed = JSON.parse(ddl || '');
+    collections = Array.isArray(parsed) ? parsed : parsed.collections || [];
+  } catch {
+    collections = [];
+  }
+
+  const tables = collections.filter((c) => c && c.name).map((c) => {
+    const properties = c.validator?.$jsonSchema?.properties || c.options?.validator?.$jsonSchema?.properties || {};
+    const fieldTypes = { _id: 'objectId' };
+    Object.entries(properties).forEach(([name, node]) => {
+      if (name !== '_id') fieldTypes[name] = node?.bsonType || 'any';
+    });
+    return { name: c.name, columns: Object.keys(fieldTypes), rowCount: 12000, embeddedArrays: [], fieldTypes };
+  });
+
+  const indexes = collections.filter((c) => c && c.name).flatMap((c) => (c.indexes || []).map((i) => ({
+    table: c.name,
+    keys: Object.entries(i.key || {}).map(([column, direction]) => ({ column, direction })),
+    unique: Boolean(i.unique),
+  })));
+
+  return {
+    schemaId: `upload-${Math.random().toString(16).slice(2, 10)}`,
+    label: label || 'Uploaded schema',
+    catalog: 'querysense_uploads',
+    builtIn: false,
+    tables,
+    foreignKeys: [],
+    warnings: tables.length ? [] : ['No collections were found in the uploaded file.'],
+    loadedAt: new Date().toISOString(),
+    dialect: 'MONGODB',
+    indexes,
+  };
+}
+
+export function mockSchemaUpload({ ddl, label, targetDb = 'SQL' }) {
+  const slot = slotOf(targetDb);
+  const snapshot = slot === 'MONGODB' ? mongoUpload({ ddl, label }) : sqlUpload({ ddl, label });
+  mockActive = { ...mockActive, [slot]: snapshot };
+  return snapshot;
 }
