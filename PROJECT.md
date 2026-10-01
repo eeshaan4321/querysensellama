@@ -2693,6 +2693,11 @@ executed inline, task by task, test first.
   the context test would otherwise seed the real `querysense` database.
 - The 503 mapping is tested through MockMvc
   (`MongoUnavailableMappingTest`), since no handler test existed.
+- The final review found that a MongoDB upload dropped only the collections
+  it named, so an earlier upload's other collections stayed in
+  `querysense_uploads`. It now drops every non-`system.` collection there
+  first, as the MySQL provisioner drops every table (`c0b6bf9`). Provisioning into
+  `querysense` for the demo still drops nothing it doesn't create.
 
 **Verified against the real `mongod`:** the server is MongoDB 8.3.11
 Community (`buildInfo.modules` is empty). `MongoUploadIntegrationTest` ran
@@ -2701,11 +2706,22 @@ each and accepted by the strict validators. The server rejected an invalid
 document with code 121. The unique `email` index and the `items.product_id`
 index exist, every embedded item references a seeded product, and `Mumbai`
 is among the cities. Afterwards the server listed only `admin`, `config` and
-`local`, so nothing was left behind. Full backend suite: 543/543.
+`local`, so nothing was left behind. Full backend suite: 545/545.
 
 **Unit-tested only:** the startup listener, the 503 on an outage, the
 duplicate-key warning, the endpoints' `dialect` handling, and everything in
 the live checklist below. The app was not started.
+
+**Known gaps, not fixed:**
+- Raw `db.getCollectionInfos()` output pasted from mongosh contains shell
+  constructors such as `UUID('...')`, which are not JSON. The upload refuses
+  it with the line and column. Paste `JSON.stringify(db.getCollectionInfos())`
+  or `EJSON.stringify(...)` instead.
+- `MongoSeeder` builds every collection's documents in memory before
+  inserting. At 12,000 per collection that is fine for the demo, but a
+  40-collection upload holds about 480,000 documents at once.
+- If the demo's first seeding fails partway, its collections exist, so
+  later startups leave it alone. Drop the `querysense` database to retry.
 
 **Live checklist (step 4):**
 1. Start the backend with `mongod` running. The log shows
