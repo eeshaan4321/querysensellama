@@ -141,4 +141,54 @@ class MongoQueryRewriterTest {
         assertThat(rewrite("db.customers.find({\"email\": \"a@b.c\"}).sort({\"name\": 1})").changes())
                 .extracting(RewriteChange::ruleId).containsExactly("RW1", "RW3");
     }
+
+    private static final String LOOKUP = "{\"$lookup\": {\"from\": \"customers\", \"localField\": \"customer_id\", "
+            + "\"foreignField\": \"_id\", \"as\": \"customer\"}}";
+
+    private java.util.List<String> stageNames(String mongosh) {
+        return parser.parse(mongosh).pipeline().stream().map(s -> s.keySet().iterator().next()).toList();
+    }
+
+    @Test
+    @DisplayName("RW4: a $match on base fields moves ahead of the $lookup before it")
+    void matchMovesAheadOfLookup() {
+        QueryRewrite result = rewrite("db.orders.aggregate([" + LOOKUP + ", {\"$match\": {\"status\": \"PAID\"}}])");
+
+        assertThat(result.changes()).extracting(RewriteChange::ruleId).containsExactly("RW4");
+        assertThat(stageNames(result.sql())).containsExactly("$match", "$lookup");
+        assertThat(result.changes().get(0).explanation()).contains("status").contains("'orders'");
+    }
+
+    @Test
+    @DisplayName("RW4 moves past a whole run of $lookup and $unwind, keeping their order")
+    void matchMovesPastARun() {
+        QueryRewrite result = rewrite("db.orders.aggregate([" + LOOKUP + ", {\"$unwind\": \"$customer\"}, "
+                + "{\"$match\": {\"$and\": [{\"status\": \"PAID\"}, {\"employee_id\": {\"$exists\": true}}]}}])");
+
+        assertThat(stageNames(result.sql())).containsExactly("$match", "$lookup", "$unwind");
+    }
+
+    @Test
+    @DisplayName("RW4 keeps a $match on the field an $unwind just unwound")
+    void matchOnUnwoundFieldStays() {
+        assertThat(rewrite("db.orders.aggregate([{\"$unwind\": \"$items\"}, "
+                + "{\"$match\": {\"items.quantity\": {\"$gt\": 2}}}])").changed()).isFalse();
+    }
+
+    @Test
+    @DisplayName("RW4 keeps a $match on the field a $lookup adds")
+    void matchOnJoinedFieldStays() {
+        assertThat(rewrite("db.orders.aggregate([" + LOOKUP + ", {\"$match\": {\"customer.city\": \"Pune\"}}])")
+                .changed()).isFalse();
+    }
+
+    @Test
+    @DisplayName("RW4 keeps a $match with $expr, one already first, and one after a reshaping stage")
+    void otherMatchesStay() {
+        assertThat(rewrite("db.orders.aggregate([" + LOOKUP + ", {\"$match\": {\"$expr\": {\"$gt\": [\"$a\", 1]}}}])")
+                .changed()).isFalse();
+        assertThat(rewrite("db.orders.aggregate([{\"$match\": {\"status\": \"PAID\"}}, " + LOOKUP + "])").changed()).isFalse();
+        assertThat(rewrite("db.orders.aggregate([{\"$group\": {\"_id\": \"$status\"}}, {\"$match\": {\"_id\": \"PAID\"}}])")
+                .changed()).isFalse();
+    }
 }

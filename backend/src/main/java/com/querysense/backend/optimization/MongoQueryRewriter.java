@@ -61,6 +61,7 @@ public class MongoQueryRewriter implements Rewriter {
         MongoQuery rewritten = nameTheFields(query, table.get(), changes);
         rewritten = collapseOrChains(rewritten, changes);
         rewritten = dropSortOnUniqueMatch(rewritten, changes);
+        rewritten = matchBeforeJoin(rewritten, table.get(), changes);
         if (changes.isEmpty()) {
             return QueryRewrite.unchanged(text);
         }
@@ -207,6 +208,81 @@ public class MongoQueryRewriter implements Rewriter {
             }
         }
         return List.copyOf(roots);
+    }
+
+    private MongoQuery matchBeforeJoin(MongoQuery query, KnownSchema.Table table, List<RewriteChange> changes) {
+        if (query.operation() != MongoQuery.Operation.AGGREGATE || query.pipeline() == null) {
+            return query;
+        }
+        Set<String> base = new HashSet<>(topLevelFields(table));
+        base.add("_id");
+        List<Document> stages = new ArrayList<>(query.pipeline());
+        boolean moved = false;
+        for (int i = 1; i < stages.size(); i++) {
+            if (!(stages.get(i).get("$match") instanceof Document match)) {
+                continue;
+            }
+            int start = i;
+            Set<String> introduced = new HashSet<>();
+            while (start > 0 && joinStage(stages.get(start - 1))) {
+                introduced.addAll(introducedFields(stages.get(start - 1)));
+                start--;
+            }
+            if (start == i) {
+                continue;
+            }
+            Set<String> roots = new LinkedHashSet<>();
+            if (!matchRoots(match, roots) || roots.isEmpty() || !base.containsAll(roots)
+                    || roots.stream().anyMatch(introduced::contains)) {
+                continue;
+            }
+            stages.add(start, stages.remove(i));
+            changes.add(new RewriteChange("RW4",
+                    "Moved the $match on " + String.join(", ", roots) + " ahead of the " + (i - start)
+                            + " $lookup/$unwind stage(s) before it. It reads only fields of '" + table.name()
+                            + "' that those stages do not change, so it keeps the same documents — but it "
+                            + "filters them before the join, so fewer documents are joined."));
+            moved = true;
+        }
+        return moved ? withPipeline(query, stages) : query;
+    }
+
+    private static boolean joinStage(Document stage) {
+        return stage.containsKey("$lookup") || stage.containsKey("$unwind");
+    }
+
+    private static Set<String> introducedFields(Document stage) {
+        Set<String> fields = new HashSet<>();
+        if (stage.get("$lookup") instanceof Document lookup && lookup.get("as") instanceof String as) {
+            fields.add(as.split("\\.")[0]);
+        }
+        Object unwind = stage.get("$unwind");
+        Object path = unwind instanceof Document d ? d.get("path") : unwind;
+        if (path instanceof String p) {
+            fields.add(p.replaceFirst("^\\$", "").split("\\.")[0]);
+        }
+        if (unwind instanceof Document d && d.get("includeArrayIndex") instanceof String index) {
+            fields.add(index.split("\\.")[0]);
+        }
+        return fields;
+    }
+
+    private static boolean matchRoots(Document match, Set<String> roots) {
+        for (Map.Entry<String, Object> entry : match.entrySet()) {
+            String key = entry.getKey();
+            if (Set.of("$and", "$or", "$nor").contains(key) && entry.getValue() instanceof List<?> clauses) {
+                for (Object clause : clauses) {
+                    if (!(clause instanceof Document d) || !matchRoots(d, roots)) {
+                        return false;
+                    }
+                }
+            } else if (key.startsWith("$")) {
+                return false;
+            } else {
+                roots.add(key.split("\\.")[0]);
+            }
+        }
+        return true;
     }
 
     static boolean plain(Object value) {
