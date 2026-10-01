@@ -97,6 +97,9 @@ public class OllamaService implements LlmFallbackService {
     }
 
     private String buildPrompt(String userInput, String dialect) {
+        if ("MongoDB".equalsIgnoreCase(dialect)) {
+            return buildMongoPrompt(userInput);
+        }
         String schemaContext = buildSchemaContext(userInput, dialect);
 
         return String.format("""
@@ -121,6 +124,37 @@ public class OllamaService implements LlmFallbackService {
             Query:
             """,
                 dialect, dialect, schemaContext, userInput
+        );
+    }
+
+    private String buildMongoPrompt(String userInput) {
+        String schemaContext = MongoSchemaContext.describe(activeSchema.active(Dialect.MONGODB),
+                activeSchema.detectTablesMentioned(Dialect.MONGODB, userInput));
+
+        return String.format("""
+            You are a MongoDB expert. Convert the following natural language query
+            into one MongoDB shell (mongosh) query.
+
+            Rules:
+            - Output ONLY the query text. No explanation, no commentary, no markdown,
+              no code fences, no leading phrase such as "Here is the query".
+            - Your entire reply must be the query and nothing else.
+            - Write exactly one statement of the form db.<collection>.<method>(...), where <method> is
+              one of: find, aggregate, countDocuments, deleteMany. A find may be followed by
+              .sort(...) and .limit(n).
+            - Use double-quoted field names and string values.
+            - Use only the collections and fields listed below; never invent one.
+            - A field inside an embedded array is written with a dot, such as items.quantity; $unwind
+              the array before grouping by one of its fields.
+            - To combine two collections, use $lookup on one of the listed references.
+            - Never generate deleteMany without a filter, and never use $out or $merge.
+            - If the request is ambiguous, generate the safest reasonable interpretation.
+            %s
+            Natural language input: %s
+
+            Query:
+            """,
+                schemaContext, userInput
         );
     }
 
@@ -183,7 +217,9 @@ public class OllamaService implements LlmFallbackService {
 
         text = stripLeadInLines(text);
 
-        if (!"MongoDB".equalsIgnoreCase(dialect)) {
+        if ("MongoDB".equalsIgnoreCase(dialect)) {
+            text = firstMongoStatement(text);
+        } else {
             int terminator = text.indexOf(';');
             if (terminator >= 0) {
                 text = text.substring(0, terminator + 1);
@@ -191,6 +227,43 @@ public class OllamaService implements LlmFallbackService {
         }
 
         return text.trim();
+    }
+
+    static String firstMongoStatement(String text) {
+        int start = text.indexOf("db.");
+        if (start < 0) {
+            return text;
+        }
+        int depth = 0;
+        char quote = 0;
+        for (int i = start; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (quote != 0) {
+                if (c == '\\') {
+                    i++;
+                } else if (c == quote) {
+                    quote = 0;
+                }
+                continue;
+            }
+            if (c == '"' || c == '\'') {
+                quote = c;
+            } else if (c == '(' || c == '[' || c == '{') {
+                depth++;
+            } else if (c == ')' || c == ']' || c == '}') {
+                depth--;
+                if (depth == 0 && c == ')') {
+                    int next = i + 1;
+                    while (next < text.length() && Character.isWhitespace(text.charAt(next))) {
+                        next++;
+                    }
+                    if (next >= text.length() || text.charAt(next) != '.') {
+                        return text.substring(start, i + 1);
+                    }
+                }
+            }
+        }
+        return text.substring(start).trim();
     }
 
     private String stripLeadInLines(String text) {

@@ -5,6 +5,7 @@ import com.querysense.backend.exception.LlmUnavailableException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.ResponseEntity;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -17,7 +18,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class OllamaServiceTest {
@@ -152,5 +155,62 @@ class OllamaServiceTest {
                 .thenThrow(new ResourceAccessException("Connection refused"));
 
         service.warmUp();
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private String promptSent() {
+        ArgumentCaptor<HttpEntity> request = ArgumentCaptor.forClass(HttpEntity.class);
+        verify(restTemplate).postForEntity(anyString(), request.capture(), eq(Map.class));
+        return (String) ((Map<String, Object>) request.getValue().getBody()).get("prompt");
+    }
+
+    @Test
+    @DisplayName("a MongoDB question gets the mongosh prompt and the Mongo schema, never the SQL rules")
+    void mongoPrompt() {
+        modelReplies("db.orders.find({\"status\": \"PAID\"})");
+
+        service.generateQuery("paid orders", "MongoDB");
+
+        String prompt = promptSent();
+        assertThat(prompt)
+                .contains("into one MongoDB shell (mongosh) query")
+                .contains("find, aggregate, countDocuments, deleteMany")
+                .contains("Real MongoDB schema")
+                .contains("status (string, one of \"NEW\"")
+                .contains("Natural language input: paid orders")
+                .doesNotContain("GROUP BY")
+                .doesNotContain("semicolon");
+    }
+
+    @Test
+    @DisplayName("the MySQL prompt is unchanged")
+    void mysqlPromptUnchanged() {
+        modelReplies("SELECT 1;");
+
+        service.generateQuery("all customers", "MySQL");
+
+        assertThat(promptSent())
+                .contains("into a valid MySQL query")
+                .contains("End every SQL statement with a semicolon.")
+                .contains("Real schema — use ONLY these tables and columns")
+                .doesNotContain("mongosh");
+    }
+
+    @Test
+    @DisplayName("a MongoDB reply with prose after the query is cut to the query")
+    void mongoReplyCutToFirstStatement() {
+        modelReplies("db.orders.find({\"status\": \"PAID\"})\n\nThis query finds every paid order.");
+
+        assertThat(service.generateQuery("paid orders", "MongoDB"))
+                .isEqualTo("db.orders.find({\"status\": \"PAID\"})");
+    }
+
+    @Test
+    @DisplayName("a chained find, and a bracket inside a string, survive the cut")
+    void chainAndQuotedParenSurvive() {
+        modelReplies("Here is the query:\ndb.customers.find({\"name\": \"a)b\"}).sort({\"name\": 1}).limit(5); // top 5");
+
+        assertThat(service.generateQuery("customers", "MongoDB"))
+                .isEqualTo("db.customers.find({\"name\": \"a)b\"}).sort({\"name\": 1}).limit(5)");
     }
 }
