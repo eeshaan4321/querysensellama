@@ -58,22 +58,22 @@ public class SchemaController {
         }
 
         return SchemaUploadResponse.from(
-                uploadService.upload(ddl, file.getOriginalFilename()), uploadService.lastWarnings());
+                uploadService.upload(ddl, file.getOriginalFilename()), uploadService.lastWarnings(Dialect.MYSQL));
     }
 
     @PostMapping(path = "/upload", consumes = "application/json")
     public SchemaUploadResponse uploadJson(@Valid @RequestBody SchemaUploadRequest request) {
         return SchemaUploadResponse.from(
-                uploadService.upload(request.getDdl(), request.getLabel()), uploadService.lastWarnings());
+                uploadService.upload(request.getDdl(), request.getLabel()), uploadService.lastWarnings(Dialect.MYSQL));
     }
 
     @GetMapping("/active")
     public SchemaUploadResponse active() {
-        return SchemaUploadResponse.from(activeSchema.active(Dialect.MYSQL), uploadService.lastWarnings());
+        return SchemaUploadResponse.from(activeSchema.active(Dialect.MYSQL), uploadService.lastWarnings(Dialect.MYSQL));
     }
 
     @PostMapping("/reset")
     public SchemaUploadResponse reset() {
-        return SchemaUploadResponse.from(uploadService.reset(), List.of());
+        return SchemaUploadResponse.from(uploadService.reset(Dialect.MYSQL), List.of());
     }
 }

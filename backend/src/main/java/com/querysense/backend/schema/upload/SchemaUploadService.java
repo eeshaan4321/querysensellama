@@ -1,10 +1,10 @@
 package com.querysense.backend.schema.upload;
 
 import com.querysense.backend.dialect.Dialect;
+import com.querysense.backend.dialect.DialectRegistry;
 import com.querysense.backend.exception.SchemaUploadException;
 import com.querysense.backend.schema.ActiveSchemaProvider;
 import com.querysense.backend.schema.SchemaSnapshot;
-import com.querysense.backend.schema.ddl.DdlSchemaParser;
 import com.querysense.backend.schema.ddl.ParsedSchema;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,6 +17,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /** Parses, validates, provisions, seeds and activates an uploaded schema. */
 @Service
@@ -24,74 +25,96 @@ public class SchemaUploadService {
 
     private static final Logger log = LoggerFactory.getLogger(SchemaUploadService.class);
 
-    private final DdlSchemaParser parser;
+    private final DialectRegistry<SchemaUploadParser> parsers;
     private final SchemaUploadValidator validator;
-    private final SchemaProvisioner provisioner;
-    private final SchemaSeeder seeder;
+    private final DialectRegistry<SchemaProvisioning> provisioners;
+    private final DialectRegistry<SchemaSeeding> seeders;
     private final ActiveSchemaProvider activeSchema;
     private final Environment environment;
+    private final Map<Dialect, List<String>> lastWarnings = new ConcurrentHashMap<>();
 
-    private volatile List<String> lastWarnings = List.of();
-
-    public SchemaUploadService(DdlSchemaParser parser,
+    public SchemaUploadService(List<SchemaUploadParser> parsers,
                                SchemaUploadValidator validator,
-                               SchemaProvisioner provisioner,
-                               SchemaSeeder seeder,
+                               List<SchemaProvisioning> provisioners,
+                               List<SchemaSeeding> seeders,
                                ActiveSchemaProvider activeSchema,
                                Environment environment) {
-        this.parser = parser;
+        this.parsers = new DialectRegistry<>(parsers, "schema upload parser");
         this.validator = validator;
-        this.provisioner = provisioner;
-        this.seeder = seeder;
+        this.provisioners = new DialectRegistry<>(provisioners, "schema provisioner");
+        this.seeders = new DialectRegistry<>(seeders, "schema seeder");
         this.activeSchema = activeSchema;
         this.environment = environment;
     }
 
-    public SchemaSnapshot upload(String ddl, String label) {
-        requireMySqlProfile();
+    public SchemaSnapshot upload(String text, String label) {
+        return upload(text, label, Dialect.MYSQL);
+    }
 
-        if (ddl == null || ddl.isBlank()) {
-            throw new SchemaUploadException(
-                    "The uploaded schema was empty. Upload a .sql file containing CREATE TABLE statements.");
+    public SchemaSnapshot upload(String text, String label, Dialect dialect) {
+        if (dialect == Dialect.MONGODB) {
+            requireMongoUri();
+        } else {
+            requireMySqlProfile();
         }
 
-        ParsedSchema parsed = parser.parse(ddl);
-        validator.validate(parsed);
-        this.lastWarnings = parsed.warnings();
+        if (text == null || text.isBlank()) {
+            throw new SchemaUploadException(dialect == Dialect.MONGODB
+                    ? "The uploaded schema was empty. Upload a .json file describing the collections, each with "
+                            + "a $jsonSchema validator."
+                    : "The uploaded schema was empty. Upload a .sql file containing CREATE TABLE statements.");
+        }
 
+        ParsedSchema parsed = parsers.get(dialect).parse(text);
+        validator.validate(parsed, dialect);
+        lastWarnings.put(dialect, parsed.warnings());
+
+        SchemaProvisioning provisioner = provisioners.get(dialect);
         provisioner.provision(parsed);
 
-        SeedReport seeded = seeder.seed(parsed);
+        SeedReport seeded = seeders.get(dialect).seed(parsed);
         Map<String, Integer> rowCounts = seeded.rowCounts();
         if (!seeded.warnings().isEmpty()) {
-            List<String> combined = new ArrayList<>(this.lastWarnings);
+            List<String> combined = new ArrayList<>(parsed.warnings());
             combined.addAll(seeded.warnings());
-            this.lastWarnings = List.copyOf(combined);
+            lastWarnings.put(dialect, List.copyOf(combined));
         }
 
         SchemaSnapshot snapshot = new SchemaSnapshot(
                 "upload-" + UUID.randomUUID().toString().substring(0, 8),
                 label == null || label.isBlank() ? "Uploaded schema" : label,
-                provisioner.uploadCatalog(),
+                provisioner.uploadDatabase(),
                 parsed.toKnownTables(),
                 parsed.allForeignKeys(),
                 rowCounts,
-                Instant.now());
+                Instant.now(),
+                dialect,
+                parsed.indexes(),
+                parsed.fieldTypes());
 
-        log.info("Uploaded schema '{}': {} tables, {} rows total",
-                snapshot.label(), snapshot.tables().size(),
+        log.info("Uploaded {} schema '{}': {} tables, {} rows total",
+                dialect.label(), snapshot.label(), snapshot.tables().size(),
                 rowCounts.values().stream().mapToInt(Integer::intValue).sum());
 
         return activeSchema.publish(snapshot);
     }
 
-    public SchemaSnapshot reset() {
-        this.lastWarnings = List.of();
-        return activeSchema.resetToBuiltIn(Dialect.MYSQL);
+    public SchemaSnapshot reset(Dialect dialect) {
+        lastWarnings.put(dialect, List.of());
+        return activeSchema.resetToBuiltIn(dialect);
     }
 
-    public List<String> lastWarnings() {
-        return lastWarnings;
+    public List<String> lastWarnings(Dialect dialect) {
+        return lastWarnings.getOrDefault(dialect, List.of());
+    }
+
+    private void requireMongoUri() {
+        String uri = environment.getProperty("spring.data.mongodb.uri");
+        if (uri == null || uri.isBlank()) {
+            throw new SchemaUploadException(
+                    "MongoDB upload needs spring.data.mongodb.uri (set it with the MONGO_URI environment "
+                            + "variable) pointing at a running mongod, and it is not set.");
+        }
     }
 
     private void requireMySqlProfile() {

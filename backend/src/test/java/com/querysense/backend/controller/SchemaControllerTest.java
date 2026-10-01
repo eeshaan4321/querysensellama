@@ -1,5 +1,6 @@
 package com.querysense.backend.controller;
 
+import com.querysense.backend.dialect.Dialect;
 import com.querysense.backend.dto.SchemaUploadRequest;
 import com.querysense.backend.dto.SchemaUploadResponse;
 import com.querysense.backend.exception.SchemaUploadException;
@@ -39,7 +40,7 @@ class SchemaControllerTest {
     @BeforeEach
     void setUp() {
         uploadService = mock(SchemaUploadService.class);
-        when(uploadService.lastWarnings()).thenReturn(List.of());
+        when(uploadService.lastWarnings(Dialect.MYSQL)).thenReturn(List.of());
         activeSchema = new ActiveSchemaProvider();
         controller = new SchemaController(uploadService, activeSchema, 2_097_152);
     }
@@ -120,7 +121,7 @@ class SchemaControllerTest {
     @Test
     @DisplayName("POST /reset returns the built-in schema")
     void resets() {
-        when(uploadService.reset()).thenReturn(KnownSchema.builtIn());
+        when(uploadService.reset(Dialect.MYSQL)).thenReturn(KnownSchema.builtIn());
 
         assertThat(controller.reset().builtIn()).isTrue();
     }
