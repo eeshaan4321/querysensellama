@@ -2622,7 +2622,9 @@ lowercased input — inside the `$match` filter.
 
 **Next:** steps 1–6 are complete; steps 4–6 are recorded in the 2026-10-01
 sessions below. Step 7 is next: LLM grounding for MongoDB, and the Mongo path
-of `GeneratedQueryValidator`. The progress ledger for steps 1–3 is at
+of `GeneratedQueryValidator`. Its plan is written and not yet executed:
+`docs/superpowers/plans/2026-10-01-mongodb-parity-step-7-llm.md` (5 tasks,
+three departures listed at its top). The progress ledger for steps 1–3 is at
 `.superpowers/sdd/2026-09-26-mongodb-parity-steps-1-3/progress.md`, which is
 git-ignored.
 
