@@ -2623,7 +2623,8 @@ lowercased input — inside the `$match` filter.
 **Next:** steps 1–7 are complete; steps 4–7 are recorded in the 2026-10-01
 sessions below. Step 8 is next: the frontend's MongoDB side (Schema source
 switch, Analysis and Optimization for Mongo, History columns, the `mongo`
-health status). The progress ledger for steps 1–3 is at
+health status). Its plan: `docs/superpowers/plans/2026-10-01-mongodb-parity-step-8-frontend.md`
+(9 tasks). The progress ledger for steps 1–3 is at
 `.superpowers/sdd/2026-09-26-mongodb-parity-steps-1-3/progress.md`, which is
 git-ignored.
 
