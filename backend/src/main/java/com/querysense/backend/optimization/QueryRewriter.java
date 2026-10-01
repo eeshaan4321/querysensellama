@@ -29,12 +29,22 @@ import java.util.Optional;
  * Every rule here preserves the rows returned; a rule that cannot guarantee that declines.
  */
 @Component
-public class QueryRewriter {
+public class QueryRewriter implements Rewriter {
 
     private final ActiveSchemaProvider activeSchema;
 
     public QueryRewriter(ActiveSchemaProvider activeSchema) {
         this.activeSchema = activeSchema;
+    }
+
+    @Override
+    public Dialect dialect() {
+        return Dialect.MYSQL;
+    }
+
+    @Override
+    public QueryRewrite rewrite(String sql) {
+        return rewrite(sql, "MySQL");
     }
 
     public QueryRewrite rewrite(String sql, String databaseType) {
