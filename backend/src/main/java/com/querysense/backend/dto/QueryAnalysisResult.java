@@ -1,5 +1,6 @@
 package com.querysense.backend.dto;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -37,6 +38,8 @@ public class QueryAnalysisResult {
     private Double queryCost;
 
     private Long executionMillis;
+
+    private MongoQueryShape mongoShape;
 
     private AnalysisVerdict verdict;
 
@@ -77,6 +80,10 @@ public class QueryAnalysisResult {
 
     public Long getExecutionMillis() { return executionMillis; }
     public void setExecutionMillis(Long executionMillis) { this.executionMillis = executionMillis; }
+
+    @JsonIgnore
+    public MongoQueryShape getMongoShape() { return mongoShape; }
+    public void setMongoShape(MongoQueryShape mongoShape) { this.mongoShape = mongoShape; }
 
     public AnalysisVerdict getVerdict() { return verdict; }
     public void setVerdict(AnalysisVerdict verdict) { this.verdict = verdict; }
