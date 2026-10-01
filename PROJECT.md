@@ -2621,10 +2621,10 @@ confirm it answers built, with `"Mumbai"` — the stored value, not the
 lowercased input — inside the `$match` filter.
 
 **Next:** steps 1–7 are complete; steps 4–7 are recorded in the 2026-10-01
-sessions below. Step 8 is next: the frontend's MongoDB side (Schema source
-switch, Analysis and Optimization for Mongo, History columns, the `mongo`
-health status). Its plan: `docs/superpowers/plans/2026-10-01-mongodb-parity-step-8-frontend.md`
-(9 tasks). The progress ledger for steps 1–3 is at
+sessions below. Step 8 (the frontend's MongoDB side) is in progress and was
+stopped partway: tasks 1–4 of 9 are done, task 5 had only its tests written.
+See the step 8 session below for exactly where it stopped. The progress
+ledger for steps 1–3 is at
 `.superpowers/sdd/2026-09-26-mongodb-parity-steps-1-3/progress.md`, which is
 git-ignored.
 
@@ -2908,6 +2908,53 @@ for the live checklist. The full backend suite is 694/694.
 2. If the model invents a field, the response carries a `schemaWarning`
    naming it at confidence 0.2, and asking again does not come back as
    `CACHE`.
+
+### Session of 2026-10-01 — MongoDB parity, step 8 (frontend), stopped partway
+
+Plan: `docs/superpowers/plans/2026-10-01-mongodb-parity-step-8-frontend.md`,
+9 tasks, executed inline, test first. Stopped on request during task 5.
+
+**Done and committed:**
+
+| Task | Delivered | Commit |
+|---|---|---|
+| 1 | `/api/health` gains `mongo: UP \| DOWN \| NOT_CONFIGURED` (a `ping` on `admin`; `NOT_CONFIGURED` when `spring.data.mongodb.uri` is blank, without contacting MongoDB). | `543ad84` |
+| 2 | API layer names its database: schema calls send `dialect`, compare sends `userInput`, health returns `{ status, mongo }`. Mock fixtures cover MongoDB for every call (demo collections, uploads, explain-shaped analysis, measured compare). | `d105683` |
+| 3 | `ActiveSchemaProvider` holds one snapshot per database, moved inside `WorkbenchProvider`; `schema` follows the Workbench toggle and `schemaFor(db)` reads either. | `d663a82` |
+| 4 | Schema source page: a MySQL \| MongoDB switch (opens on the Workbench's target), each side with its own upload (`.sql` / `.json`), paste box and reset; the MongoDB card shows typed paths, embedded arrays, references, indexes and document counts. | `3ae0226` |
+
+Backend suite after task 1: 697/697. Frontend after task 4: 82/82 tests,
+`oxlint` clean. Ruling made: task 3's test captures the context in an
+effect, because reassigning an outer variable during render trips oxlint.
+
+**Where it stopped — task 5 (Analysis shows MongoDB's real plan):** only its
+tests were written, and they are **uncommitted** in the working tree:
+- `frontend/src/components/analysis/ExplainPlanView.test.jsx` (new)
+- `frontend/src/components/analysis/PlanMetrics.test.jsx` (new)
+- `frontend/src/components/analysis/SuggestionsList.test.jsx` (new)
+- `frontend/src/components/analysis/PlanTreeView.test.jsx` (one case added)
+
+The RED run showed eight failures. Six are the expected missing MongoDB
+behaviour. Two are faults in the plan's own tests, not in the code, and must
+be fixed before the implementation:
+1. `PlanMetrics.test.jsx` "MySQL keeps rows…" matches `/MySQL's own estimate/`
+   with `getByText`, but that phrase appears twice (the cost tile's gloss and
+   the footnote). It needs a narrower query, such as the footnote's selector.
+2. `ExplainPlanView.test.jsx` fails on `window.matchMedia is not a function`.
+   `useReducedMotion` needs `matchMedia`, which jsdom lacks. The test file
+   needs a `matchMedia` stub, or the tests a mocked `useReducedMotion`.
+
+No production code for task 5 exists yet. `MongoFindingsList` is still in
+place, so the current Analysis page still shows the old MongoDB text checks.
+
+**Not started:** task 6 (Optimization compares MongoDB rewrites), task 7
+(History's Database column), task 8 (shell: MongoDB status banner and
+indicator wording), task 9 (build check and the session record).
+
+**To resume:** fix the two test faults above, then continue task 5 from its
+step 3 in the plan. The ledger is at
+`.superpowers/sdd/2026-10-01-mongodb-parity-step-8-frontend/progress.md`
+(git-ignored).
 
 ### Not verified
 
