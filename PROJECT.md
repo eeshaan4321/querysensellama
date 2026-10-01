@@ -2620,13 +2620,10 @@ the rule engine `customers in mumbai` with the target set to MongoDB, and
 confirm it answers built, with `"Mumbai"` — the stored value, not the
 lowercased input — inside the `$match` filter.
 
-**Next:** steps 1–4 are complete; step 4 is recorded in the session of
-2026-10-01 below. Step 5 is next: `MongoExplainAnalyzer`, preflight, the
-verdict vocabulary, and dialect-aware rules and advisor, with `explain` and
-`listIndexes` fixtures captured from the local `mongod`. Its plan is written
-and not yet executed: `docs/superpowers/plans/2026-10-01-mongodb-parity-step-5-analysis.md`
-(12 tasks, seven departures from the spec listed at its top). The progress
-ledger for steps 1–3 is at
+**Next:** steps 1–5 are complete; steps 4 and 5 are recorded in the two
+2026-10-01 sessions below. Step 6 is next: `MongoQueryRewriter`, compare for
+MongoDB, and `optimizedQuery` written into history. The progress ledger for
+steps 1–3 is at
 `.superpowers/sdd/2026-09-26-mongodb-parity-steps-1-3/progress.md`, which is
 git-ignored.
 
@@ -2744,6 +2741,86 @@ the live checklist below. The app was not started.
 
 Uploads write to `querysense_uploads` and the demo to `querysense`, both on
 the local `mongod`.
+
+### Session of 2026-10-01 — MongoDB parity, step 5 (analysis)
+
+Plan: `docs/superpowers/plans/2026-10-01-mongodb-parity-step-5-analysis.md`,
+executed inline, task by task, test first.
+
+| Task | Delivered | Commit |
+|---|---|---|
+| 1 | `MongoExplainCommands` (explain at `executionStats` for find, aggregate, count, delete), and 12 explain fixtures plus `listIndexes` for the demo, captured from the local `mongod` by `MongoExplainFixtureCapture`. | `af72a0b` |
+| 2 | `MongoExplainParser` and `MongoShapeGuard`: classic and slot-based explain output, and `$cursor` pipelines, mapped onto `QueryAnalysisResult`; W1, W3, W4 for MongoDB; `executionMillis`. | `b93abdd` |
+| 3 | `MongoQueryFields`, `MongoQueryShape`, `MongoPreflightValidator`: collection and field paths checked against the active Mongo schema; `$out`/`$merge` refused. | `60b187b` |
+| 4 | `MongoExplainExecutor`: `explain` and `listIndexes` on the active Mongo database; an outage is a 503. | `923888a` |
+| 5 | `MongoExplainAnalyzer` and `PlanAnalyzer`; M1 reads real `listIndexes()`, M2 reads the parsed query. | `eb7c104` |
+| 6 | `MySqlPlanAnalyzer` (today's SQL path, moved), `QueryAnalysisServiceImpl` routes by dialect, `MongoSimpleAnalyzer` deleted. An unknown `databaseType` is now a 400. | `1bf5632` |
+| 7 | Verdicts in MongoDB's words; every MySQL sentence pinned unchanged. | `d186b78` |
+| 8 | `IndexStatements` and `OptimizationSuggestion.suggestedChange`, filled for MySQL TX1, TX2, RS1, RS3. | `8469ec2` |
+| 9 | MongoDB variants of TX1–TX5, TX7, RS1–RS3; TX6 and RS4 folded. | `7332d3b` |
+| 10 | `IndexAdvisor` split into `MySqlIndexAdvisor` (moved byte for byte) and `MongoIndexAdvisor` (equality → sort → range compound, regex and grouping advice). | `deaf668` |
+| 11 | `MongoAnalysisIntegrationTest` against the real `mongod`. | `c9ba728` |
+
+**Departures from the spec, on purpose:**
+1. The fixture "script" is a JUnit class run on demand
+   (`-Dquerysense.capture-fixtures=true`); `mongosh` isn't installed.
+2. Per-collection figures exist only where MongoDB reports them per stage.
+   For pipelines in the slot-based engine `filtered` stays null, so the
+   verdict reports a scan without claiming waste.
+3. TX6 and RS4 fold into TX1 and RS3 for MongoDB.
+4. `suggestedChange` carries index statements only; `"rewrite"` comes with
+   step 6.
+5. W2 has no MongoDB variant.
+6. Preflight stops checking field paths at the first stage that reshapes
+   documents.
+7. A collection declared in the schema but missing from `mongod` is V1
+   (`UNKNOWN`), with a hint to let the demo seed.
+
+**What the 8.3 server actually returns**, learned while writing the plan:
+- Plain finds, count and delete come back as `explainVersion` "1", with
+  per-stage `docsExamined` and `nReturned`.
+- Pushed-down aggregates come back as "2": the classic stage names sit under
+  `winningPlan.queryPlan`, and `executionStages` holds the slot-based
+  engine's own lowercase stages.
+- `$facet` comes back as a `stages` array led by `$cursor`.
+- An equality on a unique index uses `EXPRESS_IXSCAN`.
+- A missing collection is `EOF` / `nonExistentNamespace`.
+- `explain` on a delete deleted nothing, which was confirmed by counting
+  documents afterwards.
+
+**Verified against the real `mongod`:** the fixture capture ran, not skipped.
+`MongoAnalysisIntegrationTest` ran 6/6, not skipped:
+- a scan on `city` is `CRITICAL` in MongoDB's words, with
+  `db.customers.createIndex({ "city": 1 })`;
+- an `email` lookup uses `email_1` and the advisor stays quiet;
+- a scan plus sort collapses into `{ "city": 1, "name": 1 }`;
+- an unfiltered `$group` is flagged for review;
+- explaining `deleteMany` left all documents in place;
+- no real plan produced an unknown-stage warning.
+
+Afterwards the server listed only `admin`, `config` and `local`. The full
+backend suite is 635/635.
+
+**Unit-tested only:** the 503 on an outage, the `$out`/`$merge` refusal
+through the analyzer, and everything in the live checklist below. The app was
+not started.
+
+**Live checklist (step 5):**
+1. Workbench with MongoDB: generate `customers in mumbai`, then open
+   Analysis. The verdict reads "Reads the whole customers collection — about
+   12,000 documents — then discards …". The warnings include "Collection scan
+   detected on 'customers'". The current Mongo findings view still renders;
+   step 8 replaces it.
+2. Schema advisor on the same query shows
+   `db.customers.createIndex({ "city": 1 });`.
+3. `POST /api/query/analyze` with
+   `{"query": "db.orders.aggregate([{\"$out\": \"x\"}])", "databaseType": "MongoDB", "resourceLevel": "MEDIUM"}`
+   returns an `UNKNOWN` verdict whose warning says QuerySense never runs a
+   write. No `x` collection appears in `querysense`.
+4. With `mongod` stopped, the same analyze call on a `find` returns 503
+   naming MongoDB within a few seconds.
+5. A MySQL analysis is unchanged: same verdict text and suggestions, plus a
+   new `suggestedChange` on TX1, TX2, RS1 and RS3 when a column is known.
 
 ### Not verified
 

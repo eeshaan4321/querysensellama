@@ -14,13 +14,13 @@ lowercased before it is read.
 |---|---|---|---|
 | **Rule engine** (question → SQL) | **23** | E1–E23 | `querybuilder/` |
 | Routing between the three layers | 3 | R1–R3 | `QueryGenerationServiceImpl`, `GeneratedQueryValidator` |
-| Checks before EXPLAIN | 2 | P1–P2 | `analysis/SqlPreflightValidator` |
-| EXPLAIN warnings | 4 | W1–W4 | `analysis/MySqlExplainAnalyzer` |
-| MongoDB checks | 2 | M1–M2 | `analysis/MongoSimpleAnalyzer` |
+| Checks before EXPLAIN | 2 | P1–P2 | `analysis/SqlPreflightValidator`, `analysis/MongoPreflightValidator` (P2 only) |
+| EXPLAIN warnings | 4 | W1–W4 | `analysis/MySqlExplainAnalyzer`, `analysis/MongoExplainParser` (W1, W3, W4) |
+| MongoDB checks | 2 | M1–M2 | `analysis/MongoExplainAnalyzer` |
 | Analysis verdict | 9 | V1–V9 | `analysis/VerdictService` |
-| Domain optimisation | 7 | TX1–TX7 | `optimization/TransactionalOptimizationRules` |
-| Resource optimisation | 5 | RS1–RS5 | `optimization/ResourceConsciousService` |
-| Schema advisor | 5 | SA1–SA5 | `service/impl/SchemaAdvisorServiceImpl` |
+| Domain optimisation | 7 | TX1–TX7 (TX6 folded into TX1) | `optimization/TransactionalOptimizationRules` |
+| Resource optimisation | 5 | RS1–RS5 (RS4 folded into RS3) | `optimization/ResourceConsciousService` |
+| Schema advisor | 5 | SA1–SA5 (SA4, SA5 folded into SA1) | `advisor/MySqlIndexAdvisor`, `advisor/MongoIndexAdvisor` |
 | Query rewrite | 3 | RW1–RW3 | `optimization/QueryRewriter` |
 | **Total** | **63** | | |
 
@@ -29,9 +29,18 @@ refuses a question and hands it to the language model. The other 40 rules
 belong to the modules that analyse and optimise a query after it has been
 generated. None of the 63 uses a model.
 
+Since 2026-10-01, 59 of the 63 IDs still fire. The four folded IDs (TX6,
+RS4, SA4, SA5) are kept below with a note saying where they went.
+
 Read again on 2026-09-21, when section 10 was added, and again on
 2026-09-26, when the rule engine became dialect-aware, gained a MongoDB
 emitter (E2) and a decline for a second unbound noun (E23).
+
+Read again on 2026-10-01, when MongoDB analysis became a real `explain()`
+reader (MongoDB parity, step 5). Every rule from section 3 on now has a
+MySQL variant and a MongoDB variant. TX6, RS4, SA4 and SA5 were folded into
+other rules for MongoDB; they keep their numbers below until step 9
+renumbers this file.
 
 ---
 
@@ -452,6 +461,13 @@ a specific message instead of a raw database error.
 - **Why:** the LLM once invented an `age` column even when told the real
   columns. This check is the safety net behind that prompt.
 - **Example:** `SELECT age FROM customers;` → blocked.
+- **MongoDB (2026-10-01):** the collection, and every field path in the
+  filter, projection, sort and pipeline, must exist in the active Mongo
+  schema. Checking stops at the first stage that reshapes documents
+  (`$group`, `$project`, `$lookup`, `$unwind`, …). A `$lookup`'s `from`,
+  `localField` and `foreignField` are always checked. Same wording: "Field
+  'age' does not exist on 'customers' — …". A pipeline containing `$out` or
+  `$merge` is refused here as well: QuerySense never runs a write.
 
 ---
 
@@ -465,6 +481,8 @@ claims the choice was wrong; recommendations belong to the schema advisor.
 - **Fires when:** MySQL reads the table from start to end.
 - **Says:** a full scan happened; if the query is slow, check whether an
   index on the filtered or joined columns would help.
+- **MongoDB:** a `COLLSCAN` stage, or a `$lookup` joining without an index —
+  "Collection scan detected on '<collection>'".
 
 #### W2 · No index used
 - **Fires when:** the table used no index but *wasn't* a full scan (so W1
@@ -473,40 +491,43 @@ claims the choice was wrong; recommendations belong to the schema advisor.
 - **Why:** it's per table. In a join where one side uses an index, the
   other side still gets reported correctly. The old version reported "no
   index is being used" for the whole query.
+- **MongoDB:** no variant. Every Mongo access stage either scans the
+  collection or uses an index.
 
 #### W3 · Temporary table
 - **Fires when:** MySQL built a temporary table (`Using temporary`), usually
   for `GROUP BY` or `DISTINCT`.
+- **MongoDB:** a grouping stage reported `usedDisk: true` — "The grouping
+  stage on '<collection>' spilled to disk".
 
 #### W4 · Filesort
 - **Fires when:** MySQL had to sort the rows after reading them
   (`Using filesort`).
 - **Says:** an index matching the `ORDER BY` columns may reduce the sorting.
+- **MongoDB:** a blocking `SORT` stage (or a `$sort` stage MongoDB didn't push
+  into the query) — "In-memory sort used for '<collection>'".
 
 ---
 
 ## 5. MongoDB checks — 2 rules
 
-> **Scope, decided 2026-09-21 and reopened 2026-09-25:** these two text checks
-> are all the MongoDB analysis that exists — no live connection, no upload
-> support, no rule-engine Mongo path. Neither rule runs the query, and the
-> "known indexed fields" list they test against is a hardcoded placeholder, not
-> real index metadata. **Parity with the SQL pipeline is now being considered**;
-> PROJECT.md §5 carries both the original non-goal and an assessment of what
-> building it would take. If that goes ahead, these two rules are replaced by a
-> real `explain()` reader, not extended.
-
-MongoDB queries aren't run through MongoDB's `explain()`. These two checks
-read the query text instead.
+> **Replaced 2026-10-01 (MongoDB parity, step 5).** MongoDB queries are now
+> planned by the real `mongod` with `explain` at `executionStats`, and these
+> two checks read the parsed query (`MongoQuery`) and the collection's real
+> `listIndexes()` output. The hardcoded `_id, email, userId` list is gone.
+> The query is never run: only `explain` and `listIndexes` are sent.
 
 #### M1 · Unindexed filter
-- **Fires when:** the first filter field that isn't a `$` operator is missing
-  from the known-index list.
-- **Honest caveat:** that list is a **placeholder** (`_id`, `email`,
-  `userId`), not real index metadata read from MongoDB.
+- **Fires when:** an equality or range field in the filter (or an
+  aggregate's leading `$match`) is the leading key of no index on the
+  collection, according to `listIndexes()`.
+- **Says:** names the field. It warns on its own only when the plan did
+  *not* already scan the collection (W1 covers that case). Either way it
+  sets the field the advisor indexes.
 
 #### M2 · Unanchored regex
-- **Fires when:** a `$regex` value doesn't start with `^`.
+- **Fires when:** a `$regex` value (or a regex literal) in the filter doesn't
+  start with `^`. Read from the parsed query, not the text.
 - **Why:** MongoDB can only use an index for a regex anchored to the start of
   the value. This behaviour doesn't vary between MongoDB versions, which is
   what makes it safe as a fixed rule.
@@ -524,6 +545,16 @@ are tried in order and the first match becomes the headline.
 
 The verdict calculates nothing new. It only ranks and words figures already
 on the screen, so the headline can't contradict the numbers below it.
+
+**MongoDB (2026-10-01):** V1–V9 run unchanged on MongoDB's mapped figures
+(`totalDocsExamined` → rows read, `nReturned` → rows returned, `COLLSCAN` →
+full scan, a blocking `SORT` → sort, a spilled group → temporary). Only the
+words change: rows → documents, table → collection, MySQL → MongoDB, a sort
+happens "in memory", a temporary table is "the grouping spilled to disk".
+MongoDB reports no cost figure, so none is shown. Where MongoDB reports no
+per-collection discard figure (count, delete, pipelines run in its
+slot-based engine), V3 can't fire and V4 reports the scan without claiming
+waste.
 
 #### V1 · EXPLAIN never ran → `UNKNOWN`
 "MySQL couldn't produce an execution plan for this query." It's never shown
@@ -603,9 +634,21 @@ severities.
   can't, such as a small join with no key on one side.
 - **TX5 · `const` or `ref` access through an index** — `INFO`. This is the
   ideal shape for a lookup.
-- **TX6 · MongoDB: unindexed filter** — `CRITICAL`.
+- **TX6 · MongoDB: unindexed filter** — folded into TX1 for MongoDB on
+  2026-10-01; `explain` now reports the collection scan this rule guessed at.
 - **TX7 · MongoDB: unanchored regex** — `CRITICAL`. A regex scan doesn't
   belong on a hot path.
+
+**MongoDB variants (2026-10-01).** TX1 fires on a `COLLSCAN` ("Collection
+scan on …"), TX2 on an in-memory sort, TX3 on a grouping that spilled to
+disk, TX4 when no index was used and nothing was scanned, TX5 on a
+single-document lookup (`EXPRESS_IXSCAN`, `EXPRESS_IDHACK`, `IDHACK`).
+
+**`suggestedChange` (2026-10-01).** A suggestion whose fix is an index now
+carries the statement: TX1 the index on the filtered column (for MongoDB, the
+equality → sort → range compound), TX2 the index on the sort column (for
+MongoDB, equality then sort). It is left out when the column isn't known.
+QuerySense never runs it.
 
 ---
 
@@ -629,8 +672,13 @@ working memory directly, so the reasoning is the same as RS1.
 *other* queries too, not just this one.
 
 #### RS4 · MongoDB: unindexed filter, low resources
-`CRITICAL`. The collection scan competes for the same memory as every other
-query.
+Folded into RS3 for MongoDB on 2026-10-01: RS3 now reads MongoDB's real
+collection scan.
+
+**MongoDB variants (2026-10-01).** RS1 fires on an in-memory sort over more
+than 5,000 documents, RS2 on a grouping that spilled to disk, RS3 on a
+collection scan over more than 5,000 documents under low memory. RS1 and
+RS3 carry the same `suggestedChange` index statements as TX2 and TX1.
 
 #### RS5 · Severity shift
 Moves every **domain** suggestion (section 7) one step: up under low, unchanged
@@ -668,14 +716,25 @@ user's decision, in their own database.
   There's deliberately no ready-made statement, because no single index
   reliably fixes this.
 
-#### SA4 · MongoDB index
+#### MongoDB variants (2026-10-01)
+- **SA1:** a `COLLSCAN` with no index in use → one compound
+  `db.<c>.createIndex({...})`, ordered equality → sort → range. It absorbs
+  the sort, so MongoDB's reconciliation happens inside SA1.
+- **SA1, regex case (was SA5):** an unanchored regex → structural advice to
+  anchor it, or a text index on that field.
+- **SA2:** an in-memory sort when SA1 didn't fire → an index on the
+  equality fields, then the sort fields.
+- **SA3:** a `$group` with no `$match` on an indexed field before it →
+  flagged for review, with no statement.
+
+#### SA4 · MongoDB index (folded into SA1, 2026-10-01)
 - **Fires when:** unindexed filter (M1).
 - **Recommends:** `db.<collection>.createIndex({ <field>: 1 });`
 - **Until 2026-09-21 it could not name the collection** — the analyzer was
   called with `collectionName = null`. It now reads the collection out of
   `db.<name>.find(...)` in the query text.
 
-#### SA5 · MongoDB regex
+#### SA5 · MongoDB regex (folded into SA1, 2026-10-01)
 - **Fires when:** unanchored regex (M2).
 - **Recommends:** anchor the regex with `^`, or create a text index if
   searching within the text is needed.
