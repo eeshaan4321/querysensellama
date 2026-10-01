@@ -93,4 +93,52 @@ class MongoQueryRewriterTest {
         String sql = "SELECT * FROM customers WHERE city = 'a' OR city = 'b';";
         assertThat(mysql.rewrite(sql)).isEqualTo(mysql.rewrite(sql, "MySQL"));
     }
+
+    @Test
+    @DisplayName("RW1: a find without a projection names the declared top-level fields, _id left to the default")
+    void projectionNamesFields() {
+        QueryRewrite result = rewrite("db.orders.find({\"status\": \"PAID\"})");
+
+        assertThat(result.changes()).extracting(RewriteChange::ruleId).containsExactly("RW1");
+        assertThat(parser.parse(result.sql()).projection()).isEqualTo(new org.bson.Document("customer_id", 1)
+                .append("employee_id", 1).append("order_date", 1).append("status", 1).append("items", 1));
+        assertThat(result.changes().get(0).explanation()).contains("5 fields").contains("'orders'");
+    }
+
+    @Test
+    @DisplayName("RW1 declines when a projection exists, when the query is not a find, or when it names an undeclared field")
+    void projectionDeclines() {
+        assertThat(rewrite("db.orders.find({\"status\": \"PAID\"}, {\"status\": 1})").changed()).isFalse();
+        assertThat(rewrite("db.orders.countDocuments({\"status\": \"PAID\"})").changed()).isFalse();
+        assertThat(rewrite("db.orders.find({\"coupon\": \"X\"})").changed()).isFalse();
+        assertThat(rewrite("db.orders.find({}).sort({\"coupon\": 1})").changed()).isFalse();
+    }
+
+    @Test
+    @DisplayName("RW3: an exact match on a unique field caps the result at one document, so the sort goes")
+    void sortDroppedOnUniqueEquality() {
+        QueryRewrite byEmail = rewrite("db.customers.find({\"email\": \"a@b.c\"}, {\"name\": 1}).sort({\"name\": 1})");
+        QueryRewrite byId = rewrite("db.customers.find({\"_id\": {\"$eq\": 7}}, {\"name\": 1}).sort({\"name\": -1}).limit(3)");
+
+        assertThat(byEmail.changes()).extracting(RewriteChange::ruleId).containsExactly("RW3");
+        assertThat(parser.parse(byEmail.sql()).sort()).isNull();
+        assertThat(byEmail.changes().get(0).explanation()).contains("'email'").contains("unique");
+        assertThat(parser.parse(byId.sql()).sort()).isNull();
+        assertThat(parser.parse(byId.sql()).limit()).isEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("RW3 keeps the sort for a non-unique field, a range on a unique field, or a unique index elsewhere")
+    void sortKeptWithoutUniqueEquality() {
+        assertThat(rewrite("db.customers.find({\"city\": \"Pune\"}, {\"name\": 1}).sort({\"name\": 1})").changed()).isFalse();
+        assertThat(rewrite("db.customers.find({\"email\": {\"$gte\": \"a\"}}, {\"name\": 1}).sort({\"name\": 1})").changed()).isFalse();
+        assertThat(rewrite("db.orders.find({\"email\": \"a@b.c\"}, {\"status\": 1}).sort({\"status\": 1})").changed()).isFalse();
+    }
+
+    @Test
+    @DisplayName("RW1 and RW3 fire together, reported in rule order")
+    void rulesInOrder() {
+        assertThat(rewrite("db.customers.find({\"email\": \"a@b.c\"}).sort({\"name\": 1})").changes())
+                .extracting(RewriteChange::ruleId).containsExactly("RW1", "RW3");
+    }
 }
