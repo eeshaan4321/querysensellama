@@ -54,6 +54,13 @@ public class GlobalExceptionHandler {
                 .body(buildError(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage()));
     }
 
+    @ExceptionHandler(MongoUnavailableException.class)
+    public ResponseEntity<Map<String, Object>> handleMongoUnavailable(MongoUnavailableException ex) {
+        return ResponseEntity
+                .status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(buildError(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage()));
+    }
+
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<Map<String, Object>> handleUnreadableBody(
             HttpMessageNotReadableException ex) {
