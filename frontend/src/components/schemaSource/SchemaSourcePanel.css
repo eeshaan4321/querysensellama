@@ -61,3 +61,29 @@
   font-size: var(--text-sm);
   line-height: 1.55;
 }
+
+.schema-switch {
+  display: inline-flex;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  margin-bottom: var(--space-5);
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.schema-switch__option {
+  border: 0;
+  background: transparent;
+  color: var(--ink-secondary);
+  font: inherit;
+  font-size: var(--text-sm);
+  padding: var(--space-1) var(--space-4);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.schema-switch__option--active {
+  background: var(--bg-elevated);
+  color: var(--ink);
+}

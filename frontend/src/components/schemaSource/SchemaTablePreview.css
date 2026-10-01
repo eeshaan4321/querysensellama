@@ -100,3 +100,16 @@
   font-size: var(--text-xs);
   color: var(--ink-muted);
 }
+
+.schema-preview__type {
+  margin-left: var(--space-2);
+  color: var(--ink-muted);
+}
+
+.schema-preview__arrays,
+.schema-preview__index {
+  margin-top: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--ink-muted);
+}
