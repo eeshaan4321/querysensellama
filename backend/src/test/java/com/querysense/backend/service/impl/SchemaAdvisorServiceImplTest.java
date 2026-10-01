@@ -1,9 +1,7 @@
 package com.querysense.backend.service.impl;
 
-import com.querysense.backend.analysis.MongoSimpleAnalyzer;
 import com.querysense.backend.dto.QueryAnalysisResult;
 import com.querysense.backend.dto.SchemaRecommendation;
-import com.querysense.backend.mongo.MongoShellParser;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -95,10 +93,10 @@ class SchemaAdvisorServiceImplTest {
     @Test
     @DisplayName("a rule-engine $lookup pipeline with no filter gets no createIndex recommendation")
     void lookupOnlyPipelineGetsNoIndex() {
-        QueryAnalysisResult analysed = new MongoSimpleAnalyzer(new MongoShellParser()).analyze(
-                "db.customers.aggregate([{\"$lookup\": {\"from\": \"orders\", \"localField\": \"_id\","
-                        + " \"foreignField\": \"customer_id\", \"as\": \"orders\"}}, {\"$unwind\": \"$orders\"}])",
-                null);
+        QueryAnalysisResult analysed = base();
+        analysed.setDatabaseType("MongoDB");
+        analysed.setTableName("customers");
+        analysed.setQueryType("AGGREGATE");
 
         assertThat(advisor.recommend(analysed)).isEmpty();
     }
