@@ -2620,11 +2620,10 @@ the rule engine `customers in mumbai` with the target set to MongoDB, and
 confirm it answers built, with `"Mumbai"` — the stored value, not the
 lowercased input — inside the `$match` filter.
 
-**Next:** steps 1–6 are complete; steps 4–6 are recorded in the 2026-10-01
-sessions below. Step 7 is next: LLM grounding for MongoDB, and the Mongo path
-of `GeneratedQueryValidator`. Its plan is written and not yet executed:
-`docs/superpowers/plans/2026-10-01-mongodb-parity-step-7-llm.md` (5 tasks,
-three departures listed at its top). The progress ledger for steps 1–3 is at
+**Next:** steps 1–7 are complete; steps 4–7 are recorded in the 2026-10-01
+sessions below. Step 8 is next: the frontend's MongoDB side (Schema source
+switch, Analysis and Optimization for Mongo, History columns, the `mongo`
+health status). The progress ledger for steps 1–3 is at
 `.superpowers/sdd/2026-09-26-mongodb-parity-steps-1-3/progress.md`, which is
 git-ignored.
 
@@ -2875,6 +2874,39 @@ rewrite path, and the live checklist below. The app was not started.
    screen's row now has an optimized query.
 3. A MySQL compare returns the same summary text as before, with
    `estimate: true`.
+
+### Session of 2026-10-01 — MongoDB parity, step 7 (LLM grounding and validation)
+
+Plan: `docs/superpowers/plans/2026-10-01-mongodb-parity-step-7-llm.md`,
+executed inline, task by task, test first.
+
+| Task | Delivered | Commit |
+|---|---|---|
+| 1 | Enum values travel with the schema: `ParsedSchema.enums()`, `SchemaSnapshot.enums`, `KnownMongoSchema.ENUMS` (checked against the demo JSON). | `df94ad5` |
+| 2 | `MongoSchemaContext`: the prompt's Mongo schema block — typed dotted paths, enums, embedded arrays, references with their `$lookup`. | `c3ccb58` |
+| 3 | `OllamaService`: a MongoDB prompt asking for one mongosh statement in the four supported operations; the reply cut to its first `db.` statement. The MySQL prompt is unchanged. | `36bd21d` |
+| 4 | `GeneratedQueryValidator` MongoDB path: unreadable or off-schema output (and `$out`/`$merge`) → 0.2, warned, never cached; cached Mongo answers rechecked; two related collections answered from one → 0.4. | `64d5751` |
+
+**Departures from the spec, on purpose:**
+1. Enums ride on `SchemaSnapshot` as a new `enums` component; MySQL
+   snapshots carry none for now.
+2. The Mongo check reuses step 5's `MongoPreflightValidator`. Its messages
+   are the warnings, and `$group` references are checked when that `$group`
+   is the first reshaping stage.
+3. The incompleteness analogue is the spec's single rule. The SQL
+   "multiple conditions" heuristic isn't carried over.
+
+**Not run against Ollama:** the prompt is asserted from the request body sent
+to a mocked `RestTemplate`. The model's real behaviour on the new prompt is
+for the live checklist. The full backend suite is 694/694.
+
+**Live checklist (step 7, with Ollama up):**
+1. Ask a MongoDB question the rule engine declines (for example
+   `total order value per customer city`). It is handled by `OLLAMA`, is a
+   single `db.…` statement, and uses `$lookup` on `customer_id`.
+2. If the model invents a field, the response carries a `schemaWarning`
+   naming it at confidence 0.2, and asking again does not come back as
+   `CACHE`.
 
 ### Not verified
 

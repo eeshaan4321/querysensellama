@@ -422,7 +422,7 @@ The rules run in the order below. The first decline stops the build.
   different queries. Matching on the question alone once returned the wrong
   language.
 
-#### R3 · LLM incompleteness check (MySQL only)
+#### R3 · LLM incompleteness check
 - **What it does:** compares the question with the SQL the model wrote.
   There are two signals:
   1. the question names more than one table, but the SQL doesn't reference
@@ -438,6 +438,28 @@ The rules run in the order below. The first decline stops the build.
   "Customers in mumbai with more than 3 orders" once came back as just the
   city filter. A lower label is honest; rejecting the query would hide the
   answer.
+- **MongoDB (2026-10-01):** one signal. The question names two collections
+  joined by a declared reference, but the query uses neither a `$lookup`
+  nor a path into its collection's embedded arrays → 0.40. "Orders with
+  their customers" answered with `db.orders.find({})` fires;
+  `db.orders.find({"items.product_id": …})` for "orders and their products"
+  doesn't.
+
+#### Grounding and the off-schema check (MySQL since 2026-09-21, MongoDB 2026-10-01)
+- **Prompt:** the model is given the active schema. For MongoDB that is the
+  active Mongo schema: each collection's dotted field paths with their BSON
+  types, enum values, embedded arrays, and the references with the `$lookup`
+  each implies; every collection when the question names none. It is asked
+  for exactly one mongosh statement in `find`, `aggregate`, `countDocuments`
+  or `deleteMany`, and its reply is cut to that statement.
+- **Check:** before an LLM answer is used, it is checked against the active
+  schema. For MongoDB:
+  - unreadable output, an unknown collection or field (including `$lookup`'s
+    fields and the first `$group`'s references), or an `$out`/`$merge` stage
+    → confidence 0.20 with a `schemaWarning` naming the problem;
+  - such an answer is not saved, so it is never served from the cache;
+  - a cached MongoDB answer is rechecked the same way before it is served,
+    so a change of active schema retires it.
 
 ---
 
