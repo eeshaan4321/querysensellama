@@ -90,7 +90,8 @@ public class SchemaUploadService {
                 Instant.now(),
                 dialect,
                 parsed.indexes(),
-                parsed.fieldTypes());
+                parsed.fieldTypes(),
+                parsed.enums());
 
         log.info("Uploaded {} schema '{}': {} tables, {} rows total",
                 dialect.label(), snapshot.label(), snapshot.tables().size(),

@@ -71,6 +71,10 @@ public final class KnownMongoSchema {
         return new IndexSpec(collection, List.of(new IndexSpec.KeyPart(field, 1)), unique);
     }
 
+    public static final Map<String, Map<String, List<String>>> ENUMS = Map.of(
+            "orders", Map.of("status", List.of("NEW", "PENDING", "PAID", "SHIPPED", "CANCELLED")),
+            "payments", Map.of("method", List.of("CARD", "UPI", "NETBANKING", "CASH")));
+
     public static SchemaSnapshot builtIn() {
         return new SchemaSnapshot(
                 SchemaSnapshot.BUILT_IN_ID,
@@ -82,6 +86,7 @@ public final class KnownMongoSchema {
                 Instant.EPOCH,
                 Dialect.MONGODB,
                 INDEXES,
-                FIELD_TYPES);
+                FIELD_TYPES,
+                ENUMS);
     }
 }

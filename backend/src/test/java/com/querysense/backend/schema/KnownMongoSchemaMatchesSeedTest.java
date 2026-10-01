@@ -65,4 +65,10 @@ class KnownMongoSchemaMatchesSeedTest {
         assertThat(builtIn.indexes()).isEqualTo(KnownMongoSchema.INDEXES);
         assertThat(builtIn.fieldTypesFor("orders")).containsEntry("items.unit_price", "decimal");
     }
+
+    @Test
+    @DisplayName("the JSON's enums are KnownMongoSchema's enums")
+    void enumsMatch() {
+        assertThat(demo.enums()).isEqualTo(KnownMongoSchema.ENUMS);
+    }
 }
