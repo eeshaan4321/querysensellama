@@ -253,4 +253,125 @@ class VerdictServiceTest {
                     .doesNotContain("possible_keys");
         }
     }
+
+    private TableAnalysis mongoTable(String name, String stage, Long docs, Double filtered,
+                                     String possibleKeys, String keyUsed) {
+        TableAnalysis t = new TableAnalysis();
+        t.setTableName(name);
+        t.setAccessType(stage);
+        t.setEstimatedRows(docs);
+        t.setFiltered(filtered);
+        t.setPossibleKeys(possibleKeys);
+        t.setKeyUsed(keyUsed);
+        t.setFullTableScan("COLLSCAN".equals(stage));
+        t.setUsesIndex(keyUsed != null);
+        return t;
+    }
+
+    private QueryAnalysisResult mongoResultWith(TableAnalysis... tables) {
+        QueryAnalysisResult result = resultWith(tables);
+        result.setDatabaseType("MongoDB");
+        result.setQueryType("FIND");
+        return result;
+    }
+
+    @Test
+    @DisplayName("MySQL wording is unchanged, character for character")
+    void mysqlWordingUnchanged() {
+        QueryAnalysisResult failed = resultWith();
+        failed.setExplainFailed(true);
+        assertThat(service.evaluate(failed).getHeadline())
+                .isEqualTo("MySQL couldn't produce an execution plan for this query.");
+
+        assertThat(service.evaluate(resultWith(table("orders", "ALL", 50_000L, 10.0, null, null))).getHeadline())
+                .isEqualTo("Reads the whole orders table — about 50,000 rows — then discards 90% of what it read.");
+
+        QueryAnalysisResult sorted = resultWith(table("orders", "range", 5_000L, 30.0, null, "idx_status"));
+        sorted.setUsesFilesort(true);
+        AnalysisVerdict sortVerdict = service.evaluate(sorted);
+        assertThat(sortVerdict.getHeadline()).isEqualTo("MySQL has to sort roughly 5,000 rows after reading them.");
+        assertThat(sortVerdict.getDetail()).isEqualTo("No index supplied the rows in the order this query needs, "
+                + "so the ordering or grouping work happens as a separate step.");
+
+        AnalysisVerdict indexed = service.evaluate(resultWith(table("customers", "ref", 12L, 100.0, "idx_city", "idx_city")));
+        assertThat(indexed.getHeadline()).isEqualTo("Uses the idx_city index to find rows instead of reading the whole table.");
+        assertThat(indexed.getDetail()).isEqualTo("About 12 rows are expected to be read.");
+
+        AnalysisVerdict ignored = service.evaluate(resultWith(table("orders", "index", 500L, 30.0, "idx_status", null)));
+        assertThat(ignored.getDetail()).isEqualTo("MySQL only uses an index when it estimates that doing so is "
+                + "cheaper. On a small table, or for a query that matches most rows, reading the table directly "
+                + "genuinely is cheaper.");
+    }
+
+    @Test
+    @DisplayName("MongoDB verdicts speak of collections, documents and MongoDB")
+    void mongoWording() {
+        QueryAnalysisResult failed = mongoResultWith();
+        failed.setExplainFailed(true);
+        assertThat(service.evaluate(failed).getHeadline())
+                .isEqualTo("MongoDB couldn't produce an execution plan for this query.");
+
+        AnalysisVerdict wasteful = service.evaluate(mongoResultWith(mongoTable("customers", "COLLSCAN", 2_000L, 10.0, null, null)));
+        assertThat(wasteful.getSeverity()).isEqualTo(Severity.CRITICAL);
+        assertThat(wasteful.getHeadline()).isEqualTo(
+                "Reads the whole customers collection — about 2,000 documents — then discards 90% of what it read.");
+        assertThat(wasteful.getDetail()).isEqualTo("MongoDB reported no index it could have used for this collection.");
+
+        AnalysisVerdict indexed = service.evaluate(mongoResultWith(mongoTable("customers", "EXPRESS_IXSCAN", 12L, 100.0, null, "email_1")));
+        assertThat(indexed.getHeadline())
+                .isEqualTo("Uses the email_1 index to find documents instead of reading the whole collection.");
+        assertThat(indexed.getDetail()).isEqualTo("About 12 documents were examined.");
+
+        AnalysisVerdict ignored = service.evaluate(mongoResultWith(mongoTable("orders", "FETCH", 500L, 30.0, "status_1", null)));
+        assertThat(ignored.getHeadline()).isEqualTo("An index on orders was available, but MongoDB chose not to use it.");
+    }
+
+    @Test
+    @DisplayName("MongoDB's in-memory sort and spilled group read as such")
+    void mongoSortAndGroup() {
+        QueryAnalysisResult sorted = mongoResultWith(mongoTable("customers", "IXSCAN", 5_000L, 30.0, null, "city_1"));
+        sorted.setUsesFilesort(true);
+        assertThat(service.evaluate(sorted).getHeadline())
+                .isEqualTo("MongoDB has to sort roughly 5,000 documents in memory after reading them.");
+
+        QueryAnalysisResult grouped = mongoResultWith(mongoTable("orders", "IXSCAN", 5_000L, 30.0, null, "status_1"));
+        grouped.setUsesTemporaryTable(true);
+        AnalysisVerdict groupVerdict = service.evaluate(grouped);
+        assertThat(groupVerdict.getHeadline())
+                .isEqualTo("MongoDB has to group roughly 5,000 documents, and the grouping spilled to disk.");
+        assertThat(groupVerdict.getDetail()).isEqualTo("No index supplied the documents in the order this query "
+                + "needs, so the sorting or grouping work happens as a separate step.");
+    }
+
+    @Test
+    @DisplayName("a Mongo scan with no discard figure (count, delete, a pushed-down group) is not graded as waste")
+    void mongoScanWithoutDiscardFigureIsNotCritical() {
+        AnalysisVerdict verdict = service.evaluate(mongoResultWith(mongoTable("orders", "COLLSCAN", 2_000L, null, null, null)));
+
+        assertThat(verdict.getSeverity()).isEqualTo(Severity.WARNING);
+        assertThat(verdict.getHeadline()).isEqualTo("Reads the whole orders collection — about 2,000 documents.");
+    }
+
+    @Test
+    @DisplayName("no MongoDB verdict says table, rows or MySQL")
+    void mongoNeverSaysSqlWords() {
+        QueryAnalysisResult sorted = mongoResultWith(mongoTable("customers", "IXSCAN", 5_000L, 30.0, null, "city_1"));
+        sorted.setUsesFilesort(true);
+        List<QueryAnalysisResult> cases = List.of(
+                mongoResultWith(),
+                mongoResultWith(mongoTable("customers", "COLLSCAN", 2_000L, 10.0, null, null)),
+                mongoResultWith(mongoTable("customers", "COLLSCAN", 2_000L, 95.0, null, null)),
+                mongoResultWith(mongoTable("customers", "COLLSCAN", 80L, 10.0, null, null)),
+                mongoResultWith(mongoTable("orders", "FETCH", 500L, 30.0, "status_1", null)),
+                mongoResultWith(mongoTable("customers", "IXSCAN", 12L, 100.0, null, "email_1")),
+                sorted);
+
+        for (QueryAnalysisResult result : cases) {
+            AnalysisVerdict verdict = service.evaluate(result);
+            String words = (verdict.getHeadline() + " " + (verdict.getDetail() == null ? "" : verdict.getDetail()))
+                    .toLowerCase();
+            assertThat(words).as(verdict.getHeadline())
+                    .doesNotContain(" table").doesNotContain(" rows").doesNotContain("mysql");
+        }
+    }
 }
