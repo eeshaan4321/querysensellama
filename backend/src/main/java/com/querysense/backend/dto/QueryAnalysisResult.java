@@ -36,6 +36,8 @@ public class QueryAnalysisResult {
 
     private Double queryCost;
 
+    private Long executionMillis;
+
     private AnalysisVerdict verdict;
 
     public QueryAnalysisResult() {}
@@ -72,6 +74,9 @@ public class QueryAnalysisResult {
 
     public Double getQueryCost() { return queryCost; }
     public void setQueryCost(Double queryCost) { this.queryCost = queryCost; }
+
+    public Long getExecutionMillis() { return executionMillis; }
+    public void setExecutionMillis(Long executionMillis) { this.executionMillis = executionMillis; }
 
     public AnalysisVerdict getVerdict() { return verdict; }
     public void setVerdict(AnalysisVerdict verdict) { this.verdict = verdict; }
