@@ -39,6 +39,38 @@ public final class KnownMongoSchema {
 
     private KnownMongoSchema() {}
 
+    public static final List<IndexSpec> INDEXES = List.of(
+            index("customers", "email", true),
+            index("employees", "email", true),
+            index("employees", "department_id", false),
+            index("employees", "manager_id", false),
+            index("orders", "customer_id", false),
+            index("orders", "employee_id", false),
+            index("orders", "items.product_id", false),
+            index("payments", "order_id", false),
+            index("products", "category_id", false),
+            index("products", "supplier_id", false));
+
+    public static final Map<String, Map<String, String>> FIELD_TYPES = Map.of(
+            "categories", Map.of("_id", "objectId", "name", "string"),
+            "customers", Map.of("_id", "objectId", "name", "string", "email", "string",
+                    "city", "string", "phone", "string"),
+            "departments", Map.of("_id", "objectId", "name", "string"),
+            "employees", Map.of("_id", "objectId", "name", "string", "email", "string",
+                    "department_id", "objectId", "manager_id", "objectId", "hire_date", "date"),
+            "orders", Map.of("_id", "objectId", "customer_id", "objectId", "employee_id", "objectId",
+                    "order_date", "date", "status", "string", "items.product_id", "objectId",
+                    "items.quantity", "int", "items.unit_price", "decimal"),
+            "payments", Map.of("_id", "objectId", "order_id", "objectId", "amount", "decimal",
+                    "payment_date", "date", "method", "string"),
+            "products", Map.of("_id", "objectId", "name", "string", "price", "decimal",
+                    "category_id", "objectId", "supplier_id", "objectId"),
+            "suppliers", Map.of("_id", "objectId", "name", "string", "contact_email", "string"));
+
+    private static IndexSpec index(String collection, String field, boolean unique) {
+        return new IndexSpec(collection, List.of(new IndexSpec.KeyPart(field, 1)), unique);
+    }
+
     public static SchemaSnapshot builtIn() {
         return new SchemaSnapshot(
                 SchemaSnapshot.BUILT_IN_ID,
@@ -49,6 +81,7 @@ public final class KnownMongoSchema {
                 Map.of(),
                 Instant.EPOCH,
                 Dialect.MONGODB,
-                List.of());
+                INDEXES,
+                FIELD_TYPES);
     }
 }

@@ -1,0 +1,85 @@
+{
+  "collections": [
+    {
+      "name": "categories",
+      "validator": {"$jsonSchema": {"bsonType": "object", "required": ["name"], "properties": {
+        "name": {"bsonType": "string"}}}}
+    },
+    {
+      "name": "customers",
+      "validator": {"$jsonSchema": {"bsonType": "object", "required": ["name", "email"], "properties": {
+        "name": {"bsonType": "string"},
+        "email": {"bsonType": "string"},
+        "city": {"bsonType": "string"},
+        "phone": {"bsonType": "string"}}}},
+      "indexes": [{"key": {"email": 1}, "unique": true}]
+    },
+    {
+      "name": "departments",
+      "validator": {"$jsonSchema": {"bsonType": "object", "required": ["name"], "properties": {
+        "name": {"bsonType": "string"}}}}
+    },
+    {
+      "name": "employees",
+      "validator": {"$jsonSchema": {"bsonType": "object", "required": ["name", "email", "department_id"], "properties": {
+        "name": {"bsonType": "string"},
+        "email": {"bsonType": "string"},
+        "department_id": {"bsonType": "objectId"},
+        "manager_id": {"bsonType": "objectId"},
+        "hire_date": {"bsonType": "date"}}}},
+      "indexes": [
+        {"key": {"email": 1}, "unique": true},
+        {"key": {"department_id": 1}},
+        {"key": {"manager_id": 1}}
+      ],
+      "references": {"department_id": "departments._id", "manager_id": "employees._id"}
+    },
+    {
+      "name": "orders",
+      "validator": {"$jsonSchema": {"bsonType": "object",
+        "required": ["customer_id", "order_date", "status", "items"], "properties": {
+        "customer_id": {"bsonType": "objectId"},
+        "employee_id": {"bsonType": "objectId"},
+        "order_date": {"bsonType": "date"},
+        "status": {"bsonType": "string", "enum": ["NEW", "PENDING", "PAID", "SHIPPED", "CANCELLED"]},
+        "items": {"bsonType": "array", "items": {"bsonType": "object",
+          "required": ["product_id", "quantity", "unit_price"], "properties": {
+          "product_id": {"bsonType": "objectId"},
+          "quantity": {"bsonType": "int"},
+          "unit_price": {"bsonType": "decimal"}}}}}}},
+      "indexes": [
+        {"key": {"customer_id": 1}},
+        {"key": {"employee_id": 1}},
+        {"key": {"items.product_id": 1}}
+      ],
+      "references": {"customer_id": "customers._id", "employee_id": "employees._id",
+                     "items.product_id": "products._id"}
+    },
+    {
+      "name": "payments",
+      "validator": {"$jsonSchema": {"bsonType": "object", "required": ["order_id", "amount"], "properties": {
+        "order_id": {"bsonType": "objectId"},
+        "amount": {"bsonType": "decimal"},
+        "payment_date": {"bsonType": "date"},
+        "method": {"bsonType": "string", "enum": ["CARD", "UPI", "NETBANKING", "CASH"]}}}},
+      "indexes": [{"key": {"order_id": 1}}],
+      "references": {"order_id": "orders._id"}
+    },
+    {
+      "name": "products",
+      "validator": {"$jsonSchema": {"bsonType": "object", "required": ["name", "price"], "properties": {
+        "name": {"bsonType": "string"},
+        "price": {"bsonType": "decimal"},
+        "category_id": {"bsonType": "objectId"},
+        "supplier_id": {"bsonType": "objectId"}}}},
+      "indexes": [{"key": {"category_id": 1}}, {"key": {"supplier_id": 1}}],
+      "references": {"category_id": "categories._id", "supplier_id": "suppliers._id"}
+    },
+    {
+      "name": "suppliers",
+      "validator": {"$jsonSchema": {"bsonType": "object", "required": ["name"], "properties": {
+        "name": {"bsonType": "string"},
+        "contact_email": {"bsonType": "string"}}}}
+    }
+  ]
+}
