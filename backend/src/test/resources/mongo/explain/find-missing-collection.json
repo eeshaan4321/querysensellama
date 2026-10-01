@@ -1,0 +1,74 @@
+{
+  "query": "db.nosuch.find({\"a\": 1})",
+  "explain": {
+    "explainVersion": "1",
+    "queryPlanner": {
+      "namespace": "querysense_fixtures.nosuch",
+      "parsedQuery": {
+        "a": {
+          "$eq": 1
+        }
+      },
+      "indexFilterSet": false,
+      "optimizationTimeMillis": 0,
+      "maxIndexedOrSolutionsReached": false,
+      "maxIndexedAndSolutionsReached": false,
+      "maxScansToExplodeReached": false,
+      "prunedSimilarIndexes": false,
+      "winningPlan": {
+        "isCached": false,
+        "stage": "EOF",
+        "type": "nonExistentNamespace"
+      },
+      "rejectedPlans": []
+    },
+    "executionStats": {
+      "executionSuccess": true,
+      "nReturned": 0,
+      "executionTimeMillis": 0,
+      "totalKeysExamined": 0,
+      "totalDocsExamined": 0,
+      "executionStages": {
+        "isCached": false,
+        "stage": "EOF",
+        "nReturned": 0,
+        "executionTimeMillisEstimate": 0,
+        "works": 1,
+        "advanced": 0,
+        "needTime": 0,
+        "needYield": 0,
+        "saveState": 0,
+        "restoreState": 0,
+        "isEOF": 1,
+        "type": "nonExistentNamespace"
+      }
+    },
+    "queryShapeHash": "A17425633BC6132D4B64039303A157D65A346295644908FBCB8F1701628A9E49",
+    "command": {
+      "find": "nosuch",
+      "filter": {
+        "a": 1
+      },
+      "$db": "querysense_fixtures"
+    },
+    "serverInfo": {
+      "host": "LAPTOP-K7181KRT",
+      "port": 27017,
+      "version": "8.3.11",
+      "gitVersion": "b8b83d6e6e1aed495578ad8c6f9234ad329c9955"
+    },
+    "serverParameters": {
+      "internalQueryFacetBufferSizeBytes": 104857600,
+      "internalDocumentSourceGroupMaxMemoryBytes": 104857600,
+      "internalQueryMaxBlockingSortMemoryUsageBytes": 104857600,
+      "internalDocumentSourceSetWindowFieldsMaxMemoryBytes": 104857600,
+      "internalQueryFacetMaxOutputDocSizeBytes": 104857600,
+      "internalLookupStageIntermediateDocumentMaxSizeBytes": 104857600,
+      "internalQueryProhibitBlockingMergeOnMongoS": 0,
+      "internalQueryMaxAddToSetBytes": 104857600,
+      "internalQueryFrameworkControl": "trySbeRestricted",
+      "internalQueryPlannerIgnoreIndexWithCollationForRegex": 1
+    },
+    "ok": 1.0
+  }
+}

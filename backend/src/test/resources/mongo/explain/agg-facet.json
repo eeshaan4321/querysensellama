@@ -1,0 +1,159 @@
+{
+  "query": "db.orders.aggregate([{\"$match\": {\"status\": \"PAID\"}}, {\"$facet\": {\"n\": [{\"$count\": \"n\"}]}}])",
+  "explain": {
+    "explainVersion": "1",
+    "stages": [
+      {
+        "$cursor": {
+          "queryPlanner": {
+            "namespace": "querysense_fixtures.orders",
+            "parsedQuery": {
+              "status": {
+                "$eq": "PAID"
+              }
+            },
+            "indexFilterSet": false,
+            "queryHash": "F7CB0027",
+            "planCacheShapeHash": "F7CB0027",
+            "planCacheKey": "05441C6E",
+            "optimizationTimeMillis": 0,
+            "cursorType": "emptyDocuments",
+            "maxIndexedOrSolutionsReached": false,
+            "maxIndexedAndSolutionsReached": false,
+            "maxScansToExplodeReached": false,
+            "prunedSimilarIndexes": false,
+            "winningPlan": {
+              "isCached": false,
+              "stage": "COLLSCAN",
+              "filter": {
+                "status": {
+                  "$eq": "PAID"
+                }
+              },
+              "nss": "querysense_fixtures.orders",
+              "direction": "forward"
+            },
+            "rejectedPlans": []
+          },
+          "executionStats": {
+            "executionSuccess": true,
+            "nReturned": 408,
+            "executionTimeMillis": 1,
+            "totalKeysExamined": 0,
+            "totalDocsExamined": 2000,
+            "executionStages": {
+              "isCached": false,
+              "stage": "COLLSCAN",
+              "filter": {
+                "status": {
+                  "$eq": "PAID"
+                }
+              },
+              "nReturned": 408,
+              "executionTimeMillisEstimate": 0,
+              "works": 2001,
+              "advanced": 408,
+              "needTime": 1592,
+              "needYield": 0,
+              "saveState": 5,
+              "restoreState": 4,
+              "isEOF": 1,
+              "nss": "querysense_fixtures.orders",
+              "direction": "forward",
+              "docsExamined": 2000
+            }
+          }
+        },
+        "nReturned": 408,
+        "executionTimeMillisEstimate": 1
+      },
+      {
+        "$facet": {
+          "n": [
+            {
+              "$internalFacetTeeConsumer": {},
+              "nReturned": 408,
+              "executionTimeMillisEstimate": 1
+            },
+            {
+              "$group": {
+                "_id": {
+                  "$const": null
+                },
+                "n": {
+                  "$sum": {
+                    "$const": 1
+                  }
+                },
+                "$willBeMerged": false
+              },
+              "nReturned": 1,
+              "executionTimeMillisEstimate": 1,
+              "maxAccumulatorMemoryUsageBytes": {
+                "n": 224
+              },
+              "totalOutputDataSizeBytes": 237,
+              "usedDisk": false,
+              "spills": 0,
+              "spilledDataStorageSize": 0,
+              "spilledBytes": 0,
+              "spilledRecords": 0,
+              "peakTrackedMemBytes": 240
+            },
+            {
+              "$project": {
+                "n": true,
+                "_id": false
+              },
+              "nReturned": 1,
+              "executionTimeMillisEstimate": 1
+            }
+          ]
+        },
+        "nReturned": 1,
+        "executionTimeMillisEstimate": 1
+      }
+    ],
+    "queryShapeHash": "66F585A8FD68D3E1EB28ACA7648E08A2EACB10B8515BFF19EF5C1723B43E2BF1",
+    "serverInfo": {
+      "host": "LAPTOP-K7181KRT",
+      "port": 27017,
+      "version": "8.3.11",
+      "gitVersion": "b8b83d6e6e1aed495578ad8c6f9234ad329c9955"
+    },
+    "serverParameters": {
+      "internalQueryFacetBufferSizeBytes": 104857600,
+      "internalDocumentSourceGroupMaxMemoryBytes": 104857600,
+      "internalQueryMaxBlockingSortMemoryUsageBytes": 104857600,
+      "internalDocumentSourceSetWindowFieldsMaxMemoryBytes": 104857600,
+      "internalQueryFacetMaxOutputDocSizeBytes": 104857600,
+      "internalLookupStageIntermediateDocumentMaxSizeBytes": 104857600,
+      "internalQueryProhibitBlockingMergeOnMongoS": 0,
+      "internalQueryMaxAddToSetBytes": 104857600,
+      "internalQueryFrameworkControl": "trySbeRestricted",
+      "internalQueryPlannerIgnoreIndexWithCollationForRegex": 1
+    },
+    "command": {
+      "aggregate": "orders",
+      "pipeline": [
+        {
+          "$match": {
+            "status": "PAID"
+          }
+        },
+        {
+          "$facet": {
+            "n": [
+              {
+                "$count": "n"
+              }
+            ]
+          }
+        }
+      ],
+      "cursor": {},
+      "$db": "querysense_fixtures"
+    },
+    "ok": 1.0
+  }
+}

@@ -1,0 +1,73 @@
+{
+  "query": "db.customers.find({\"email\": \"nobody@example.com\"})",
+  "explain": {
+    "explainVersion": "1",
+    "queryPlanner": {
+      "namespace": "querysense_fixtures.customers",
+      "parsedQuery": {
+        "email": {
+          "$eq": "nobody@example.com"
+        }
+      },
+      "indexFilterSet": false,
+      "queryHash": "2C2F10E4",
+      "planCacheShapeHash": "2C2F10E4",
+      "planCacheKey": "F713C797",
+      "optimizationTimeMillis": 0,
+      "maxIndexedOrSolutionsReached": false,
+      "maxIndexedAndSolutionsReached": false,
+      "maxScansToExplodeReached": false,
+      "prunedSimilarIndexes": false,
+      "winningPlan": {
+        "isCached": false,
+        "stage": "EXPRESS_IXSCAN",
+        "keyPattern": "{ email: 1 }",
+        "indexName": "email_1"
+      },
+      "rejectedPlans": []
+    },
+    "executionStats": {
+      "executionSuccess": true,
+      "nReturned": 0,
+      "executionTimeMillis": 0,
+      "totalKeysExamined": 0,
+      "totalDocsExamined": 0,
+      "executionStages": {
+        "isCached": false,
+        "stage": "EXPRESS_IXSCAN",
+        "keyPattern": "{ email: 1 }",
+        "indexName": "email_1",
+        "keysExamined": 0,
+        "docsExamined": 0,
+        "nReturned": 0
+      }
+    },
+    "queryShapeHash": "C6DE9E1FF37CBE208BB43DF5B0811B2A612D7C410E085AE5ECBCF71C0B0BE903",
+    "command": {
+      "find": "customers",
+      "filter": {
+        "email": "nobody@example.com"
+      },
+      "$db": "querysense_fixtures"
+    },
+    "serverInfo": {
+      "host": "LAPTOP-K7181KRT",
+      "port": 27017,
+      "version": "8.3.11",
+      "gitVersion": "b8b83d6e6e1aed495578ad8c6f9234ad329c9955"
+    },
+    "serverParameters": {
+      "internalQueryFacetBufferSizeBytes": 104857600,
+      "internalDocumentSourceGroupMaxMemoryBytes": 104857600,
+      "internalQueryMaxBlockingSortMemoryUsageBytes": 104857600,
+      "internalDocumentSourceSetWindowFieldsMaxMemoryBytes": 104857600,
+      "internalQueryFacetMaxOutputDocSizeBytes": 104857600,
+      "internalLookupStageIntermediateDocumentMaxSizeBytes": 104857600,
+      "internalQueryProhibitBlockingMergeOnMongoS": 0,
+      "internalQueryMaxAddToSetBytes": 104857600,
+      "internalQueryFrameworkControl": "trySbeRestricted",
+      "internalQueryPlannerIgnoreIndexWithCollationForRegex": 1
+    },
+    "ok": 1.0
+  }
+}

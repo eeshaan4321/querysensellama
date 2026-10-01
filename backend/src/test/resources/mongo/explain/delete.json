@@ -1,0 +1,110 @@
+{
+  "query": "db.orders.deleteMany({\"status\": \"CANCELLED\"})",
+  "explain": {
+    "explainVersion": "1",
+    "queryPlanner": {
+      "namespace": "querysense_fixtures.orders",
+      "parsedQuery": {
+        "status": {
+          "$eq": "CANCELLED"
+        }
+      },
+      "indexFilterSet": false,
+      "queryHash": "F7CB0027",
+      "planCacheShapeHash": "F7CB0027",
+      "planCacheKey": "05441C6E",
+      "optimizationTimeMillis": 0,
+      "maxIndexedOrSolutionsReached": false,
+      "maxIndexedAndSolutionsReached": false,
+      "maxScansToExplodeReached": false,
+      "prunedSimilarIndexes": false,
+      "winningPlan": {
+        "isCached": false,
+        "stage": "BATCHED_DELETE",
+        "inputStage": {
+          "stage": "COLLSCAN",
+          "filter": {
+            "status": {
+              "$eq": "CANCELLED"
+            }
+          },
+          "nss": "querysense_fixtures.orders",
+          "direction": "forward"
+        }
+      },
+      "rejectedPlans": []
+    },
+    "executionStats": {
+      "executionSuccess": true,
+      "nReturned": 0,
+      "executionTimeMillis": 1,
+      "totalKeysExamined": 0,
+      "totalDocsExamined": 2000,
+      "executionStages": {
+        "isCached": false,
+        "stage": "BATCHED_DELETE",
+        "nReturned": 0,
+        "executionTimeMillisEstimate": 0,
+        "works": 2001,
+        "advanced": 0,
+        "needTime": 2000,
+        "needYield": 0,
+        "saveState": 0,
+        "restoreState": 0,
+        "isEOF": 1,
+        "nWouldDelete": 392,
+        "inputStage": {
+          "stage": "COLLSCAN",
+          "filter": {
+            "status": {
+              "$eq": "CANCELLED"
+            }
+          },
+          "nReturned": 392,
+          "executionTimeMillisEstimate": 0,
+          "works": 2001,
+          "advanced": 392,
+          "needTime": 1608,
+          "needYield": 0,
+          "saveState": 0,
+          "restoreState": 0,
+          "isEOF": 1,
+          "nss": "querysense_fixtures.orders",
+          "direction": "forward",
+          "docsExamined": 2000
+        }
+      }
+    },
+    "command": {
+      "delete": "orders",
+      "deletes": [
+        {
+          "q": {
+            "status": "CANCELLED"
+          },
+          "limit": 0
+        }
+      ],
+      "$db": "querysense_fixtures"
+    },
+    "serverInfo": {
+      "host": "LAPTOP-K7181KRT",
+      "port": 27017,
+      "version": "8.3.11",
+      "gitVersion": "b8b83d6e6e1aed495578ad8c6f9234ad329c9955"
+    },
+    "serverParameters": {
+      "internalQueryFacetBufferSizeBytes": 104857600,
+      "internalDocumentSourceGroupMaxMemoryBytes": 104857600,
+      "internalQueryMaxBlockingSortMemoryUsageBytes": 104857600,
+      "internalDocumentSourceSetWindowFieldsMaxMemoryBytes": 104857600,
+      "internalQueryFacetMaxOutputDocSizeBytes": 104857600,
+      "internalLookupStageIntermediateDocumentMaxSizeBytes": 104857600,
+      "internalQueryProhibitBlockingMergeOnMongoS": 0,
+      "internalQueryMaxAddToSetBytes": 104857600,
+      "internalQueryFrameworkControl": "trySbeRestricted",
+      "internalQueryPlannerIgnoreIndexWithCollationForRegex": 1
+    },
+    "ok": 1.0
+  }
+}

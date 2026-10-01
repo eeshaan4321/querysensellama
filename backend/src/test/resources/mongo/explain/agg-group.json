@@ -1,0 +1,187 @@
+{
+  "query": "db.orders.aggregate([{\"$match\": {\"status\": \"PAID\"}}, {\"$group\": {\"_id\": \"$customer_id\", \"n\": {\"$sum\": 1}}}])",
+  "explain": {
+    "explainVersion": "2",
+    "queryPlanner": {
+      "namespace": "querysense_fixtures.orders",
+      "parsedQuery": {
+        "status": {
+          "$eq": "PAID"
+        }
+      },
+      "indexFilterSet": false,
+      "queryHash": "4F1E2917",
+      "planCacheShapeHash": "4F1E2917",
+      "planCacheKey": "8D1212EC",
+      "optimizationTimeMillis": 0,
+      "optimizedPipeline": true,
+      "maxIndexedOrSolutionsReached": false,
+      "maxIndexedAndSolutionsReached": false,
+      "maxScansToExplodeReached": false,
+      "prunedSimilarIndexes": false,
+      "winningPlan": {
+        "isCached": false,
+        "queryPlan": {
+          "stage": "GROUP",
+          "planNodeId": 3,
+          "inputStage": {
+            "stage": "COLLSCAN",
+            "planNodeId": 1,
+            "filter": {
+              "status": {
+                "$eq": "PAID"
+              }
+            },
+            "nss": "querysense_fixtures.orders",
+            "direction": "forward"
+          }
+        },
+        "slotBasedPlan": {
+          "slots": "$$RESULT=s8 env: {  }",
+          "stages": "[3] project [s8 = newBsonObj(\"_id\", s7, \"n\", s5)] \n[3] group [s7] [s5 = _internalCount::accumulate(s5, 1)] spillSlots[s6] mergingExprs[_internalCount::merge(s6)] \n[3] project [s7 = (s3 ?: null)] \n[1] filter {traverseF(s4, lambda(l2.0) { ((move(l2.0) == \"PAID\") ?: false) }, false)} \n[1] scan generic [s1 = record, s2 = recordId] [s3 = customer_id, s4 = status] @\"7ffe0bd7-fa45-421a-b25b-818d6c0f3dfd\" "
+        }
+      },
+      "rejectedPlans": []
+    },
+    "executionStats": {
+      "executionSuccess": true,
+      "nReturned": 369,
+      "executionTimeMillis": 1,
+      "totalKeysExamined": 0,
+      "totalDocsExamined": 2000,
+      "executionStages": {
+        "stage": "project",
+        "planNodeId": 3,
+        "nReturned": 369,
+        "executionTimeMillisEstimate": 0,
+        "opens": 1,
+        "closes": 1,
+        "saveState": 0,
+        "restoreState": 0,
+        "isEOF": 1,
+        "projections": {
+          "8": "newBsonObj(\"_id\", s7, \"n\", s5) "
+        },
+        "inputStage": {
+          "stage": "group",
+          "planNodeId": 3,
+          "nReturned": 369,
+          "executionTimeMillisEstimate": 0,
+          "opens": 1,
+          "closes": 1,
+          "saveState": 0,
+          "restoreState": 0,
+          "isEOF": 1,
+          "groupBySlots": [
+            7
+          ],
+          "expressions": {
+            "5": "_internalCount::accumulate(s5, 1) ",
+            "initExprs": {
+              "5": null,
+              "mergingExprs": {
+                "6": "_internalCount::merge(s6) "
+              }
+            }
+          },
+          "usedDisk": false,
+          "spills": 0,
+          "spilledBytes": 0,
+          "spilledRecords": 0,
+          "spilledDataStorageSize": 0,
+          "peakTrackedMemBytes": 14942,
+          "inputStage": {
+            "stage": "project",
+            "planNodeId": 3,
+            "nReturned": 408,
+            "executionTimeMillisEstimate": 0,
+            "opens": 1,
+            "closes": 1,
+            "saveState": 0,
+            "restoreState": 0,
+            "isEOF": 1,
+            "projections": {
+              "7": "(s3 ?: null) "
+            },
+            "inputStage": {
+              "stage": "filter",
+              "planNodeId": 1,
+              "nReturned": 408,
+              "executionTimeMillisEstimate": 0,
+              "opens": 1,
+              "closes": 1,
+              "saveState": 0,
+              "restoreState": 0,
+              "isEOF": 1,
+              "numTested": 2000,
+              "filter": "traverseF(s4, lambda(l2.0) { ((move(l2.0) == \"PAID\") ?: false) }, false) ",
+              "inputStage": {
+                "stage": "scan",
+                "planNodeId": 1,
+                "nReturned": 2000,
+                "executionTimeMillisEstimate": 0,
+                "opens": 1,
+                "closes": 1,
+                "saveState": 0,
+                "restoreState": 0,
+                "isEOF": 1,
+                "numReads": 2000,
+                "recordSlot": 1,
+                "recordIdSlot": 2,
+                "scanFieldNames": [
+                  "customer_id",
+                  "status"
+                ],
+                "scanFieldSlots": [
+                  3,
+                  4
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "queryShapeHash": "F7EF7A2862832DE61C0F67F2B4D5ED89CE2C2A68C857468172927C31FD510A79",
+    "peakTrackedMemBytes": 14942,
+    "command": {
+      "aggregate": "orders",
+      "pipeline": [
+        {
+          "$match": {
+            "status": "PAID"
+          }
+        },
+        {
+          "$group": {
+            "_id": "$customer_id",
+            "n": {
+              "$sum": 1
+            }
+          }
+        }
+      ],
+      "cursor": {},
+      "$db": "querysense_fixtures"
+    },
+    "serverInfo": {
+      "host": "LAPTOP-K7181KRT",
+      "port": 27017,
+      "version": "8.3.11",
+      "gitVersion": "b8b83d6e6e1aed495578ad8c6f9234ad329c9955"
+    },
+    "serverParameters": {
+      "internalQueryFacetBufferSizeBytes": 104857600,
+      "internalDocumentSourceGroupMaxMemoryBytes": 104857600,
+      "internalQueryMaxBlockingSortMemoryUsageBytes": 104857600,
+      "internalDocumentSourceSetWindowFieldsMaxMemoryBytes": 104857600,
+      "internalQueryFacetMaxOutputDocSizeBytes": 104857600,
+      "internalLookupStageIntermediateDocumentMaxSizeBytes": 104857600,
+      "internalQueryProhibitBlockingMergeOnMongoS": 0,
+      "internalQueryMaxAddToSetBytes": 104857600,
+      "internalQueryFrameworkControl": "trySbeRestricted",
+      "internalQueryPlannerIgnoreIndexWithCollationForRegex": 1
+    },
+    "ok": 1.0
+  }
+}
