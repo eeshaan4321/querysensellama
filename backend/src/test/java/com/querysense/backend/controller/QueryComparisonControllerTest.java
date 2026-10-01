@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -33,12 +34,12 @@ class QueryComparisonControllerTest {
 
         CompareResponse expected = new CompareResponse();
         expected.setOriginalQuery("SELECT * FROM customers;");
-        when(service.compare(eq("SELECT * FROM customers;"), eq("MySQL"))).thenReturn(expected);
+        when(service.compare(eq("SELECT * FROM customers;"), eq("MySQL"), isNull())).thenReturn(expected);
 
         CompareResponse actual = controller.compare(request);
 
         assertThat(actual).isSameAs(expected);
-        verify(service).compare("SELECT * FROM customers;", "MySQL");
+        verify(service).compare("SELECT * FROM customers;", "MySQL", null);
     }
 
     @Test
@@ -47,11 +48,24 @@ class QueryComparisonControllerTest {
         CompareRequest request = new CompareRequest();
         request.setQuery("db.customers.find({})");
         request.setDatabaseType("MongoDB");
-        when(service.compare(eq("db.customers.find({})"), eq("MongoDB")))
+        when(service.compare(eq("db.customers.find({})"), eq("MongoDB"), isNull()))
                 .thenReturn(new CompareResponse());
 
         controller.compare(request);
 
-        verify(service).compare("db.customers.find({})", "MongoDB");
+        verify(service).compare("db.customers.find({})", "MongoDB", null);
+    }
+
+    @Test
+    @DisplayName("the user's question, when sent, reaches the service so the rewrite lands on the right history row")
+    void passesUserInputThrough() {
+        CompareRequest request = new CompareRequest();
+        request.setQuery("db.customers.find({})");
+        request.setDatabaseType("MongoDB");
+        request.setUserInput("all customers");
+
+        controller.compare(request);
+
+        verify(service).compare("db.customers.find({})", "MongoDB", "all customers");
     }
 }
