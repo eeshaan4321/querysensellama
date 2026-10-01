@@ -3,6 +3,7 @@ package com.querysense.backend.schema.upload;
 import com.mongodb.MongoCommandException;
 import com.mongodb.MongoTimeoutException;
 import com.mongodb.ServerAddress;
+import com.mongodb.client.ListCollectionNamesIterable;
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
@@ -61,8 +62,42 @@ class MongoProvisionerTest {
         collection = mock(MongoCollection.class);
         when(client.getDatabase(anyString())).thenReturn(database);
         when(database.getCollection(anyString())).thenReturn(collection);
+        existing();
         provisioner = new MongoProvisioner(client, "querysense_uploads");
         schema = new JsonSchemaUploadParser().parse(UPLOAD);
+    }
+
+    @SuppressWarnings("unchecked")
+    private void existing(String... collections) {
+        ListCollectionNamesIterable names = mock(ListCollectionNamesIterable.class);
+        when(database.listCollectionNames()).thenReturn(names);
+        when(names.into(any())).thenAnswer(inv -> {
+            java.util.Collection<String> target = inv.getArgument(0);
+            target.addAll(java.util.List.of(collections));
+            return target;
+        });
+    }
+
+    @Test
+    @DisplayName("an upload clears the previous upload's other collections, as MySQL clears its tables")
+    void uploadClearsPreviousCollections() {
+        existing("old_orders", "system.views");
+
+        provisioner.provision(schema);
+
+        verify(database).getCollection("old_orders");
+        verify(database, never()).getCollection("system.views");
+        verify(collection, org.mockito.Mockito.times(2)).drop();
+    }
+
+    @Test
+    @DisplayName("provisioning into another database leaves its other collections alone")
+    void namedDatabaseKeepsOtherCollections() {
+        existing("unrelated");
+
+        provisioner.provision(schema, "querysense");
+
+        verify(database, never()).getCollection("unrelated");
     }
 
     @Test

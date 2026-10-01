@@ -22,6 +22,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
+
 /** Creates an uploaded MongoDB schema's collections, validators and indexes. */
 @Component
 public class MongoProvisioner implements SchemaProvisioning {
@@ -50,13 +52,24 @@ public class MongoProvisioner implements SchemaProvisioning {
 
     @Override
     public void provision(ParsedSchema schema) {
-        provision(schema, uploadDatabase);
+        provision(schema, uploadDatabase, true);
     }
 
     public void provision(ParsedSchema schema, String database) {
+        provision(schema, database, false);
+    }
+
+    private void provision(ParsedSchema schema, String database, boolean clearOthers) {
         MongoDatabase db = client.getDatabase(database);
         String current = null;
         try {
+            if (clearOthers) {
+                for (String existing : db.listCollectionNames().into(new ArrayList<>())) {
+                    if (!existing.startsWith("system.")) {
+                        db.getCollection(existing).drop();
+                    }
+                }
+            }
             for (ParsedTable collection : schema.tables()) {
                 current = collection.name();
                 db.getCollection(collection.name()).drop();
