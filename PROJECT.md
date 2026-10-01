@@ -2623,8 +2623,10 @@ lowercased input — inside the `$match` filter.
 **Next:** steps 1–4 are complete; step 4 is recorded in the session of
 2026-10-01 below. Step 5 is next: `MongoExplainAnalyzer`, preflight, the
 verdict vocabulary, and dialect-aware rules and advisor, with `explain` and
-`listIndexes` fixtures captured from the local `mongod`. The progress ledger
-for steps 1–3 is at
+`listIndexes` fixtures captured from the local `mongod`. Its plan is written
+and not yet executed: `docs/superpowers/plans/2026-10-01-mongodb-parity-step-5-analysis.md`
+(12 tasks, seven departures from the spec listed at its top). The progress
+ledger for steps 1–3 is at
 `.superpowers/sdd/2026-09-26-mongodb-parity-steps-1-3/progress.md`, which is
 git-ignored.
 
