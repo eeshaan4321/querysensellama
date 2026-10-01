@@ -1,12 +1,14 @@
 package com.querysense.backend.optimization;
 
 import com.querysense.backend.dialect.Dialect;
+import com.querysense.backend.dto.MongoQueryShape;
 import com.querysense.backend.dto.OptimizationSuggestion;
 import com.querysense.backend.dto.QueryAnalysisResult;
 import com.querysense.backend.enums.SuggestionSeverity;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 /** Optimisation rules for transactional workloads. */
 public class TransactionalOptimizationRules implements DomainOptimizationRules {
@@ -81,15 +83,54 @@ public class TransactionalOptimizationRules implements DomainOptimizationRules {
         }
     }
 
+    private static final Set<String> SINGLE_DOCUMENT_LOOKUPS = Set.of("EXPRESS_IXSCAN", "EXPRESS_IDHACK", "IDHACK");
+
     private void evaluateMongo(QueryAnalysisResult result, List<OptimizationSuggestion> suggestions) {
 
-        if (result.isHasUnindexedFilter()) {
+        boolean documentsExceedThreshold = result.getEstimatedRows() != null
+                && result.getEstimatedRows() > ROW_COUNT_CRITICAL_THRESHOLD;
+
+        if (result.isHasFullTableScan()) {
             suggestions.add(OptimizationSuggestion.domain(
-                    "Filter on '" + result.getFilteredColumn() + "' has no supporting index. For a transactional "
-                            + "operation running on every call, this is a critical latency risk — add an index "
-                            + "on the filtered field(s) immediately.",
-                    SuggestionSeverity.CRITICAL
-            ));
+                    "Collection scan on '" + result.getTableName() + "' in a transactional query. This query "
+                            + "path is expected to run frequently — a missing index here means this scan repeats "
+                            + "on every call. Add an index on the filtered field(s) immediately.",
+                    documentsExceedThreshold ? SuggestionSeverity.CRITICAL : SuggestionSeverity.WARNING,
+                    mongoIndex(result, true)));
+        }
+
+        if (result.isUsesFilesort()) {
+            suggestions.add(OptimizationSuggestion.domain(
+                    "Query sorts documents in memory. Transactional queries should be simple key lookups — an "
+                            + "in-memory sort here suggests this query is doing more than it should on a hot "
+                            + "path. Consider an index covering the sort order, or reconsider whether this "
+                            + "belongs in the transactional path at all.",
+                    SuggestionSeverity.CRITICAL,
+                    mongoIndex(result, false)));
+        }
+
+        if (result.isUsesTemporaryTable()) {
+            suggestions.add(OptimizationSuggestion.domain(
+                    "Query groups enough documents that the grouping spilled to disk. Grouping is unusual for a "
+                            + "transactional query — this logic may be better suited to a batch or analytical "
+                            + "path rather than running on every transactional call.",
+                    SuggestionSeverity.CRITICAL));
+        }
+
+        if (!result.isUsesIndex() && result.getKeyUsed() == null && !result.isHasFullTableScan()
+                && result.getAccessType() != null) {
+            suggestions.add(OptimizationSuggestion.domain(
+                    "No index used for this lookup on '" + result.getTableName() + "'. Transactional queries "
+                            + "should resolve via an index (ideally _id or a unique index) for consistent, "
+                            + "low latency.",
+                    SuggestionSeverity.WARNING));
+        }
+
+        if (SINGLE_DOCUMENT_LOOKUPS.contains(result.getAccessType()) && result.getKeyUsed() != null) {
+            suggestions.add(OptimizationSuggestion.domain(
+                    "Query resolves via index '" + result.getKeyUsed() + "' as a single-document lookup ("
+                            + result.getAccessType() + ") — this is the ideal shape for a transactional lookup.",
+                    SuggestionSeverity.INFO));
         }
 
         if (result.isHasUnanchoredRegex()) {
@@ -100,5 +141,15 @@ public class TransactionalOptimizationRules implements DomainOptimizationRules {
                     SuggestionSeverity.CRITICAL
             ));
         }
+    }
+
+    static String mongoIndex(QueryAnalysisResult result, boolean forScan) {
+        MongoQueryShape shape = result.getMongoShape();
+        if (shape != null) {
+            return IndexStatements.create(Dialect.MONGODB, result.getTableName(),
+                    forScan ? shape.esrKeys() : shape.sortIndexKeys());
+        }
+        return IndexStatements.create(Dialect.MONGODB, result.getTableName(),
+                forScan ? result.getFilteredColumn() : result.getOrderByColumn());
     }
 }

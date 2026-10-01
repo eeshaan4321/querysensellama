@@ -86,12 +86,53 @@ public class ResourceConsciousService {
 
     private void evaluateMongo(ResourceLevel level, QueryAnalysisResult result, List<OptimizationSuggestion> suggestions) {
 
-        if (result.isHasUnindexedFilter() && level == ResourceLevel.LOW) {
+        boolean documentsAreSignificant = result.getEstimatedRows() != null
+                && result.getEstimatedRows() > ROW_COUNT_MEMORY_CONCERN_THRESHOLD;
+
+        if (result.isUsesFilesort() && documentsAreSignificant) {
+            String sortIndex = TransactionalOptimizationRules.mongoIndex(result, false);
+            switch (level) {
+                case LOW -> suggestions.add(OptimizationSuggestion.resource(
+                        "Available memory is low and this in-memory sort covers a significant number of "
+                                + "documents — it is likely to exceed MongoDB's sort memory limit and spill to "
+                                + "disk, or fail. Avoiding the sort (via an index) matters more under these "
+                                + "constraints than it would otherwise.",
+                        SuggestionSeverity.CRITICAL, sortIndex));
+                case MEDIUM -> suggestions.add(OptimizationSuggestion.resource(
+                        "In-memory sort over a significant number of documents. At medium available memory "
+                                + "this is usually fine, but worth monitoring if memory pressure increases.",
+                        SuggestionSeverity.WARNING, sortIndex));
+                case HIGH -> suggestions.add(OptimizationSuggestion.resource(
+                        "In-memory sort detected, but available memory is high — this is unlikely to spill "
+                                + "to disk or cause a noticeable slowdown.",
+                        SuggestionSeverity.INFO, sortIndex));
+            }
+        }
+
+        if (result.isUsesTemporaryTable()) {
+            switch (level) {
+                case LOW -> suggestions.add(OptimizationSuggestion.resource(
+                        "Available memory is low and this grouping already spilled to disk — under memory "
+                                + "pressure the spill grows, adding significant latency.",
+                        SuggestionSeverity.CRITICAL));
+                case MEDIUM -> suggestions.add(OptimizationSuggestion.resource(
+                        "The grouping spilled to disk. At medium available memory this is usually fine, but "
+                                + "keep an eye on it if document counts grow.",
+                        SuggestionSeverity.WARNING));
+                case HIGH -> suggestions.add(OptimizationSuggestion.resource(
+                        "The grouping spilled to disk even though available memory is high — it is unlikely "
+                                + "to be the bottleneck, but its memory limit is being reached.",
+                        SuggestionSeverity.INFO));
+            }
+        }
+
+        if (result.isHasFullTableScan() && documentsAreSignificant && level == ResourceLevel.LOW) {
             suggestions.add(OptimizationSuggestion.resource(
-                    "Unindexed filter combined with low available memory — the resulting collection scan "
-                            + "competes for cache space with other queries, compounding the performance impact "
-                            + "beyond just this one operation.",
-                    SuggestionSeverity.CRITICAL));
+                    "Full collection scan over a significant number of documents while available memory is "
+                            + "low — this pushes other data out of MongoDB's cache and can slow down other "
+                            + "concurrent queries, not just this one.",
+                    SuggestionSeverity.WARNING,
+                    TransactionalOptimizationRules.mongoIndex(result, true)));
         }
     }
 
