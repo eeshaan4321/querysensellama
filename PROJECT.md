@@ -2620,11 +2620,13 @@ the rule engine `customers in mumbai` with the target set to MongoDB, and
 confirm it answers built, with `"Mumbai"` — the stored value, not the
 lowercased input — inside the `$match` filter.
 
-**Next:** steps 1–3 of the plan (tasks 1–11) are complete. Spec step 4 is
-next — MongoDB upload, taking collections with a `$jsonSchema` validator,
-indexes and an optional `references` block. The progress ledger for steps
-1–3 is at `.superpowers/sdd/2026-09-26-mongodb-parity-steps-1-3/progress.md`,
-which is git-ignored.
+**Next:** steps 1–4 are complete; step 4 is recorded in the session of
+2026-10-01 below. Step 5 is next: `MongoExplainAnalyzer`, preflight, the
+verdict vocabulary, and dialect-aware rules and advisor, with `explain` and
+`listIndexes` fixtures captured from the local `mongod`. The progress ledger
+for steps 1–3 is at
+`.superpowers/sdd/2026-09-26-mongodb-parity-steps-1-3/progress.md`, which is
+git-ignored.
 
 **2026-09-28 — step 4 planned, not started.**
 - `3e701e8` adds two more documented differences to `DialectParityTest`
@@ -2633,8 +2635,8 @@ which is git-ignored.
   MongoDB Community Server, and nothing has been run against it yet.
 - The step 4 plan is written:
   `docs/superpowers/plans/2026-09-28-mongodb-parity-step-4-upload.md`,
-  10 tasks. It has not been reviewed or executed, and no code from it
-  exists. The tasks:
+  10 tasks. It was executed on 2026-10-01 — see that session below. The
+  tasks:
   - Tasks 1–3: per-dialect upload interfaces, `JsonSchemaUploadParser`,
     and the Mongo validation rules.
   - Tasks 4–5: `MongoProvisioner` and `MongoSeeder`, with an unreachable
@@ -2655,7 +2657,75 @@ which is git-ignored.
      outside embedded arrays.
   5. The demo indexes every reference field, as InnoDB does for foreign
      keys.
-- Next: review the plan, pick an execution method, then run it.
+- Executed 2026-10-01, inline, in plan order.
+
+### Session of 2026-10-01 — MongoDB parity, step 4 (upload)
+
+Plan: `docs/superpowers/plans/2026-09-28-mongodb-parity-step-4-upload.md`,
+executed inline, task by task, test first.
+
+| Task | Delivered | Commit |
+|---|---|---|
+| 1 | `SchemaUploadParser`, `SchemaProvisioning`, `SchemaSeeding` and a top-level `SeedReport`; `ParsedTable` gains embedded arrays and the validator, `ParsedSchema` gains indexes and field types, `SchemaSnapshot` gains `fieldTypes`. The MySQL classes implement the interfaces unchanged. | `01b934d` |
+| 2 | `JsonSchemaUploadParser`: the `{"collections": [...]}` format or `db.getCollectionInfos()` output, dotted leaf paths, embedded arrays, indexes, `references`; views and `system.*` skipped with a warning. | `09d3a58` |
+| 3 | `SchemaUploadValidator.validate(schema, dialect)`: names, duplicates, references (declared, same `bsonType`, not inside an array), indexes on declared fields, required fields of a type the seeder can't make, `additionalProperties: false` without `_id`. | `95014fe` |
+| 4 | `MongoProvisioner`: drop, `createCollection` with a strict, erroring validator, `createIndex`. `MongoUnavailableException` is a 503. | `8a9ff4c` |
+| 5 | `MongoSeeder`: documents generated from `$jsonSchema`, references filled from the target's generated values (through arrays), unordered batches of 1,000; a validator rejection names the collection and field. | `ceb2020` |
+| 6 | `SchemaUploadService` runs parser → validator → provisioner → seeder per dialect; warnings kept per dialect; MySQL keeps the H2 refusal, MongoDB needs `spring.data.mongodb.uri`. | `88dffdf` |
+| 7 | The built-in demo as `backend/src/main/resources/mongo/demo-collections.json`; `KnownMongoSchema` gains `INDEXES` and `FIELD_TYPES`; `MongoDemoSeeder` seeds `querysense` at startup only when none of the eight collections exist. | `caf8d44` |
+| 8 | `dialect` on `POST /api/schema/upload` (multipart part or JSON field, `schema` accepted for `ddl`), `GET /active` and `POST /reset`; a `.json` file needs MongoDB and a `.sql` file needs MySQL. Responses gain `dialect`, `indexes`, and per table `embeddedArrays` and `fieldTypes`. | `9a329f4` |
+| 9 | `MongoUploadIntegrationTest` (`@Tag("mongo")`): provisions and seeds the demo into a throwaway `querysense_it_*` database, then drops it. | `0580432` |
+
+**Departures from the spec, on purpose:**
+1. Seeding generates every collection first and fills references afterwards,
+   not in dependency order; cycles need no special case.
+2. The H2 profile refuses MySQL uploads only; a MongoDB upload is guarded by
+   `spring.data.mongodb.uri`.
+3. The demo is seeded by a startup listener, only when the `querysense`
+   database has none of its collections. It never drops anything there.
+4. A reference must share a `bsonType` with its target and point outside
+   embedded arrays.
+5. The demo indexes every reference field, as InnoDB does for foreign keys.
+
+**Calls made during execution:**
+- `BackendApplicationTests` turns off `querysense.mongo.demo.seed-on-startup`.
+  `@SpringBootTest` fires `ApplicationReadyEvent`, and with a local `mongod`
+  the context test would otherwise seed the real `querysense` database.
+- The 503 mapping is tested through MockMvc
+  (`MongoUnavailableMappingTest`), since no handler test existed.
+
+**Verified against the real `mongod`:** the server is MongoDB 8.3.11
+Community (`buildInfo.modules` is empty). `MongoUploadIntegrationTest` ran
+6/6, not skipped: all eight demo collections were seeded with 200 documents
+each and accepted by the strict validators. The server rejected an invalid
+document with code 121. The unique `email` index and the `items.product_id`
+index exist, every embedded item references a seeded product, and `Mumbai`
+is among the cities. Afterwards the server listed only `admin`, `config` and
+`local`, so nothing was left behind. Full backend suite: 543/543.
+
+**Unit-tested only:** the startup listener, the 503 on an outage, the
+duplicate-key warning, the endpoints' `dialect` handling, and everything in
+the live checklist below. The app was not started.
+
+**Live checklist (step 4):**
+1. Start the backend with `mongod` running. The log shows
+   `Seeded the MongoDB demo into 'querysense'`, or `already has demo
+   collections` if it was seeded before.
+2. In the Workbench, with the target set to MongoDB, ask `customers in
+   mumbai`. It builds, with `"Mumbai"` in the `$match` filter.
+3. `curl -F file=@backend/src/main/resources/mongo/demo-collections.json -F
+   dialect=MONGODB http://localhost:8080/api/schema/upload` returns
+   `"dialect": "MONGODB"`, eight collections, row counts of 12000, and the
+   indexes.
+4. `curl "http://localhost:8080/api/schema/active?dialect=MONGODB"` shows the
+   upload, and `?dialect=MYSQL` is unchanged.
+5. `curl -X POST "http://localhost:8080/api/schema/reset?dialect=MONGODB"`
+   returns the built-in.
+6. With `mongod` stopped, the upload in step 3 returns 503 within a few
+   seconds.
+
+Uploads write to `querysense_uploads` and the demo to `querysense`, both on
+the local `mongod`.
 
 ### Not verified
 
