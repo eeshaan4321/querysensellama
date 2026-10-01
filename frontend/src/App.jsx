@@ -14,8 +14,8 @@ import { NotFoundPage } from './pages/NotFoundPage';
 function App() {
   return (
     <EngineStatusProvider>
-      <ActiveSchemaProvider>
-        <WorkbenchProvider>
+      <WorkbenchProvider>
+        <ActiveSchemaProvider>
           <BrowserRouter>
             <Routes>
               <Route element={<AppShell />}>
@@ -29,8 +29,8 @@ function App() {
               </Route>
             </Routes>
           </BrowserRouter>
-        </WorkbenchProvider>
-      </ActiveSchemaProvider>
+        </ActiveSchemaProvider>
+      </WorkbenchProvider>
     </EngineStatusProvider>
   );
 }
