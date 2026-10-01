@@ -2622,7 +2622,9 @@ lowercased input — inside the `$match` filter.
 
 **Next:** steps 1–5 are complete; steps 4 and 5 are recorded in the two
 2026-10-01 sessions below. Step 6 is next: `MongoQueryRewriter`, compare for
-MongoDB, and `optimizedQuery` written into history. The progress ledger for
+MongoDB, and `optimizedQuery` written into history. Its plan is written and
+not yet executed: `docs/superpowers/plans/2026-10-01-mongodb-parity-step-6-rewrite.md`
+(7 tasks, six departures listed at its top). The progress ledger for
 steps 1–3 is at
 `.superpowers/sdd/2026-09-26-mongodb-parity-steps-1-3/progress.md`, which is
 git-ignored.
