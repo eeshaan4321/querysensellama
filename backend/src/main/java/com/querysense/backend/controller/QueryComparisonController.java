@@ -22,6 +22,6 @@ public class QueryComparisonController {
 
     @PostMapping("/compare")
     public CompareResponse compare(@Valid @RequestBody CompareRequest request) {
-        return queryComparisonService.compare(request.getQuery(), request.getDatabaseType());
+        return queryComparisonService.compare(request.getQuery(), request.getDatabaseType(), request.getUserInput());
     }
 }

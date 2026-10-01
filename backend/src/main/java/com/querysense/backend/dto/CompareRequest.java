@@ -11,6 +11,8 @@ public class CompareRequest {
     @NotBlank(message = "databaseType must not be blank")
     private String databaseType;
 
+    private String userInput;
+
     public CompareRequest() {}
 
     public String getQuery() { return query; }
@@ -18,4 +20,7 @@ public class CompareRequest {
 
     public String getDatabaseType() { return databaseType; }
     public void setDatabaseType(String databaseType) { this.databaseType = databaseType; }
+
+    public String getUserInput() { return userInput; }
+    public void setUserInput(String userInput) { this.userInput = userInput; }
 }

@@ -4,6 +4,7 @@ import com.querysense.backend.model.QueryHistory;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
 
 /** Data access for query history. */
@@ -15,4 +16,10 @@ public interface QueryHistoryRepository extends JpaRepository<QueryHistory, Long
 
     Optional<QueryHistory> findFirstByUserInputIgnoreCaseAndDatabaseTypeIgnoreCaseAndSchemaLabel(
             String userInput, String databaseType, String schemaLabel);
+
+    Optional<QueryHistory> findFirstByUserInputIgnoreCaseAndDatabaseTypeIgnoreCaseAndSchemaLabelOrderByCreatedAtDescIdDesc(
+            String userInput, String databaseType, String schemaLabel);
+
+    List<QueryHistory> findTop50ByDatabaseTypeIgnoreCaseAndSchemaLabelOrderByCreatedAtDescIdDesc(
+            String databaseType, String schemaLabel);
 }

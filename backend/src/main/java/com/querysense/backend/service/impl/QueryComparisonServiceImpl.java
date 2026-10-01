@@ -1,39 +1,43 @@
 package com.querysense.backend.service.impl;
 
+import com.querysense.backend.dialect.Dialect;
+import com.querysense.backend.dialect.DialectRegistry;
 import com.querysense.backend.dto.CompareResponse;
 import com.querysense.backend.dto.QueryAnalysisResult;
 import com.querysense.backend.optimization.QueryRewrite;
-import com.querysense.backend.optimization.QueryRewriter;
+import com.querysense.backend.optimization.Rewriter;
 import com.querysense.backend.service.QueryAnalysisService;
 import com.querysense.backend.service.QueryComparisonService;
 import org.springframework.stereotype.Service;
+
+import java.util.List;
 
 /** Runs the analyser over a query and its rewrite, and reports the difference. */
 @Service
 public class QueryComparisonServiceImpl implements QueryComparisonService {
 
-    private final QueryRewriter queryRewriter;
+    private final DialectRegistry<Rewriter> rewriters;
     private final QueryAnalysisService queryAnalysisService;
+    private final OptimizedQueryRecorder recorder;
 
-    public QueryComparisonServiceImpl(QueryRewriter queryRewriter,
-                                      QueryAnalysisService queryAnalysisService) {
-        this.queryRewriter = queryRewriter;
+    public QueryComparisonServiceImpl(List<Rewriter> rewriters,
+                                      QueryAnalysisService queryAnalysisService,
+                                      OptimizedQueryRecorder recorder) {
+        this.rewriters = new DialectRegistry<>(rewriters, "query rewriter");
         this.queryAnalysisService = queryAnalysisService;
+        this.recorder = recorder;
     }
 
     @Override
-    public CompareResponse compare(String query, String databaseType) {
+    public CompareResponse compare(String query, String databaseType, String userInput) {
+        Dialect dialect = Dialect.from(databaseType);
+        boolean mongo = dialect == Dialect.MONGODB;
         CompareResponse response = new CompareResponse();
         response.setOriginalQuery(query);
         response.setOptimizedQuery(query);
+        response.setEstimate(!mongo);
 
-        if (!"MySQL".equalsIgnoreCase(databaseType)) {
-            response.setSummary("Comparison is SQL-only for now. "
-                    + "The rewriter has no MongoDB rules, so no MongoDB query is changed here.");
-            return response;
-        }
-
-        QueryRewrite rewrite = queryRewriter.rewrite(query, databaseType);
+        QueryRewrite rewrite = rewriters.get(dialect).rewrite(query);
 
         QueryAnalysisResult before = queryAnalysisService.analyze(query, databaseType);
         response.setOriginalAnalysis(before);
@@ -46,11 +50,14 @@ public class QueryComparisonServiceImpl implements QueryComparisonService {
 
         QueryAnalysisResult after = queryAnalysisService.analyze(rewrite.sql(), databaseType);
 
-        // SQL the database will not even plan is not an optimisation, whatever the rules intended.
         if (after.isExplainFailed()) {
-            response.setSummary("A rewrite was produced but could not be checked — EXPLAIN rejected it, "
-                    + "so it is withheld rather than offered as an improvement. "
-                    + "This usually means the active schema and the live tables disagree about a column.");
+            response.setSummary(mongo
+                    ? "A rewrite was produced but could not be checked — MongoDB's explain rejected it, so it is "
+                            + "withheld rather than offered as an improvement. This usually means the active "
+                            + "schema and the live collections disagree about a field."
+                    : "A rewrite was produced but could not be checked — EXPLAIN rejected it, "
+                            + "so it is withheld rather than offered as an improvement. "
+                            + "This usually means the active schema and the live tables disagree about a column.");
             return response;
         }
 
@@ -60,8 +67,9 @@ public class QueryComparisonServiceImpl implements QueryComparisonService {
         response.setOptimizedAnalysis(after);
         response.setEstimatedRowsDelta(deltaOf(before.getEstimatedRows(), after.getEstimatedRows()));
         response.setQueryCostDelta(deltaOf(before.getQueryCost(), after.getQueryCost()));
-        response.setSummary(summarise(response));
+        response.setSummary(mongo ? summariseMongo(response, before, after) : summarise(response));
 
+        recorder.record(dialect, userInput, query, rewrite.sql());
         return response;
     }
 
@@ -94,5 +102,30 @@ public class QueryComparisonServiceImpl implements QueryComparisonService {
         }
         return opening + "EXPLAIN estimates the same number of rows read either way, "
                 + "so the rewrite changes the shape of the query without changing what it reads.";
+    }
+
+    private String summariseMongo(CompareResponse response, QueryAnalysisResult before, QueryAnalysisResult after) {
+        int ruleCount = response.getChanges().size();
+        String opening = ruleCount + (ruleCount == 1 ? " rewrite rule applied. " : " rewrite rules applied. ");
+        String planChange = before.getAccessType() != null && after.getAccessType() != null
+                && !before.getAccessType().equals(after.getAccessType())
+                ? " The plan changed from " + before.getAccessType() + " to " + after.getAccessType() + "."
+                : "";
+
+        Long delta = response.getEstimatedRowsDelta();
+        if (delta == null) {
+            return opening + "MongoDB reported no documents-examined figure for one of the two plans, "
+                    + "so the two cannot be compared on documents." + planChange;
+        }
+        if (delta < 0) {
+            return opening + "MongoDB examined " + Math.abs(delta) + " fewer documents under the rewrite, "
+                    + "measured by running both plans with explain." + planChange;
+        }
+        if (delta > 0) {
+            return opening + "MongoDB examined " + delta + " more documents under the rewrite — the rewrite did "
+                    + "not help this query, measured by running both plans with explain." + planChange;
+        }
+        return opening + "MongoDB examined the same number of documents either way, so the rewrite changes "
+                + "the shape of the query without changing what it reads." + planChange;
     }
 }
