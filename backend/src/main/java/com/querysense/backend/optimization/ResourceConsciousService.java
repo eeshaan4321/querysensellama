@@ -1,5 +1,6 @@
 package com.querysense.backend.optimization;
 
+import com.querysense.backend.dialect.Dialect;
 import com.querysense.backend.dto.OptimizationSuggestion;
 import com.querysense.backend.dto.QueryAnalysisResult;
 import com.querysense.backend.enums.ResourceLevel;
@@ -38,20 +39,21 @@ public class ResourceConsciousService {
                 && result.getEstimatedRows() > ROW_COUNT_MEMORY_CONCERN_THRESHOLD;
 
         if (result.isUsesFilesort() && rowsAreSignificant) {
+            String sortIndex = IndexStatements.create(Dialect.MYSQL, result.getTableName(), result.getOrderByColumn());
             switch (level) {
                 case LOW -> suggestions.add(OptimizationSuggestion.resource(
                         "Available memory is low and this filesort covers a significant row count — it is likely "
                                 + "to spill to disk, which is much slower than an in-memory sort. Avoiding the "
                                 + "sort (via an index) matters more under these constraints than it would otherwise.",
-                        SuggestionSeverity.CRITICAL));
+                        SuggestionSeverity.CRITICAL, sortIndex));
                 case MEDIUM -> suggestions.add(OptimizationSuggestion.resource(
                         "Filesort over a significant row count. At medium available memory this is usually fine, "
                                 + "but worth monitoring if memory pressure increases.",
-                        SuggestionSeverity.WARNING));
+                        SuggestionSeverity.WARNING, sortIndex));
                 case HIGH -> suggestions.add(OptimizationSuggestion.resource(
                         "Filesort detected, but available memory is high — this is unlikely to cause a "
                                 + "disk-based sort or noticeable slowdown.",
-                        SuggestionSeverity.INFO));
+                        SuggestionSeverity.INFO, sortIndex));
             }
         }
 
@@ -77,7 +79,8 @@ public class ResourceConsciousService {
                     "Full table scan over a significant row count while available memory is low — this "
                             + "increases pressure on the buffer pool and can slow down other concurrent queries, "
                             + "not just this one.",
-                    SuggestionSeverity.WARNING));
+                    SuggestionSeverity.WARNING,
+                    IndexStatements.create(Dialect.MYSQL, result.getTableName(), result.getFilteredColumn())));
         }
     }
 
@@ -111,7 +114,7 @@ public class ResourceConsciousService {
         List<OptimizationSuggestion> adjusted = new ArrayList<>();
         for (OptimizationSuggestion suggestion : suggestions) {
             SuggestionSeverity newSeverity = shiftSeverity(suggestion.getSeverity(), shift);
-            adjusted.add(new OptimizationSuggestion(suggestion.getMessage(), newSeverity, suggestion.getSource()));
+            adjusted.add(suggestion.withSeverity(newSeverity));
         }
         return adjusted;
     }

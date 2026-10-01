@@ -1,5 +1,6 @@
 package com.querysense.backend.optimization;
 
+import com.querysense.backend.dialect.Dialect;
 import com.querysense.backend.dto.OptimizationSuggestion;
 import com.querysense.backend.dto.QueryAnalysisResult;
 import com.querysense.backend.enums.SuggestionSeverity;
@@ -36,7 +37,8 @@ public class TransactionalOptimizationRules implements DomainOptimizationRules {
                     "Full table scan on '" + result.getTableName() + "' in a transactional query. This query "
                             + "path is expected to run frequently — a missing index here means this scan repeats "
                             + "on every call. Add an index on the lookup column(s) immediately.",
-                    severity
+                    severity,
+                    IndexStatements.create(Dialect.MYSQL, result.getTableName(), result.getFilteredColumn())
             ));
         }
 
@@ -46,7 +48,8 @@ public class TransactionalOptimizationRules implements DomainOptimizationRules {
                             + "here suggests this query is doing more than it should on a hot path. Consider an "
                             + "index covering the sort order, or reconsider whether this belongs in the "
                             + "transactional path at all.",
-                    SuggestionSeverity.CRITICAL
+                    SuggestionSeverity.CRITICAL,
+                    IndexStatements.create(Dialect.MYSQL, result.getTableName(), result.getOrderByColumn())
             ));
         }
 
