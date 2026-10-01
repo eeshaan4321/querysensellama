@@ -1,5 +1,7 @@
 package com.querysense.backend.dto;
 
+import com.querysense.backend.dialect.Dialect;
+import com.querysense.backend.schema.IndexSpec;
 import com.querysense.backend.schema.KnownSchema;
 import com.querysense.backend.schema.SchemaSnapshot;
 
@@ -15,11 +17,14 @@ public record SchemaUploadResponse(
         List<SchemaTableView> tables,
         List<KnownSchema.ForeignKey> foreignKeys,
         List<String> warnings,
-        Instant loadedAt) {
+        Instant loadedAt,
+        Dialect dialect,
+        List<IndexSpec> indexes) {
 
     public static SchemaUploadResponse from(SchemaSnapshot snapshot, List<String> warnings) {
         List<SchemaTableView> tables = snapshot.tables().stream()
-                .map(t -> new SchemaTableView(t.name(), t.columns(), snapshot.rowCountFor(t.name())))
+                .map(t -> new SchemaTableView(t.name(), t.columns(), snapshot.rowCountFor(t.name()),
+                        t.embeddedArrays(), snapshot.fieldTypesFor(t.name())))
                 .toList();
 
         return new SchemaUploadResponse(
@@ -30,6 +35,8 @@ public record SchemaUploadResponse(
                 tables,
                 snapshot.foreignKeys(),
                 warnings == null ? List.of() : warnings,
-                snapshot.loadedAt());
+                snapshot.loadedAt(),
+                snapshot.dialect(),
+                snapshot.indexes());
     }
 }

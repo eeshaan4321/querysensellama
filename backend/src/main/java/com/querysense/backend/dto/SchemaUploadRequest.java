@@ -1,10 +1,12 @@
 package com.querysense.backend.dto;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import jakarta.validation.constraints.NotBlank;
 
-/** JSON request body for uploading DDL as text. */
+/** JSON request body for uploading a schema as text: DDL for MySQL, a collections document for MongoDB. */
 public class SchemaUploadRequest {
 
+    @JsonAlias("schema")
     @NotBlank(message = "ddl must not be blank")
     private String ddl;
 
@@ -24,5 +26,15 @@ public class SchemaUploadRequest {
 
     public void setLabel(String label) {
         this.label = label;
+    }
+
+    private String dialect;
+
+    public String getDialect() {
+        return dialect;
+    }
+
+    public void setDialect(String dialect) {
+        this.dialect = dialect;
     }
 }
