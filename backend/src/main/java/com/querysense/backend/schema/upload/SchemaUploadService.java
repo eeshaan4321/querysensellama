@@ -61,7 +61,7 @@ public class SchemaUploadService {
 
         provisioner.provision(parsed);
 
-        SchemaSeeder.SeedReport seeded = seeder.seed(parsed);
+        SeedReport seeded = seeder.seed(parsed);
         Map<String, Integer> rowCounts = seeded.rowCounts();
         if (!seeded.warnings().isEmpty()) {
             List<String> combined = new ArrayList<>(this.lastWarnings);

@@ -1,5 +1,6 @@
 package com.querysense.backend.schema.upload;
 
+import com.querysense.backend.dialect.Dialect;
 import com.querysense.backend.schema.KnownSchema;
 import com.querysense.backend.schema.ddl.ParsedColumn;
 import com.querysense.backend.schema.ddl.ParsedSchema;
@@ -23,7 +24,7 @@ import java.util.stream.Collectors;
 
 /** Fills uploaded tables with generated rows. */
 @Component
-public class SchemaSeeder {
+public class SchemaSeeder implements SchemaSeeding {
 
     private static final Logger log = LoggerFactory.getLogger(SchemaSeeder.class);
     private static final int BATCH_SIZE = 200;
@@ -43,9 +44,12 @@ public class SchemaSeeder {
         this.seed = seed;
     }
 
-    public record SeedReport(Map<String, Integer> rowCounts, List<String> warnings) {
+    @Override
+    public Dialect dialect() {
+        return Dialect.MYSQL;
     }
 
+    @Override
     public SeedReport seed(ParsedSchema schema) {
         Map<String, Integer> rowCounts = new LinkedHashMap<>();
         List<String> warnings = new ArrayList<>();

@@ -1,5 +1,6 @@
 package com.querysense.backend.schema.upload;
 
+import com.querysense.backend.dialect.Dialect;
 import com.querysense.backend.exception.SchemaUploadException;
 import com.querysense.backend.schema.KnownSchema;
 import com.querysense.backend.schema.ddl.ParsedColumn;
@@ -18,7 +19,7 @@ import java.util.stream.Collectors;
 
 /** Creates an uploaded schema's tables in the upload database. */
 @Component
-public class SchemaProvisioner {
+public class SchemaProvisioner implements SchemaProvisioning {
 
     private static final Logger log = LoggerFactory.getLogger(SchemaProvisioner.class);
 
@@ -37,6 +38,17 @@ public class SchemaProvisioner {
         return uploadCatalog;
     }
 
+    @Override
+    public Dialect dialect() {
+        return Dialect.MYSQL;
+    }
+
+    @Override
+    public String uploadDatabase() {
+        return uploadCatalog;
+    }
+
+    @Override
     public void provision(ParsedSchema schema) {
         createDatabase();
         dropExistingTables();

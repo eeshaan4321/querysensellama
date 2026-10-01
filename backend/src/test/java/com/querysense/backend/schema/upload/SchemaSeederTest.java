@@ -88,7 +88,7 @@ class SchemaSeederTest {
                 "Data truncation: Out of range value for column 'status' at row 1"))
                 .when(jdbcTemplate).batchUpdate(anyString(), any(List.class));
 
-        SchemaSeeder.SeedReport report = seeder.seed(customersAndOrders());
+        SeedReport report = seeder.seed(customersAndOrders());
 
         assertThat(report.rowCounts()).containsEntry("customers", 0);
         assertThat(report.warnings())
@@ -115,7 +115,7 @@ class SchemaSeederTest {
 
         assertThat(production.seedableRowsFor(narrow)).isEqualTo(127L);
 
-        SchemaSeeder.SeedReport report = production.seed(new ParsedSchema(List.of(narrow), List.of()));
+        SeedReport report = production.seed(new ParsedSchema(List.of(narrow), List.of()));
 
         assertThat(report.rowCounts()).containsEntry("flags", 127);
         assertThat(report.warnings())

@@ -16,7 +16,8 @@ public record SchemaSnapshot(
         Map<String, Integer> rowCounts,
         Instant loadedAt,
         Dialect dialect,
-        List<IndexSpec> indexes) {
+        List<IndexSpec> indexes,
+        Map<String, Map<String, String>> fieldTypes) {
 
     public static final String BUILT_IN_ID = "builtin";
 
@@ -25,7 +26,21 @@ public record SchemaSnapshot(
                           List<KnownSchema.ForeignKey> foreignKeys,
                           Map<String, Integer> rowCounts,
                           Instant loadedAt) {
-        this(id, label, catalog, tables, foreignKeys, rowCounts, loadedAt, Dialect.MYSQL, List.of());
+        this(id, label, catalog, tables, foreignKeys, rowCounts, loadedAt, Dialect.MYSQL, List.of(), Map.of());
+    }
+
+    public SchemaSnapshot(String id, String label, String catalog,
+                          List<KnownSchema.Table> tables,
+                          List<KnownSchema.ForeignKey> foreignKeys,
+                          Map<String, Integer> rowCounts,
+                          Instant loadedAt,
+                          Dialect dialect,
+                          List<IndexSpec> indexes) {
+        this(id, label, catalog, tables, foreignKeys, rowCounts, loadedAt, dialect, indexes, Map.of());
+    }
+
+    public Map<String, String> fieldTypesFor(String tableName) {
+        return fieldTypes.getOrDefault(tableName, Map.of());
     }
 
     public boolean builtIn() {

@@ -1,6 +1,8 @@
 package com.querysense.backend.schema.ddl;
 
+import com.querysense.backend.dialect.Dialect;
 import com.querysense.backend.schema.KnownSchema;
+import com.querysense.backend.schema.upload.SchemaUploadParser;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
 import net.sf.jsqlparser.statement.Statement;
 import net.sf.jsqlparser.statement.create.table.ColumnDefinition;
@@ -20,11 +22,17 @@ import java.util.regex.Pattern;
 
 /** Parses CREATE TABLE statements from uploaded DDL. */
 @Component
-public class DdlSchemaParser {
+public class DdlSchemaParser implements SchemaUploadParser {
 
     private static final Logger log = LoggerFactory.getLogger(DdlSchemaParser.class);
     private static final int WARNING_SNIPPET_LENGTH = 80;
 
+    @Override
+    public Dialect dialect() {
+        return Dialect.MYSQL;
+    }
+
+    @Override
     public ParsedSchema parse(String ddl) {
         List<ParsedTable> tables = new ArrayList<>();
         List<String> warnings = new ArrayList<>();

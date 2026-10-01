@@ -40,7 +40,7 @@ class SchemaUploadServiceTest {
         provisioner = mock(SchemaProvisioner.class);
         when(provisioner.uploadCatalog()).thenReturn("querysense_uploads");
         seeder = mock(SchemaSeeder.class);
-        when(seeder.seed(any())).thenReturn(new SchemaSeeder.SeedReport(
+        when(seeder.seed(any())).thenReturn(new SeedReport(
                 Map.of("customers", 500, "orders", 500), List.of()));
         activeSchema = new ActiveSchemaProvider();
         environment = new MockEnvironment();
