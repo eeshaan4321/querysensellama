@@ -8,10 +8,9 @@ import { ExplainPlanView } from '../components/analysis/ExplainPlanView';
 import { PlanTreeView } from '../components/analysis/PlanTreeView';
 import { VerdictBanner } from '../components/analysis/VerdictBanner';
 import { RuleTracePanel } from '../components/analysis/RuleTracePanel';
-import { MongoFindingsList } from '../components/analysis/MongoFindingsList';
 import { SuggestionsList } from '../components/analysis/SuggestionsList';
 import { analyzeQuery } from '../api';
-import { TargetDb } from '../api/contracts';
+import { isMongoAnalysis } from '../api/contracts';
 import { useWorkbench } from '../context/workbench.js';
 
 export function AnalysisPage() {
@@ -41,7 +40,7 @@ export function AnalysisPage() {
   if (!build) {
     return (
       <div>
-        <PageHeader title="Analysis" description="EXPLAIN-based findings for SQL, lightweight rule checks for MongoDB." />
+        <PageHeader title="Analysis" description="Runs the real plan — MySQL EXPLAIN or MongoDB explain — and the optimization and resource-aware suggestions those findings trigger." />
         <EmptyState title="Nothing to analyze yet" detail="Build a query in the Workbench first." />
       </div>
     );
@@ -51,7 +50,7 @@ export function AnalysisPage() {
     <div>
       <PageHeader
         title="Analysis"
-        description="Runs MySQL EXPLAIN against the real query plan, or MongoDB's lightweight structural checks, plus the optimization and resource-aware suggestions those findings trigger."
+        description="Runs the real plan — MySQL EXPLAIN or MongoDB explain — and the optimization and resource-aware suggestions those findings trigger."
         action={!analysis && <Button onClick={runAnalysis} loading={loading}>Run analysis</Button>}
       />
 
@@ -81,24 +80,19 @@ export function AnalysisPage() {
             </ul>
           )}
 
-          {(build.targetDb || targetDb) === TargetDb.MONGODB ? (
-            <MongoFindingsList analysis={analysis} />
-          ) : (
-            <>
-              <ExplainPlanView plan={analysis} />
+          <ExplainPlanView plan={analysis} />
 
-              <section>
-                <h3 style={{ fontSize: 'var(--text-sm)', color: 'var(--ink-secondary)', marginBottom: 'var(--space-2)' }}>
-                  Plan tree
-                </h3>
-                <p className="page-note" style={{ marginBottom: 'var(--space-3)' }}>
-                  The same plan as above, in the shape MySQL actually executes it: operations wrap
-                  the tables they drive, and a sort is attributed to the step that performs it.
-                </p>
-                <PlanTreeView tree={analysis.planTree} />
-              </section>
-            </>
-          )}
+          <section>
+            <h3 style={{ fontSize: 'var(--text-sm)', color: 'var(--ink-secondary)', marginBottom: 'var(--space-2)' }}>
+              Plan tree
+            </h3>
+            <p className="page-note" style={{ marginBottom: 'var(--space-3)' }}>
+              {isMongoAnalysis(analysis)
+                ? 'The same plan as above, as MongoDB executes it: each stage feeds the one that wraps it, and a sort or a $lookup appears as its own stage.'
+                : 'The same plan as above, in the shape MySQL actually executes it: operations wrap the tables they drive, and a sort is attributed to the step that performs it.'}
+            </p>
+            <PlanTreeView tree={analysis.planTree} dialect={isMongoAnalysis(analysis) ? 'MONGODB' : 'SQL'} />
+          </section>
 
           <section>
             <h3 style={{ fontSize: 'var(--text-sm)', color: 'var(--ink-secondary)', marginBottom: 'var(--space-3)' }}>

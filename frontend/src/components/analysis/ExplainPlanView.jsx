@@ -2,69 +2,60 @@ import { motion } from 'framer-motion';
 import { PlanMetrics } from './PlanMetrics';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
 import { useActiveSchema } from '../../context/activeSchema.js';
-import { accessTypeGloss, FIELD_GLOSS } from '../../lib/explainGlossary';
+import { isMongoAnalysis, TargetDb } from '../../api/contracts';
+import {
+  accessTypeGloss, FIELD_GLOSS, mongoAccessTypeGloss, MONGO_FIELD_GLOSS,
+} from '../../lib/explainGlossary';
 import './ExplainPlanView.css';
 
-const ROWS = [
-  { key: 'accessType', label: 'Access type', gloss: accessTypeGloss },
-  { key: 'keyUsed', label: 'Index used', gloss: () => FIELD_GLOSS.keyUsed },
-  {
-    key: 'hasFullTableScan',
-    label: 'Full table scan',
-    bool: true,
-    badTone: true,
-    gloss: (v) => (v ? FIELD_GLOSS.fullTableScan : null),
-  },
-  {
-    key: 'usesFilesort',
-    label: 'Uses filesort',
-    bool: true,
-    badTone: true,
-    gloss: (v) => (v ? FIELD_GLOSS.usesFilesort : null),
-  },
-  {
-    key: 'usesTemporaryTable',
-    label: 'Temporary table',
-    bool: true,
-    badTone: true,
-    gloss: (v) => (v ? FIELD_GLOSS.usesTemporaryTable : null),
-  },
-];
+function flagRows(isMongo, gloss, scanKey) {
+  return [
+    {
+      key: scanKey,
+      label: isMongo ? 'Collection scan' : 'Full table scan',
+      bool: true,
+      badTone: true,
+      gloss: (v) => (v ? gloss.fullTableScan : null),
+    },
+    {
+      key: 'usesFilesort',
+      label: isMongo ? 'In-memory sort' : 'Uses filesort',
+      bool: true,
+      badTone: true,
+      gloss: (v) => (v ? gloss.usesFilesort : null),
+    },
+    {
+      key: 'usesTemporaryTable',
+      label: isMongo ? 'Grouping spilled to disk' : 'Temporary table',
+      bool: true,
+      badTone: true,
+      gloss: (v) => (v ? gloss.usesTemporaryTable : null),
+    },
+  ];
+}
 
-const TABLE_ROWS = [
-  { key: 'accessType', label: 'Access type', gloss: accessTypeGloss },
-  { key: 'keyUsed', label: 'Index used', gloss: () => FIELD_GLOSS.keyUsed },
-  { key: 'possibleKeys', label: 'Indexes considered', gloss: () => FIELD_GLOSS.possibleKeys },
-  { key: 'estimatedRows', label: 'Rows examined', number: true, gloss: () => FIELD_GLOSS.estimatedRows },
-  {
-    key: 'estimatedRowsReturned',
-    label: 'Rows returned',
-    number: true,
-    gloss: () => FIELD_GLOSS.estimatedRowsReturned,
-  },
-  { key: 'ref', label: 'Joined on', gloss: () => FIELD_GLOSS.ref },
-  {
-    key: 'fullTableScan',
-    label: 'Full table scan',
-    bool: true,
-    badTone: true,
-    gloss: (v) => (v ? FIELD_GLOSS.fullTableScan : null),
-  },
-  {
-    key: 'usesFilesort',
-    label: 'Uses filesort',
-    bool: true,
-    badTone: true,
-    gloss: (v) => (v ? FIELD_GLOSS.usesFilesort : null),
-  },
-  {
-    key: 'usesTemporaryTable',
-    label: 'Temporary table',
-    bool: true,
-    badTone: true,
-    gloss: (v) => (v ? FIELD_GLOSS.usesTemporaryTable : null),
-  },
-];
+function summaryRows(isMongo) {
+  const gloss = isMongo ? MONGO_FIELD_GLOSS : FIELD_GLOSS;
+  return [
+    { key: 'accessType', label: isMongo ? 'Plan stage' : 'Access type', gloss: isMongo ? mongoAccessTypeGloss : accessTypeGloss },
+    { key: 'keyUsed', label: 'Index used', gloss: () => gloss.keyUsed },
+    ...flagRows(isMongo, gloss, 'hasFullTableScan'),
+  ];
+}
+
+function tableRows(isMongo) {
+  const gloss = isMongo ? MONGO_FIELD_GLOSS : FIELD_GLOSS;
+  const unit = isMongo ? 'Documents' : 'Rows';
+  return [
+    { key: 'accessType', label: isMongo ? 'Plan stage' : 'Access type', gloss: isMongo ? mongoAccessTypeGloss : accessTypeGloss },
+    { key: 'keyUsed', label: 'Index used', gloss: () => gloss.keyUsed },
+    { key: 'possibleKeys', label: 'Indexes considered', gloss: () => gloss.possibleKeys },
+    { key: 'estimatedRows', label: `${unit} examined`, number: true, gloss: () => gloss.estimatedRows },
+    { key: 'estimatedRowsReturned', label: `${unit} returned`, number: true, gloss: () => gloss.estimatedRowsReturned },
+    ...(isMongo ? [] : [{ key: 'ref', label: 'Joined on', gloss: () => gloss.ref }]),
+    ...flagRows(isMongo, gloss, 'fullTableScan'),
+  ];
+}
 
 function formatValue(value, row) {
   if (row.bool) return value ? 'Yes' : 'No';
@@ -78,7 +69,7 @@ function valueClass(row, value, unavailable) {
   return `explain-plan__row-value explain-plan__row-value--${value ? 'danger' : 'good'}`;
 }
 
-function MetricRows({ rows, source, unavailable, reduced }) {
+function MetricRows({ rows, source, unavailable, unavailableText, reduced }) {
   return (
     <ul className="explain-plan__rows">
       {rows.map((row, i) => {
@@ -95,7 +86,7 @@ function MetricRows({ rows, source, unavailable, reduced }) {
             <div className="explain-plan__row-main">
               <span className="explain-plan__row-label">{row.label}</span>
               <span className={valueClass(row, value, unavailable)}>
-                {unavailable ? 'Unavailable — EXPLAIN failed' : formatValue(value, row)}
+                {unavailable ? unavailableText : formatValue(value, row)}
               </span>
             </div>
             {gloss && <p className="explain-plan__row-gloss">{gloss}</p>}
@@ -108,9 +99,12 @@ function MetricRows({ rows, source, unavailable, reduced }) {
 
 export function ExplainPlanView({ plan }) {
   const reduced = useReducedMotion();
-  const { schema } = useActiveSchema();
+  const isMongo = isMongoAnalysis(plan);
+  const { schemaFor } = useActiveSchema();
+  const schema = schemaFor(isMongo ? TargetDb.MONGODB : TargetDb.SQL);
   const generated = Boolean(schema) && !schema.builtIn;
   const unavailable = Boolean(plan.explainFailed);
+  const unavailableText = isMongo ? 'Unavailable — explain failed' : 'Unavailable — EXPLAIN failed';
   const tables = Array.isArray(plan.tables) ? plan.tables : [];
   const perTable = !unavailable && tables.length > 0;
 
@@ -118,9 +112,19 @@ export function ExplainPlanView({ plan }) {
     <div className="explain-plan">
       {generated && !unavailable && (
         <p className="explain-plan__provenance">
-          This plan is MySQL&apos;s, run against <code>{schema.catalog}</code>. Those tables were
-          created from your uploaded schema and filled with generated rows — the access paths and
-          index choices are real, the row counts describe synthetic data.
+          {isMongo ? (
+            <>
+              This plan is MongoDB&apos;s, run against <code>{schema.catalog}</code>. Those collections were
+              created from your uploaded schema and filled with generated documents — the plan stages and
+              index choices are real, the document counts describe synthetic data.
+            </>
+          ) : (
+            <>
+              This plan is MySQL&apos;s, run against <code>{schema.catalog}</code>. Those tables were
+              created from your uploaded schema and filled with generated rows — the access paths and
+              index choices are real, the row counts describe synthetic data.
+            </>
+          )}
         </p>
       )}
 
@@ -130,8 +134,9 @@ export function ExplainPlanView({ plan }) {
         <div className="explain-plan__tables">
           {tables.length > 1 && (
             <p className="explain-plan__tables-intro">
-              MySQL reads {tables.length} tables for this query. Each is planned separately, so each
-              is reported separately here.
+              {isMongo
+                ? `MongoDB reads ${tables.length} collections for this query. Each is reported separately here.`
+                : `MySQL reads ${tables.length} tables for this query. Each is planned separately, so each is reported separately here.`}
             </p>
           )}
           {tables.map((table, tableIndex) => (
@@ -146,16 +151,30 @@ export function ExplainPlanView({ plan }) {
                     table.fullTableScan ? 'danger' : 'good'
                   }`}
                 >
-                  {table.fullTableScan ? 'Full scan' : `Index: ${table.keyUsed || 'yes'}`}
+                  {table.fullTableScan
+                    ? isMongo ? 'Collection scan' : 'Full scan'
+                    : `Index: ${table.keyUsed || 'yes'}`}
                 </span>
               </header>
               {table.extra && <p className="explain-plan__table-extra">{table.extra}</p>}
-              <MetricRows rows={TABLE_ROWS} source={table} unavailable={false} reduced={reduced} />
+              <MetricRows
+                rows={tableRows(isMongo)}
+                source={table}
+                unavailable={false}
+                unavailableText={unavailableText}
+                reduced={reduced}
+              />
             </section>
           ))}
         </div>
       ) : (
-        <MetricRows rows={ROWS} source={plan} unavailable={unavailable} reduced={reduced} />
+        <MetricRows
+          rows={summaryRows(isMongo)}
+          source={plan}
+          unavailable={unavailable}
+          unavailableText={unavailableText}
+          reduced={reduced}
+        />
       )}
     </div>
   );

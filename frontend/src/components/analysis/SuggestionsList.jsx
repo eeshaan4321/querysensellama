@@ -19,6 +19,7 @@ export function SuggestionsList({ suggestions }) {
               <span className="suggestions-list__severity">{s.severity}</span>
             </div>
             <p className="suggestions-list__message">{s.message}</p>
+            {s.suggestedChange && <code className="suggestions-list__change">{s.suggestedChange}</code>}
           </div>
         </li>
       ))}

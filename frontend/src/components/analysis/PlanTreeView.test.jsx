@@ -81,4 +81,18 @@ describe('PlanTreeView', () => {
     render(<PlanTreeView tree={{ kind: 'query_block', label: 'query block' }} />);
     expect(screen.getByText('query block')).toBeInTheDocument();
   });
+
+  it('a MongoDB plan tree names stages and counts documents, with no MySQL wording', () => {
+    render(<PlanTreeView dialect="MONGODB" tree={{
+      kind: 'SORT', label: 'customers', usesFilesort: true, children: [
+        { kind: 'COLLSCAN', label: 'customers', accessType: 'COLLSCAN', estimatedRows: 2000, children: [] },
+      ],
+    }} />);
+
+    expect(screen.getByText('SORT')).toBeInTheDocument();
+    expect(screen.getByText('COLLSCAN')).toBeInTheDocument();
+    expect(screen.getByText('2,000 documents')).toBeInTheDocument();
+    expect(screen.getByText('In-memory sort')).toBeInTheDocument();
+    expect(screen.queryByText('Using filesort')).toBeNull();
+  });
 });

@@ -1,4 +1,5 @@
-import { FIELD_GLOSS, QUERY_COST_CAVEAT } from '../../lib/explainGlossary';
+import { FIELD_GLOSS, MONGO_FIELD_GLOSS, MONGO_PLAN_FOOTNOTE, QUERY_COST_CAVEAT } from '../../lib/explainGlossary';
+import { isMongoAnalysis } from '../../api/contracts';
 import './PlanMetrics.css';
 
 function count(value) {
@@ -27,13 +28,16 @@ function Metric({ label, value, gloss, tone }) {
 export function PlanMetrics({ plan }) {
   if (plan.explainFailed) return null;
 
+  const isMongo = isMongoAnalysis(plan);
+  const gloss = isMongo ? MONGO_FIELD_GLOSS : FIELD_GLOSS;
+  const unit = isMongo ? 'Documents' : 'Rows';
   const examined = plan.estimatedRows;
   const returned = plan.estimatedRowsReturned;
-  const waste = amplification(examined, returned);
+  const waste = isMongo && plan.filtered == null ? null : amplification(examined, returned);
 
   const tiles = [
-    { key: 'examined', label: 'Rows examined', value: count(examined), gloss: FIELD_GLOSS.estimatedRows },
-    { key: 'returned', label: 'Rows returned', value: count(returned), gloss: FIELD_GLOSS.estimatedRowsReturned },
+    { key: 'examined', label: `${unit} examined`, value: count(examined), gloss: gloss.estimatedRows },
+    { key: 'returned', label: `${unit} returned`, value: count(returned), gloss: gloss.estimatedRowsReturned },
     {
       key: 'waste',
       label: 'Wasted work',
@@ -41,15 +45,26 @@ export function PlanMetrics({ plan }) {
       tone: waste && waste !== 'none' ? 'danger' : undefined,
       gloss:
         waste === 'none'
-          ? 'Nearly every row read is a row returned — almost nothing is discarded.'
-          : 'Rows read for each row returned. The rest are read and thrown away.',
+          ? isMongo
+            ? 'Nearly every document read is a document returned — almost nothing is discarded.'
+            : 'Nearly every row read is a row returned — almost nothing is discarded.'
+          : isMongo
+            ? 'Documents read for each document returned. The rest are read and thrown away.'
+            : 'Rows read for each row returned. The rest are read and thrown away.',
     },
-    {
-      key: 'cost',
-      label: 'Query cost',
-      value: typeof plan.queryCost === 'number' ? plan.queryCost.toLocaleString() : null,
-      gloss: QUERY_COST_CAVEAT,
-    },
+    isMongo
+      ? {
+          key: 'time',
+          label: 'Execution time',
+          value: typeof plan.executionMillis === 'number' ? `${plan.executionMillis.toLocaleString()} ms` : null,
+          gloss: MONGO_FIELD_GLOSS.executionMillis,
+        }
+      : {
+          key: 'cost',
+          label: 'Query cost',
+          value: typeof plan.queryCost === 'number' ? plan.queryCost.toLocaleString() : null,
+          gloss: QUERY_COST_CAVEAT,
+        },
   ].filter((tile) => tile.value !== null && tile.value !== undefined);
 
   if (tiles.length === 0) return null;
@@ -62,8 +77,9 @@ export function PlanMetrics({ plan }) {
         ))}
       </div>
       <p className="plan-metrics__footnote">
-        Every figure here is MySQL&apos;s own estimate, read from its execution plan. QuerySense does
-        not run your query, so none of these is a measured result.
+        {isMongo
+          ? MONGO_PLAN_FOOTNOTE
+          : "Every figure here is MySQL's own estimate, read from its execution plan. QuerySense does not run your query, so none of these is a measured result."}
       </p>
     </section>
   );
