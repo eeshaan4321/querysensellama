@@ -822,6 +822,68 @@ It was built in eight steps, each recorded as a session in §7, from
 The live checklists in the step 4–8 sessions in §7 are the outstanding
 checks.
 
+### Planned: a rule engine that adapts to any schema — sub-project 1 of 4 planned 2026-10-02
+
+The rule engine already binds to whatever schema is active (§2). These four
+sub-projects lift the limits where it still expects particular words or
+shapes. Each works for MySQL and MongoDB together, decided 2026-10-02. They
+run in this order, each with its own spec, plan and commits:
+
+| # | Sub-project | Status |
+|---|---|---|
+| 1 | **Vocabulary:** declared aliases, built-in synonyms, one-letter typos, irregular plurals, multi-word values, numbers beyond ten | **Planned.** Spec `docs/superpowers/specs/2026-10-02-rule-engine-vocabulary-design.md`; plan `docs/superpowers/plans/2026-10-02-rule-engine-vocabulary.md`, 11 tasks. Not started. |
+| 2 | **More question shapes:** top-N / highest, average per group, DISTINCT, NOT / without, OR | Not designed |
+| 3 | **Joins across three or more tables:** a path of declared foreign keys | Not designed |
+| 4 | **Dates:** "last month", "in 2025", "since january" as real ranges | Not designed |
+
+**Sub-project 1, as planned:**
+- **Aliases:**
+  - Declared by the schema itself with `aka:` in a SQL `COMMENT` or a
+    MongoDB `description`, or in an `aliases` upload block.
+  - A declared alias counts as an exact name (0.95).
+  - An alias that collides with a real name, or is declared twice, is
+    dropped with an upload warning.
+  - The built-in demos declare `customers` aka `buyers`.
+- **Built-in synonyms:**
+  - A reviewed English list in
+    `backend/src/main/resources/querybuilder/synonyms.json`, kept clear of
+    the words the parser reads as instructions.
+  - A synonym binds only when exactly one table or column fits; otherwise
+    the engine declines and names the candidates.
+- **Typos:**
+  - One edit (an adjacent swap counts as one), words of five or more
+    letters, one candidate only.
+  - A table typo is tried only when no table matched otherwise.
+- **Confidence:** a query built through a synonym or typo reports **0.85**
+  instead of 0.95. Every non-exact reading is listed under "Read as" in the
+  rule trace and in the response's new `interpretations` field.
+- **Values:**
+  - Runs of up to four words, so "new delhi" matches.
+  - A one-letter typo in a value is corrected to the stored spelling.
+  - A value stored in two columns now declines. Today the engine silently
+    picks the first, which is a guess at 0.95.
+  - Values never use synonyms.
+- **Numbers:**
+  - Digits with separators, decimals, and words up to the millions, plus
+    `a dozen`.
+  - They replace the one-to-ten list, in comparisons, `with` filters and
+    limits.
+- **Design:** a new `SchemaLexicon` behind `SchemaBinder` indexes every way
+  a word can reach a schema item. The emitters are unchanged, so both
+  dialects get every improvement.
+- **Guard:** every question that builds today must build byte-for-byte the
+  same, at the same confidence.
+
+**Departures from the spec, in the plan:**
+1. Alias collisions are cleaned in `SchemaUploadService`, not in the
+   validator.
+2. The lexicon rebuilds lazily when the snapshot changes.
+3. The comparison decline keeps today's wording.
+4. An adjacent swap counts as one edit.
+5. A table typo is tried only when no table matched.
+6. `SchemaBinder.bindColumn` keeps an exact-or-alias meaning for the
+   parser's probe checks.
+
 ### Missing endpoints
 
 | Endpoint | Status | What is needed |

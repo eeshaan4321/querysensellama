@@ -250,8 +250,8 @@ there are none.
 Each new decline is a complete sentence, shown in the trace and sent to
 the LLM fallback like the existing ones:
 - **A synonym or typo fits several items:**
-  `"cost" could mean products.price or products.cost_price, so this engine
-  won't pick one.`
+  `"telephone" could mean suppliers.phone or suppliers.mobile, so this
+  engine won't pick one.`
 - **A value is stored in several columns:**
   `"Pune" is stored in both customers.city and customers.branch, so this
   engine can't tell which one the question means.`
@@ -287,8 +287,8 @@ All tests are written first.
   - `customers in new delhi` → `city = 'New Delhi'`;
   - `orders above two hundred and fifty` → `amount > 250`;
   - `top twenty customers` → limit 20;
-  - `cost of products` with `price` and `cost_price` both present → decline
-    naming both;
+  - `telephone of suppliers` with `phone` and `mobile` both present →
+    decline naming both;
   - a value stored in two columns → decline.
 - **`DialectParityTest`:** the same questions against the MongoDB demo
   produce identical intents.
