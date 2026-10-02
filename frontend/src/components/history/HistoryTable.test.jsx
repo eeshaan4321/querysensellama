@@ -51,4 +51,13 @@ describe('HistoryTable', () => {
     const row = rowFor({ ...RECORD, resourceLevel: null, confidence: null, durationMs: null, schemaLabel: null });
     expect(within(row).getAllByText('—').length).toBeGreaterThanOrEqual(4);
   });
+
+  it('shows which database the query was written for', () => {
+    expect(within(rowFor({ ...RECORD, databaseType: 'MongoDB' })).getByText('MongoDB')).toBeInTheDocument();
+  });
+
+  it('has a Database column', () => {
+    render(<HistoryTable records={[RECORD]} />);
+    expect(screen.getByRole('columnheader', { name: 'Database' })).toBeInTheDocument();
+  });
 });

@@ -27,6 +27,7 @@ export function HistoryTable({ records }) {
         <tr>
           <th>Request</th>
           <th>Generated query</th>
+          <th>Database</th>
           <th>Handled by</th>
           <th>Confidence</th>
           <th>Schema</th>
@@ -40,6 +41,7 @@ export function HistoryTable({ records }) {
           <tr key={r.id}>
             <td className="history-table__nl">{r.userInput}</td>
             <td className="history-table__query"><code>{r.generatedQuery}</code></td>
+            <td className="history-table__meta">{r.databaseType || EMPTY}</td>
             <td><EngineBadge handledBy={r.source} size="sm" /></td>
             <td className="history-table__meta">{formatConfidence(r.confidence)}</td>
             <td className="history-table__meta">{r.schemaLabel || EMPTY}</td>
