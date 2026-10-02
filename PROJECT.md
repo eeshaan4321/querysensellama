@@ -732,7 +732,10 @@ reasoning rather than acting on it.
 UI; and any widening of the upload path's DDL execution beyond the isolated
 `querysense_uploads` catalog it already provisions. The upload feature is the
 one place this project emits DDL, and it does so only into a scratch catalog
-it owns — never the connected database (§3, §6).
+it owns — never the connected database (§3, §6). Since 2026-10-01 the same
+holds for MongoDB: uploaded collections go only into the `querysense_uploads`
+database. The built-in demo is created in `querysense` only when that
+database has none of its collections.
 
 The UI carries this in its wording. The Optimization screen's real half is
 headed **"Recommended schema changes"** and its script block **"Copy as one
@@ -740,154 +743,82 @@ script"** — an earlier draft read "Schema changes to apply" and "Apply all",
 which implied an action the app does not perform. The only control on that
 block is Copy.
 
-### Not a gap: MongoDB is analysed, never connected
+### Decided: MongoDB works the same as MySQL — 2026-09-26, built by 2026-10-02
 
-> **REOPENED 2026-09-25 at the user's request** — parity with the SQL pipeline
-> is being considered. The decision below is kept in full, because it is still
-> the reason the code looks the way it does and still the argument against
-> doing this badly. What it forbids is now under review rather than settled.
-> The feasibility assessment is the section immediately after this one.
->
-> **DECIDED 2026-09-26: full parity, including upload.** The design is
-> `docs/superpowers/specs/2026-09-26-mongodb-parity-design.md`. The build is in
-> progress, and this section is deleted when it is finished (spec step 9).
-> Until then the code still behaves as described below, except for what §7's
-> 2026-09-26 session lists as done.
->
-> **SUPERSEDED 2026-09-26 for stage 1 (the rule engine) only.** The rule
-> engine now builds MongoDB questions instead of declining every one of
-> them — see §7's 2026-09-26 session and `RULES.md` E2/E23. Spec steps 4–9
-> (analysis, advisor, rewrite, upload) are still exactly as this section and
-> the next one describe; only the first bullet under "What follows from the
-> decision" below is out of date.
+**This replaces two earlier sections**: "Not a gap: MongoDB is analysed, never
+connected" (decided 2026-09-21, reopened 2026-09-25) and "What MongoDB parity
+would actually take" (assessed 2026-09-25). The 2026-09-21 decision kept
+MongoDB to two text checks over the query string and LLM generation, on the
+grounds that half-supporting a second database was worse than supporting one
+properly. The 2026-09-25 assessment found that MongoDB's own `explain()`
+maps onto the fields `QueryAnalysisResult` already had. That made full
+support a structural extension rather than an invention, and on 2026-09-26
+the user chose full parity.
 
-**Decided 2026-09-21. This is a non-goal, not a TODO.** QuerySense will not
-grow a live MongoDB connection, a Mongo path in the rule engine, or Mongo
-support in schema upload. What exists is what will exist: two static text
-checks over the query string (`MongoSimpleAnalyzer` — unindexed filter field,
-unanchored `$regex`), the two schema-advisor rules those feed, and LLM
-generation.
+**The design:** `docs/superpowers/specs/2026-09-26-mongodb-parity-design.md`.
+It was built in eight steps, each recorded as a session in §7, from
+2026-09-26 to 2026-10-02:
+- **Choices settled in conversation:**
+  - A MongoDB upload takes collections with a `$jsonSchema` validator,
+    indexes and an optional `references` block. It does not take sample
+    documents.
+  - MongoDB runs as a local Community Server on `27017`.
+  - Each database has its own active schema, and the Workbench toggle picks
+    which one answers.
+  - One pipeline, with a per-dialect implementation of each stage. A
+    parallel Mongo pipeline and a Mongo→SQL translation were both rejected.
 
-The reasoning is the same proportionality argument as the DDL non-goal above,
-pointed at scope rather than privilege. Supporting MongoDB properly is not one
-feature, it is four: a live connection, upload provisioning collections and
-indexes, schema-grounded Mongo prompts, and a rule-engine Mongo path. Each is
-comparable in size to the whole rewrite engine. Done half-way, the result is a
-system that *looks* like it supports two databases and is measurably worse at
-one of them — which is the single thing this project's central claim cannot
-survive. "MySQL, done properly, with the limits stated" is a stronger position
-than two databases half-supported.
+**What MongoDB has now, stage for stage with MySQL:**
+- **Rule engine:** `MongoEmitter` writes `find`/`aggregate`, and joins become
+  `$lookup` (`RULES.md` E2).
+- **Cache and history:** keyed by dialect and schema, as for MySQL.
+- **LLM fallback:** prompts grounded in the active Mongo schema. Off-schema
+  output is returned at 0.2 and never cached (`RULES.md` R3).
+- **Upload:** collections are provisioned with strict validators and
+  indexes into `querysense_uploads`, then seeded with generated documents.
+- **Analysis:** a real `explain` at `executionStats`, read into the same
+  verdict, warnings and metric tiles. Its figures are measured, not
+  estimated.
+- **Rules:** a MongoDB variant of every domain, resource and advisor rule.
+  The advisor writes `createIndex` statements against the real
+  `listIndexes()`.
+- **Rewrite and compare:** RW1–RW4, compared by documents examined.
+- **Frontend:** every screen, with MongoDB's own wording.
 
-**What this forbids, so later work doesn't quietly reintroduce it:**
-uncommenting `spring.data.mongodb.uri` and wiring a `MongoTemplate`; extending
-`SchemaUploadService` to emit Mongo collections; adding a Mongo branch to
-`RuleBasedQueryBuilder`. Each would put QuerySense back on the road to a second
-half-supported database.
+`MongoSimpleAnalyzer` and its placeholder index list (`_id`, `email`,
+`userId`) are deleted.
 
-**What follows from the decision, stated rather than discovered:**
+**What did not change:** the non-goal above applies to MongoDB unchanged.
+- `explain` plans a query and never runs a write. Explaining a `deleteMany`
+  deletes nothing; this was confirmed against the real server by counting
+  documents afterwards.
+- `$out` and `$merge` are refused before anything reaches `mongod`.
+- Advisor output is shown, never applied.
+- Uploads write only to `querysense_uploads`. The built-in demo is seeded
+  into `querysense` only when that database has none of its collections, and
+  nothing there is ever dropped.
 
-- ~~**The rule engine declines every MongoDB question**, so 100% of Mongo
-  generation is the LLM. With Ollama down, every Mongo question 503s.~~
-  **No longer true as of 2026-09-26** — see the note above. Every other
-  bullet below is still current.
-- **Mongo LLM generation is ungrounded and unguarded.**
-  `buildSchemaContext` returns `""` for any non-MySQL dialect and
-  `GeneratedQueryValidator` returns clean for one. Both are deliberate:
-  `KnownSchema` describes relational tables, and there is no Mongo schema to
-  check output against. **Report Mongo accuracy as its own figure; folding it
-  into a blended number hides this.**
-- **Schema upload does nothing for MongoDB.** The pipeline emits MySQL DDL,
-  seeds through JDBC and reads MySQL `EXPLAIN`, end to end.
-- **`MongoSimpleAnalyzer` never runs the query** and produces no plan. Its
-  "known indexed fields" list is the hardcoded placeholder `_id`, `email`,
-  `userId` — not real index metadata.
-- **There is no comparison for MongoDB.** `QueryRewriter` has no Mongo rules,
-  and `/api/query/compare` returns `rewritten: false` with a summary saying so,
-  without calling the analyser at all.
+**Where MongoDB still differs, on purpose** (pinned in `DialectParityTest`):
+- An aggregate over no documents returns nothing, where SQL returns one
+  0/NULL row.
+- Grouped keys come back under `_id`.
+- A HAVING-style filter on an embedded-array field would sum to zero with
+  no error. The parser cannot produce one today.
 
-The UI carries this rather than leaving it to be discovered: the Optimization
-screen's rewrite half shows "SQL only, for now" for a Mongo analysis, and the
-Analysis screen shows Mongo findings instead of a plan. Neither pretends a
-plan is coming.
+**Still out of scope** (spec §13):
+- inferring a schema by sampling documents;
+- uploading sample documents or data dumps;
+- operations beyond `find`, `aggregate`, `countDocuments` and `deleteMany`;
+- a QuerySense-computed cost model for either database.
 
-### What MongoDB parity would actually take — assessed 2026-09-25
+**Not yet verified end to end:**
+- Each backend step ran its integration tests against the real `mongod`
+  (8.3.11 Community).
+- No screen has been opened in a browser with MongoDB targeted.
+- The MongoDB prompt has not been run against Ollama.
 
-Asked directly: can MongoDB have the same structure the SQL side has? **Yes,
-and less of it is new work than the non-goal above assumes.** That assessment
-was written from scope, before anyone checked what MongoDB's own tooling
-offers. This section is the check. Nothing here is built.
-
-#### The fact that changes the argument: MongoDB has a real `explain()`
-
-`db.coll.find({…}).explain("executionStats")` returns a winning plan with
-stages, and its figures land on fields `QueryAnalysisResult` **already has**:
-
-| SQL today | MongoDB equivalent |
-|---|---|
-| `accessType: ALL`, `hasFullTableScan` | a `COLLSCAN` stage |
-| `usesIndex`, `keyUsed` | an `IXSCAN` stage, `indexName` |
-| `usesFilesort` | an in-memory `SORT` stage |
-| `estimatedRows` | `totalDocsExamined` |
-| `estimatedRowsReturned` | `nReturned` |
-| read amplification | the same ratio, the same meaning |
-
-So the verdict ladder (§9.6), the metric tiles, the wasted-work breakdown and
-most of the advisor's rule shapes **transfer rather than being reinvented**.
-The original reasoning treated Mongo analysis as something that would have to
-be invented; it does not.
-
-#### Stage by stage, against the pipeline in §2
-
-| Stage | What exists for MySQL | What MongoDB needs |
-|---|---|---|
-| 0 · Schema | DDL parsed into a `SchemaSnapshot` | **The one genuinely new concept.** No DDL to parse, so a `MongoSchemaProvider` samples N documents per collection to infer fields and reads **real** indexes via `listIndexes()`. That also retires `MongoSimpleAnalyzer`'s hardcoded `_id, email, userId` placeholder. |
-| 1 · Rule engine | `QueryIntent` → `SqlEmitter` | `QueryIntent` is nearly dialect-neutral already, **but SQL rendering is baked into the record** — `Predicate.render()` emits SQL and `Predicate.in` writes SQL quoting. Lift rendering out into `SqlEmitter`, then add a `MongoEmitter` for `find`/`aggregate`. `SchemaBinder` and `QueryIntentParser` work unchanged. Joins become `$lookup`. **Largest single chunk, and the least necessary for a credible demo.** |
-| 2 · Analysis | `MySqlExplainAnalyzer` | `MongoExplainAnalyzer` running the real `explain()` through a Mongo equivalent of `ExplainExecutor`. This is where "never runs the query, produces no plan" stops being true. |
-| 3 · Advisor | `CREATE INDEX` from plan flags | `db.coll.createIndex({field: 1})` from the same flags, against real index metadata instead of two regexes. The five-rule shape carries over. |
-| 4 · Rewrite + compare | `QueryRewriter`, 3 rules | The same semantics-preserving constraint, with Mongo rules: add a projection (the `SELECT *` analogue), collapse an `$or` chain on one field into `$in`, anchor a prefix regex. Then `explain()` both and compare `totalDocsExamined`. |
-| 5 · History | dialect-agnostic | Nothing. |
-| Frontend | every screen branches on `targetDb` | Mostly replacing the honest empty states with real content. |
-
-#### The four things that are hard rather than merely long
-
-1. **Inferred schema is sampling, not truth.** A field missing from the sample
-   is not missing from the collection. This has to be labelled on screen the
-   way "generated data" already is, or the system starts making claims it
-   cannot support — the exact failure the non-goal above was written to avoid.
-2. **`explain()` output shape varies by server version.** This is the MySQL 9
-   `explain_format` trap (§6) in a second dialect: pin the verbosity, assert
-   the shape in a test, and do not trust a bare call.
-3. **Grounding the prompt** with an inferred schema is new prompt work with its
-   own failure modes — though it does end the "ungrounded *and* unguarded"
-   state that makes Mongo the least protected path today.
-4. **There is nothing to test against on this machine.** `27017` is not
-   listening, and §7's 2026-09-09 session records it never having been up
-   here. mongod running and seeded is a precondition, not a detail.
-
-#### Recommended order, if this goes ahead
-
-**Stages 2 and 3 first** — real `explain()`, real index metadata. Highest value
-per unit of work, each demoable alone, and together they retire the weakest
-claim in the project: that `MongoSimpleAnalyzer` never runs the query and its
-index list is a placeholder. Stage 1 last.
-
-**The trade-off, stated rather than buried:** this is the largest remaining
-build in the project, comparable to everything done in the fortnight to
-2026-09-21, and it competes for time with the live verification run — which is
-currently the larger risk, since nothing from that fortnight has met a running
-backend. Scope and deadline were put back to the user; no decision recorded yet.
-
-**Decision, 2026-09-26: full parity, upload included.** Four choices were
-settled in conversation:
-- A Mongo upload takes collections with a `$jsonSchema` validator, indexes and
-  an optional `references` block. It does not take sample documents.
-- MongoDB runs as a local Community Server on `27017`.
-- Each database has its own active schema.
-- The architecture is one pipeline with a per-dialect implementation of each
-  stage, not a parallel Mongo pipeline.
-
-Sampling a schema from documents (stage 0 above) is out of scope. The rule
-engine (stage 1) is now required. The order of work is in the spec's §12.
+The live checklists in the step 4–8 sessions in §7 are the outstanding
+checks.
 
 ### Missing endpoints
 
@@ -988,16 +919,10 @@ engine (stage 1) is now required. The order of work is in the spec's §12.
    because calling a row count a cost would invent a unit. A failed probe drops
    the cost and the plan tree, never the plan.
 
-6. **MongoDB is still a text-level check — and as of 2026-09-25 that is under
-   review rather than decided.** See "Not a gap: MongoDB is analysed, never
-   connected" above for the original reasoning, and "What MongoDB parity would
-   actually take" after it for what building the SQL structure on this side
-   would cost. Until something is built, the state is unchanged: two regex
-   checks, no connection, no plan. The one real defect on that path was fixed
-   2026-09-21: `MongoSimpleAnalyzer` was called with `collectionName = null`,
-   so Mongo recommendations could not name their collection. It now reads the
-   collection out of `db.<name>.find(...)` itself, and an explicit name still
-   wins.
+6. ~~**MongoDB is still a text-level check.**~~ **Resolved 2026-10-01.**
+   MongoDB analysis is a real `explain` against the real indexes. See
+   "Decided: MongoDB works the same as MySQL" above. `MongoSimpleAnalyzer`, and
+   its 2026-09-21 fix for the null collection name, are deleted.
 
 7. **`EXPLAIN` runs twice per pipeline run**, because the schema advisor re-runs
    the whole analysis. Accepted at this scale; worth revisiting if the analysis
@@ -1168,7 +1093,12 @@ output being cached and later relabelled 1.0 — is still open.
 
 #### MongoDB is affected worse
 
-Every layer of protection is MySQL-only:
+**Resolved 2026-10-01** (MongoDB parity, steps 3 and 7). The rule engine
+builds MongoDB questions, and the prompt is grounded in the active Mongo
+schema. Off-schema Mongo output is returned at 0.2 and never cached. The
+account below describes the state before that.
+
+Every layer of protection was MySQL-only:
 
 - `RuleBasedQueryBuilder` declines all MongoDB requests, so 100% of Mongo
   generation goes to the LLM.
@@ -1206,7 +1136,9 @@ Mongo accuracy as its own figure; folding it into a blended number hides this.
    from the SQL.
 3. ~~**Still open.** Decide explicitly what MongoDB grounding should look
    like…~~ **DECIDED 2026-09-21: it stays a no-op, and the no-op is now
-   deliberate.** See "Not a gap: MongoDB is analysed, never connected" in §5.
+   deliberate.** That §5 section has since been replaced by "Decided: MongoDB
+   works the same as MySQL", and the no-op was removed on 2026-10-01 (see the
+   2026-10-01 qualifier below).
    There is no Mongo schema to ground a prompt with or to check output against,
    and creating one is the four-feature build that decision rules out. The
    consequence — Mongo generation is ungrounded and unguarded — is now stated
@@ -1218,6 +1150,12 @@ Mongo accuracy as its own figure; folding it into a blended number hides this.
    which is stage 0 of the parity assessment in §5. If that is built, this
    no-op stops being defensible and both the grounding and the validator gain
    a Mongo path. Until then the entry stands as written.
+
+   **Superseded 2026-10-01.** Grounding and validation came from the
+   *declared* schema after all: a MongoDB upload carries `$jsonSchema`
+   validators, and the built-in demo has `KnownMongoSchema`. Sampling stayed
+   out of scope. Both paths now have a MongoDB branch (MongoDB parity,
+   step 7).
 
 ### Correctness defect: the cache did not know which schema answered
 
@@ -2234,7 +2172,34 @@ picked it up. Stopped (the Maven launcher and its child JVM) and restarted
 with `./mvnw clean spring-boot:run` — *"Started BackendApplication in 4.724
 seconds"*. §6 now carries this as a gotcha.
 
-#### Not verified
+#### Session of 2026-10-02 — MongoDB parity, step 9 (docs)
+
+There was no plan file; the spec's §12 row was the brief.
+
+- **`PROJECT.md` §5:** the two MongoDB sections are replaced by one record of
+  the decision, "Decided: MongoDB works the same as MySQL". The two sections
+  were "Not a gap: MongoDB is analysed, never connected" and "What MongoDB
+  parity would actually take". The record covers:
+  - what was chosen, and why the 2026-09-21 reasoning stopped holding;
+  - what MongoDB now has at each stage;
+  - that recommend-never-execute applies to it unchanged;
+  - the three documented differences, what is still out of scope, and what
+    hasn't been verified.
+- **Other places that pointed at the deleted sections, or described
+  `MongoSimpleAnalyzer` as current, now say what replaced it:** §5 item 6,
+  "MongoDB is affected worse", the third fix direction under the invented
+  identifiers defect, the §9 table, and §9.5. §9 now notes that `RULES.md`
+  is the current rule list.
+- **`RULES.md` renumbered:**
+  - The four IDs folded on 2026-10-01 are retired: TX6 (into TX1), RS4 (into
+    RS3), and SA4 and SA5 (into SA1).
+  - TX7 becomes TX6, and RS5 becomes RS4. Each renamed rule notes its old
+    ID.
+  - The total goes from 64 to 60.
+  - Only the RW IDs ever reach an API response, and they didn't change.
+  - `MongoOptimizationRulesTest`'s display names follow; it ran 10/10.
+
+### Not verified
 
 - No `/analyze` call was made after the restart; the user is testing it.
 - `./mvnw test` and `npm test` were not run for this change.
@@ -2620,9 +2585,9 @@ the rule engine `customers in mumbai` with the target set to MongoDB, and
 confirm it answers built, with `"Mumbai"` — the stored value, not the
 lowercased input — inside the `$match` filter.
 
-**Next:** steps 1–8 are complete; steps 4–8 are recorded in the sessions
-below. Step 9 is next: docs. `PROJECT.md` §5 records the decision and drops
-the two Mongo non-goal sections, and `RULES.md` is renumbered. The progress
+**Next:** all nine steps are complete; steps 4–9 are recorded in the
+sessions below. What remains is the live checklists in the step 4–8
+sessions, with the app running and `mongod` up. The progress
 ledger for steps 1–3 is at
 `.superpowers/sdd/2026-09-26-mongodb-parity-steps-1-3/progress.md`, which is
 git-ignored.
@@ -3262,13 +3227,18 @@ order it applies them.
 | Routing between the three layers | 3 | `QueryGenerationServiceImpl`, `GeneratedQueryValidator` |
 | Pre-EXPLAIN checks | 2 | `analysis/SqlPreflightValidator` |
 | EXPLAIN warnings | 4 | `analysis/MySqlExplainAnalyzer` |
-| MongoDB checks | 2 | `analysis/MongoSimpleAnalyzer` |
+| MongoDB checks | 2 | `analysis/MongoExplainAnalyzer` (was `MongoSimpleAnalyzer` until 2026-10-01) |
 | Analysis verdict | 9 | `analysis/VerdictService` |
 | Domain optimisation | 7 (transactional — the only set left) | `optimization/TransactionalOptimizationRules` |
 | Resource optimisation | 5 | `optimization/ResourceConsciousService` |
 | Schema advisor | 5 | `service/impl/SchemaAdvisorServiceImpl` |
 | Query rewrite | 3 | `optimization/QueryRewriter` |
 | **Total** | **63** | |
+
+**Since MongoDB parity (2026-10-01), `RULES.md` is the current list.** It
+carries every rule's MongoDB variant, and the 2026-10-02 renumbering that
+retired the four folded IDs, which brings the total to 60. This section is
+the 2026-09-26 reading and is kept for its account of the rules.
 
 Only the first row is the rule engine in the strict sense: layer 1 of query
 generation (§2). The rest are the other rule-based modules. They are
@@ -3373,16 +3343,18 @@ They report what MySQL chose; they don't claim it was wrong.
 | 3 | `Using temporary` | a temporary table was built for GROUP BY / DISTINCT |
 | 4 | `Using filesort` | results were sorted after reading; an index matching ORDER BY may help |
 
-### 9.5 MongoDB checks — 2 rules (`MongoSimpleAnalyzer`)
+### 9.5 MongoDB checks — 2 rules (`MongoExplainAnalyzer`)
+
+**Replaced 2026-10-01.** Until then these were text checks in
+`MongoSimpleAnalyzer`, over a placeholder index list. Both checks now read the
+parsed query and the collection's real `listIndexes()`, after a real `explain`.
 
 | # | Fires when |
 |---|---|
-| 1 | the first filter field that isn't a `$` operator is missing from the **placeholder** index list (`_id`, `email`, `userId`) |
+| 1 | an equality or range field in the filter is the leading key of no index in the collection's real `listIndexes()` |
 | 2 | a `$regex` value doesn't start with `^`, so no index can serve it |
 
-Both read the query text and neither runs it. **Under review since 2026-09-25**
-— if MongoDB parity is built, `listIndexes()` replaces the placeholder in rule
-1 and a real `explain()` reader replaces both. See §5.
+See `RULES.md` M1–M2.
 
 ### 9.6 Analysis verdict — 9 rules (`VerdictService`)
 

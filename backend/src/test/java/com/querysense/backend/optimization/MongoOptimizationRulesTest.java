@@ -38,7 +38,7 @@ class MongoOptimizationRulesTest {
     }
 
     @Test
-    @DisplayName("TX1: a collection scan above 100 documents is CRITICAL, fixed by the ESR index, and TX6 does not repeat it")
+    @DisplayName("TX1: a collection scan above 100 documents is CRITICAL, fixed by the ESR index, with no separate unindexed-filter suggestion")
     void tx1() {
         List<OptimizationSuggestion> suggestions = rules.evaluate(collscan(2_000));
 
@@ -102,7 +102,7 @@ class MongoOptimizationRulesTest {
     }
 
     @Test
-    @DisplayName("TX7: an unanchored regex stays CRITICAL with today's message")
+    @DisplayName("TX6: an unanchored regex stays CRITICAL with today's message")
     void tx7() {
         QueryAnalysisResult result = mongo(10);
         result.setUsesIndex(true);
@@ -131,7 +131,7 @@ class MongoOptimizationRulesTest {
     }
 
     @Test
-    @DisplayName("RS3 on MongoDB: a big collection scan under low memory, with the index; RS4 no longer repeats it")
+    @DisplayName("RS3 on MongoDB: a big collection scan under low memory, with the index and no separate unindexed-filter suggestion")
     void rs3() {
         List<OptimizationSuggestion> low = resources.evaluate(ResourceLevel.LOW, collscan(6_000));
 

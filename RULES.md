@@ -18,19 +18,22 @@ lowercased before it is read.
 | EXPLAIN warnings | 4 | W1–W4 | `analysis/MySqlExplainAnalyzer`, `analysis/MongoExplainParser` (W1, W3, W4) |
 | MongoDB checks | 2 | M1–M2 | `analysis/MongoExplainAnalyzer` |
 | Analysis verdict | 9 | V1–V9 | `analysis/VerdictService` |
-| Domain optimisation | 7 | TX1–TX7 (TX6 folded into TX1) | `optimization/TransactionalOptimizationRules` |
-| Resource optimisation | 5 | RS1–RS5 (RS4 folded into RS3) | `optimization/ResourceConsciousService` |
-| Schema advisor | 5 | SA1–SA5 (SA4, SA5 folded into SA1) | `advisor/MySqlIndexAdvisor`, `advisor/MongoIndexAdvisor` |
+| Domain optimisation | 6 | TX1–TX6 | `optimization/TransactionalOptimizationRules` |
+| Resource optimisation | 4 | RS1–RS4 | `optimization/ResourceConsciousService` |
+| Schema advisor | 3 | SA1–SA3 | `advisor/MySqlIndexAdvisor`, `advisor/MongoIndexAdvisor` |
 | Query rewrite | 4 | RW1–RW4 (RW4 MongoDB only) | `optimization/QueryRewriter`, `optimization/MongoQueryRewriter` |
-| **Total** | **64** | | |
+| **Total** | **60** | | |
 
 **The rule engine has 23 rules.** Of those, 19 are conditions under which it
-refuses a question and hands it to the language model. The other 40 rules
+refuses a question and hands it to the language model. The other 37 rules
 belong to the modules that analyse and optimise a query after it has been
-generated. None of the 63 uses a model.
+generated. None of the 60 uses a model.
 
-Since 2026-10-01, 60 of the 64 IDs still fire. The four folded IDs (TX6,
-RS4, SA4, SA5) are kept below with a note saying where they went.
+**Renumbered 2026-10-02 (MongoDB parity, step 9).** The four MongoDB-only
+IDs folded on 2026-10-01 are gone: the old TX6 lives in TX1, the old RS4 in
+RS3, and the old SA4 and SA5 in SA1. The old TX7 is now TX6, and the old RS5
+is now RS4. No ID appears in an API response except the RW IDs, which did
+not change.
 
 Read again on 2026-09-21, when section 10 was added, and again on
 2026-09-26, when the rule engine became dialect-aware, gained a MongoDB
@@ -38,9 +41,8 @@ emitter (E2) and a decline for a second unbound noun (E23).
 
 Read again on 2026-10-01, when MongoDB analysis became a real `explain()`
 reader (MongoDB parity, step 5). Every rule from section 3 on now has a
-MySQL variant and a MongoDB variant. TX6, RS4, SA4 and SA5 were folded into
-other rules for MongoDB; they keep their numbers below until step 9
-renumbers this file.
+MySQL variant and a MongoDB variant. Four MongoDB-only rules were folded
+into others then, and their IDs were retired on 2026-10-02.
 
 ---
 
@@ -623,7 +625,7 @@ The rows were found through an index.
 
 ---
 
-## 7. Domain optimisation — 7 rules
+## 7. Domain optimisation — 6 rules
 
 One rule set, run on every analysis: the transactional one. "Large" means
 **above 100 rows**.
@@ -641,7 +643,7 @@ arrive tagged `source: "DOMAIN"`, through a class still called
 contract does not move — no rule below reads a domain, and nothing asks for
 one. See PROJECT.md §9.7 for the full list of what kept the name.
 
-### Transactional — 7 rules (large = above 100 rows)
+### Transactional — 6 rules (large = above 100 rows)
 
 Short, frequent, time-critical lookups. Whatever a query does, it does again
 on every call, so this set has the lowest threshold and the harshest
@@ -656,14 +658,13 @@ severities.
   can't, such as a small join with no key on one side.
 - **TX5 · `const` or `ref` access through an index** — `INFO`. This is the
   ideal shape for a lookup.
-- **TX6 · MongoDB: unindexed filter** — folded into TX1 for MongoDB on
-  2026-10-01; `explain` now reports the collection scan this rule guessed at.
-- **TX7 · MongoDB: unanchored regex** — `CRITICAL`. A regex scan doesn't
-  belong on a hot path.
+- **TX6 · MongoDB: unanchored regex** (TX7 until 2026-10-02) — `CRITICAL`.
+  A regex scan doesn't belong on a hot path.
 
 **MongoDB variants (2026-10-01).** TX1 fires on a `COLLSCAN` ("Collection
-scan on …"), TX2 on an in-memory sort, TX3 on a grouping that spilled to
-disk, TX4 when no index was used and nothing was scanned, TX5 on a
+scan on …"). `explain` reports that scan directly, where the old
+MongoDB-only unindexed-filter rule could only guess at it. TX2 fires on an
+in-memory sort, TX3 on a grouping that spilled to disk, TX4 when no index was used and nothing was scanned, TX5 on a
 single-document lookup (`EXPRESS_IXSCAN`, `EXPRESS_IDHACK`, `IDHACK`).
 
 **`suggestedChange` (2026-10-01).** A suggestion whose fix is an index now
@@ -674,7 +675,7 @@ QuerySense never runs it.
 
 ---
 
-## 8. Resource optimisation — 5 rules
+## 8. Resource optimisation — 4 rules
 
 Resource levels are simulated categories (low / medium / high), not live
 measurements of the machine. No level given means **medium**. "Significant"
@@ -693,24 +694,20 @@ working memory directly, so the reasoning is the same as RS1.
 `WARNING`. A large scan pushes other data out of memory, which slows down
 *other* queries too, not just this one.
 
-#### RS4 · MongoDB: unindexed filter, low resources
-Folded into RS3 for MongoDB on 2026-10-01: RS3 now reads MongoDB's real
-collection scan.
-
 **MongoDB variants (2026-10-01).** RS1 fires on an in-memory sort over more
 than 5,000 documents, RS2 on a grouping that spilled to disk, RS3 on a
-collection scan over more than 5,000 documents under low memory. RS1 and
-RS3 carry the same `suggestedChange` index statements as TX2 and TX1.
+collection scan over more than 5,000 documents under low memory. That takes
+over from the old MongoDB-only unindexed-filter rule. RS1 and RS3 carry the same `suggestedChange` index statements as TX2 and TX1.
 
-#### RS5 · Severity shift
+#### RS4 · Severity shift (RS5 until 2026-10-02)
 Moves every **domain** suggestion (section 7) one step: up under low, unchanged
 under medium, down under high, never below `INFO` or above `CRITICAL`. So the
 same finding reads as `CRITICAL` on a small machine and `INFO` on a large one.
-The resource module's own suggestions (RS1–RS4) aren't shifted.
+The resource module's own suggestions (RS1–RS3) aren't shifted.
 
 ---
 
-## 9. Schema advisor — 5 rules
+## 9. Schema advisor — 3 rules
 
 Each recommendation appears only when the specific problem it fixes is
 present. For example, an index is never suggested while one is already doing
@@ -740,26 +737,15 @@ user's decision, in their own database.
 
 #### MongoDB variants (2026-10-01)
 - **SA1:** a `COLLSCAN` with no index in use → one compound
-  `db.<c>.createIndex({...})`, ordered equality → sort → range. It absorbs
-  the sort, so MongoDB's reconciliation happens inside SA1.
-- **SA1, regex case (was SA5):** an unanchored regex → structural advice to
-  anchor it, or a text index on that field.
+  `db.<c>.createIndex({...})`, ordered equality → sort → range (SA4 until
+  2026-10-02). It absorbs the sort, so MongoDB's reconciliation happens
+  inside SA1.
+- **SA1, regex case (SA5 until 2026-10-02):** an unanchored regex →
+  structural advice to anchor it, or a text index on that field.
 - **SA2:** an in-memory sort when SA1 didn't fire → an index on the
   equality fields, then the sort fields.
 - **SA3:** a `$group` with no `$match` on an indexed field before it →
   flagged for review, with no statement.
-
-#### SA4 · MongoDB index (folded into SA1, 2026-10-01)
-- **Fires when:** unindexed filter (M1).
-- **Recommends:** `db.<collection>.createIndex({ <field>: 1 });`
-- **Until 2026-09-21 it could not name the collection** — the analyzer was
-  called with `collectionName = null`. It now reads the collection out of
-  `db.<name>.find(...)` in the query text.
-
-#### SA5 · MongoDB regex (folded into SA1, 2026-10-01)
-- **Fires when:** unanchored regex (M2).
-- **Recommends:** anchor the regex with `^`, or create a text index if
-  searching within the text is needed.
 
 #### Reconciliation — added 2026-09-21
 The rules above each read a single signal and cannot see what the others
