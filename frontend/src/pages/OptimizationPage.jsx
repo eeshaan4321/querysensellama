@@ -15,7 +15,7 @@ import { useActiveSchema } from '../context/activeSchema.js';
 
 export function OptimizationPage() {
   const { build, analysis, targetDb, resourceLevel, schemaAdvice, setSchemaAdvice } = useWorkbench();
-  const { schema } = useActiveSchema();
+  const { schemaFor } = useActiveSchema();
   const navigate = useNavigate();
 
   const [loading, setLoading] = useState(false);
@@ -26,6 +26,7 @@ export function OptimizationPage() {
 
   const activeDb = build?.targetDb || targetDb;
   const isMongo = activeDb === TargetDb.MONGODB;
+  const schema = schemaFor(activeDb);
 
   useEffect(() => {
     if (!analysis || schemaAdvice || adviceLoading) return;

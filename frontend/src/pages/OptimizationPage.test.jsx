@@ -11,18 +11,22 @@ import { ActiveSchemaContext } from '../context/activeSchema.js';
 
 const QUERY = 'db.customers.find({ "email": "a@b.c" }).sort({ "name": 1 })';
 
-function renderPage() {
+const MONGO_DEMO = { builtIn: true, dialect: 'MONGODB', catalog: 'querysense' };
+const MYSQL_UPLOAD = { builtIn: false, dialect: 'MYSQL', catalog: 'querysense_uploads' };
+
+function renderPage({ workbenchDb = 'MONGODB' } = {}) {
+  const schemas = { MONGODB: MONGO_DEMO, SQL: MYSQL_UPLOAD };
   render(
     <MemoryRouter>
       <WorkbenchContext.Provider value={{
         build: { generatedQuery: QUERY, targetDb: 'MONGODB', naturalLanguageQuery: 'customer a@b.c by name' },
         analysis: { databaseType: 'MongoDB' },
-        targetDb: 'MONGODB',
+        targetDb: workbenchDb,
         resourceLevel: 'MEDIUM',
         schemaAdvice: [],
         setSchemaAdvice: vi.fn(),
       }}>
-        <ActiveSchemaContext.Provider value={{ schema: { builtIn: true, dialect: 'MONGODB', catalog: 'querysense' } }}>
+        <ActiveSchemaContext.Provider value={{ schema: schemas[workbenchDb], schemaFor: (db) => schemas[db] }}>
           <OptimizationPage />
         </ActiveSchemaContext.Provider>
       </WorkbenchContext.Provider>
@@ -53,5 +57,11 @@ describe('OptimizationPage', () => {
     expect(await screen.findByText('Documents examined')).toBeInTheDocument();
     expect(screen.getByText(/MongoDB examined 2 fewer documents/)).toBeInTheDocument();
     expect(screen.getByText(/measured by MongoDB/)).toBeInTheDocument();
+  });
+
+  it('reads the schema of the database the query was built for, not the toggle', () => {
+    renderPage({ workbenchDb: 'SQL' });
+
+    expect(screen.queryByText(/Anchored to/)).toBeNull();
   });
 });
