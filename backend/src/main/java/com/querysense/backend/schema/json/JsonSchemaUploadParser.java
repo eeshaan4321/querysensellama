@@ -42,7 +42,12 @@ public class JsonSchemaUploadParser implements SchemaUploadParser {
             .enable(JsonReadFeature.ALLOW_UNQUOTED_FIELD_NAMES)
             .enable(JsonReadFeature.ALLOW_SINGLE_QUOTES)
             .enable(JsonReadFeature.ALLOW_TRAILING_COMMA)
+            .enable(JsonReadFeature.ALLOW_BACKSLASH_ESCAPING_ANY_CHARACTER)
             .build();
+
+    private static final Set<String> SHELL_CONSTRUCTORS = Set.of(
+            "ObjectId", "ISODate", "Date", "UUID", "NumberLong", "Long", "NumberInt", "Int32", "Double",
+            "NumberDecimal", "Decimal128", "Timestamp", "BinData", "MinKey", "MaxKey");
 
     private record Collection(ParsedTable table, List<IndexSpec> indexes) {
     }
@@ -99,7 +104,7 @@ public class JsonSchemaUploadParser implements SchemaUploadParser {
 
     private JsonNode read(String text) {
         try {
-            JsonNode root = MAPPER.readTree(text);
+            JsonNode root = MAPPER.readTree(fromShell(text));
             if (root == null || root.isMissingNode()) {
                 throw new SchemaUploadException(
                         "The uploaded schema was empty. Upload a .json file describing the collections.");
@@ -109,8 +114,157 @@ public class JsonSchemaUploadParser implements SchemaUploadParser {
             JsonLocation at = e.getLocation();
             String where = at == null ? "" : " at line " + at.getLineNr() + ", column " + at.getColumnNr();
             throw new SchemaUploadException(
-                    "The uploaded file is not valid JSON" + where + ": " + e.getOriginalMessage(), e);
+                    "The uploaded file is not valid JSON" + where + ": " + e.getOriginalMessage()
+                            + ". If it was pasted from mongosh, paste the output of "
+                            + "JSON.stringify(db.getCollectionInfos()) instead.", e);
         }
+    }
+
+    public static String fromShell(String text) {
+        StringBuilder out = new StringBuilder(text.length());
+        int i = 0;
+        while (i < text.length()) {
+            char c = text.charAt(i);
+            if (c == '"' || c == '\'') {
+                int end = endOfString(text, i);
+                out.append(text, i, end);
+                i = end;
+                continue;
+            }
+            if (!Character.isJavaIdentifierStart(c)) {
+                out.append(c);
+                i++;
+                continue;
+            }
+            int end = endOfWord(text, i);
+            String word = text.substring(i, end);
+            int open = skipSpaces(text, end);
+            if ("new".equals(word)) {
+                int nameEnd = endOfWord(text, open);
+                int paren = skipSpaces(text, nameEnd);
+                if (SHELL_CONSTRUCTORS.contains(text.substring(open, nameEnd)) && paren < text.length()
+                        && text.charAt(paren) == '(') {
+                    word = text.substring(open, nameEnd);
+                    open = paren;
+                }
+            }
+            int close = SHELL_CONSTRUCTORS.contains(word) && open < text.length() && text.charAt(open) == '('
+                    ? closingParen(text, open)
+                    : -1;
+            if (close < 0) {
+                out.append(text, i, end);
+                i = end;
+            } else {
+                out.append(extendedJson(word, text.substring(open + 1, close).trim()));
+                i = close + 1;
+            }
+        }
+        return out.toString();
+    }
+
+    private static String extendedJson(String constructor, String inner) {
+        String value = unquote(inner);
+        boolean integer = value.matches("-?\\d+");
+        return switch (constructor) {
+            case "ObjectId" -> "{\"$oid\": " + quote(value) + "}";
+            case "ISODate", "Date" -> integer && !isQuoted(inner)
+                    ? "{\"$date\": {\"$numberLong\": " + quote(value) + "}}"
+                    : "{\"$date\": " + quote(value) + "}";
+            case "UUID" -> "{\"$uuid\": " + quote(value) + "}";
+            case "NumberLong", "Long" -> "{\"$numberLong\": " + quote(value) + "}";
+            case "NumberDecimal", "Decimal128" -> "{\"$numberDecimal\": " + quote(value) + "}";
+            case "NumberInt", "Int32", "Double" ->
+                    value.matches("-?\\d+(\\.\\d+)?([eE][-+]?\\d+)?") ? value : quote(value);
+            case "Timestamp" -> inner.startsWith("{")
+                    ? "{\"$timestamp\": " + inner + "}"
+                    : "{\"$timestamp\": {\"t\": " + inner.replaceFirst("\\s*,\\s*", ", \"i\": ") + "}}";
+            case "BinData" -> {
+                int comma = inner.indexOf(',');
+                yield comma < 0
+                        ? quote(value)
+                        : "{\"$binary\": {\"base64\": " + quote(unquote(inner.substring(comma + 1).trim()))
+                                + ", \"subType\": " + quote(Integer.toHexString(Integer.parseInt(inner.substring(0, comma).trim())))
+                                + "}}";
+            }
+            case "MinKey" -> "{\"$minKey\": 1}";
+            case "MaxKey" -> "{\"$maxKey\": 1}";
+            default -> quote(value);
+        };
+    }
+
+    private static boolean isQuoted(String text) {
+        return text.length() >= 2 && (text.charAt(0) == '"' || text.charAt(0) == '\'')
+                && text.charAt(text.length() - 1) == text.charAt(0);
+    }
+
+    private static String unquote(String text) {
+        if (!isQuoted(text)) {
+            return text;
+        }
+        StringBuilder out = new StringBuilder();
+        for (int j = 1; j < text.length() - 1; j++) {
+            char ch = text.charAt(j);
+            if (ch == '\\' && j + 1 < text.length() - 1) {
+                ch = text.charAt(++j);
+            }
+            out.append(ch);
+        }
+        return out.toString();
+    }
+
+    private static String quote(String value) {
+        return "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
+    }
+
+    private static int endOfString(String text, int start) {
+        char quote = text.charAt(start);
+        int j = start + 1;
+        while (j < text.length()) {
+            char ch = text.charAt(j);
+            if (ch == '\\') {
+                j += 2;
+            } else if (ch == quote) {
+                return j + 1;
+            } else {
+                j++;
+            }
+        }
+        return text.length();
+    }
+
+    private static int endOfWord(String text, int start) {
+        int j = start;
+        while (j < text.length() && Character.isJavaIdentifierPart(text.charAt(j))) {
+            j++;
+        }
+        return j;
+    }
+
+    private static int skipSpaces(String text, int start) {
+        int j = start;
+        while (j < text.length() && Character.isWhitespace(text.charAt(j))) {
+            j++;
+        }
+        return j;
+    }
+
+    private static int closingParen(String text, int open) {
+        int depth = 0;
+        int j = open;
+        while (j < text.length()) {
+            char ch = text.charAt(j);
+            if (ch == '"' || ch == '\'') {
+                j = endOfString(text, j);
+                continue;
+            }
+            if (ch == '(') {
+                depth++;
+            } else if (ch == ')' && --depth == 0) {
+                return j;
+            }
+            j++;
+        }
+        return -1;
     }
 
     private Iterable<JsonNode> collectionEntries(JsonNode root) {

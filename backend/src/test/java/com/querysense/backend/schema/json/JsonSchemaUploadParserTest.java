@@ -261,4 +261,58 @@ class JsonSchemaUploadParserTest {
                 .hasMessageContaining("orders.customer_id")
                 .hasMessageContaining("customers._id");
     }
+
+    @Test
+    @DisplayName("output pasted straight from mongosh, shell constructors and all, is read")
+    void mongoshOutputIsRead() {
+        String pasted = """
+                [
+                  {
+                    name: 'customers',
+                    type: 'collection',
+                    options: {
+                      validator: { '$jsonSchema': { bsonType: 'object', required: [ 'name' ],
+                        properties: { name: { bsonType: 'string' }, joined: { bsonType: 'date' },
+                          visits: { bsonType: 'long', minimum: Long('0') } } } }
+                    },
+                    info: { readOnly: false, uuid: UUID('0b3f2c1e-7a4d-4e1b-9c55-2f6a8d1e4b70') },
+                    idIndex: { v: 2, key: { _id: 1 }, name: '_id_' },
+                    created: ISODate('2026-10-02T10:00:00.000Z'),
+                    note: 'UUID(\\'kept as text\\')',
+                    seenAt: new Date(1700000000000),
+                    owner: ObjectId("65f0c0ffee0123456789abcd"),
+                    stamp: Timestamp({ t: 1700000000, i: 1 }),
+                    small: NumberInt(5)
+                  }
+                ]
+                """;
+
+        ParsedSchema schema = parser.parse(pasted);
+
+        assertThat(schema.tables()).singleElement().satisfies(t -> {
+            assertThat(t.name()).isEqualTo("customers");
+            assertThat(t.columns()).extracting(ParsedColumn::name).containsExactly("_id", "name", "joined", "visits");
+            assertThat(t.validator().get("$jsonSchema", Document.class)
+                    .get("properties", Document.class).get("visits", Document.class).get("minimum")).isEqualTo(0L);
+        });
+    }
+
+    @Test
+    @DisplayName("shell constructors are converted outside strings only")
+    void constructorsInsideStringsAreLeftAlone() {
+        assertThat(JsonSchemaUploadParser.fromShell("{a: 'UUID(\"x\")', b: UUID('y'), c: \"NumberInt(3)\"}"))
+                .isEqualTo("{a: 'UUID(\"x\")', b: {\"$uuid\": \"y\"}, c: \"NumberInt(3)\"}");
+        assertThat(JsonSchemaUploadParser.fromShell("{n: NumberLong(\"42\"), d: NumberDecimal('1.5'), e: Int32(7)}"))
+                .isEqualTo("{n: {\"$numberLong\": \"42\"}, d: {\"$numberDecimal\": \"1.5\"}, e: 7}");
+        assertThat(JsonSchemaUploadParser.fromShell("{o: ObjectId('ab'), t: ISODate('2026-10-02'), m: new Date(5)}"))
+                .isEqualTo("{o: {\"$oid\": \"ab\"}, t: {\"$date\": \"2026-10-02\"}, m: {\"$date\": {\"$numberLong\": \"5\"}}}");
+    }
+
+    @Test
+    @DisplayName("text that still isn't JSON says how to paste from mongosh")
+    void unreadablePasteSaysHowToPaste() {
+        assertThatThrownBy(() -> parser.parse("[ { name: 'x', options: [Object] } ]"))
+                .isInstanceOf(SchemaUploadException.class)
+                .hasMessageContaining("JSON.stringify(db.getCollectionInfos())");
+    }
 }
