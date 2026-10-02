@@ -72,4 +72,17 @@ describe('ActiveSchemaProvider', () => {
     expect(captured.current.schemaFor('MONGODB')).toEqual(MONGO);
     expect(captured.current.schemaFor('SQL')).toEqual(SQL);
   });
+
+  it("a failed MongoDB load is MongoDB's error, not MySQL's", async () => {
+    getActiveSchema.mockImplementation(async (db) => {
+      if (db === 'MONGODB') throw new Error('MongoDB is down');
+      return SQL;
+    });
+    renderFor('SQL');
+    await screen.findByText('mysql demo');
+
+    expect(captured.current.errorFor('MONGODB')).toBe('MongoDB is down');
+    expect(captured.current.errorFor('SQL')).toBeNull();
+    expect(captured.current.error).toBeNull();
+  });
 });

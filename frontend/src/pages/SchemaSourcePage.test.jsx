@@ -18,13 +18,13 @@ const MONGO = {
   foreignKeys: [], indexes: [],
 };
 
-function renderPage(targetDb) {
+function renderPage(targetDb, errors = {}) {
   const value = {
     schemaFor: (db) => (db === 'MONGODB' ? MONGO : SQL),
     applySchema: vi.fn(),
     reset: vi.fn(),
     loading: false,
-    error: null,
+    errorFor: (db) => errors[db] ?? null,
   };
   render(
     <WorkbenchContext.Provider value={{ targetDb }}>
@@ -67,5 +67,13 @@ describe('SchemaSourcePage', () => {
     await waitFor(() => expect(uploadSchemaText)
       .toHaveBeenCalledWith({ ddl: '{"collections": []}', label: 'Pasted schema' }, 'MONGODB'));
     await waitFor(() => expect(context.applySchema).toHaveBeenCalledWith(MONGO));
+  });
+
+  it("shows only the selected database's load error", () => {
+    renderPage('SQL', { MONGODB: 'MongoDB is down' });
+
+    expect(screen.queryByText('MongoDB is down')).toBeNull();
+    fireEvent.click(screen.getByRole('tab', { name: 'MongoDB' }));
+    expect(screen.getByText('MongoDB is down')).toBeInTheDocument();
   });
 });

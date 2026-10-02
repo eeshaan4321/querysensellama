@@ -7,10 +7,14 @@ import { RecommendationList } from '../components/schema/RecommendationList';
 import { adviseSchema } from '../api';
 import { useWorkbench } from '../context/workbench.js';
 import { useActiveSchema } from '../context/activeSchema.js';
+import { TargetDb } from '../api/contracts';
 
 export function SchemaAdvisorPage() {
   const { build, targetDb, resourceLevel, schemaAdvice, setSchemaAdvice } = useWorkbench();
-  const { schema } = useActiveSchema();
+  const { schemaFor } = useActiveSchema();
+  const activeDb = build?.targetDb || targetDb;
+  const isMongo = activeDb === TargetDb.MONGODB;
+  const schema = schemaFor(activeDb);
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -21,7 +25,7 @@ export function SchemaAdvisorPage() {
     try {
       const result = await adviseSchema({
         query: build.generatedQuery,
-        targetDb: build.targetDb || targetDb,
+        targetDb: activeDb,
         resourceLevel,
       });
       setSchemaAdvice(result);
@@ -51,7 +55,9 @@ export function SchemaAdvisorPage() {
 
       {schema && !schema.builtIn && (
         <p className="page-note">
-          Anchored to EXPLAIN over your uploaded schema, whose tables hold generated rows.
+          {isMongo
+            ? 'Anchored to MongoDB explain over your uploaded collections, which hold generated documents.'
+            : 'Anchored to EXPLAIN over your uploaded schema, whose tables hold generated rows.'}
         </p>
       )}
 

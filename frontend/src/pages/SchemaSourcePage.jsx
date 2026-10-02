@@ -14,7 +14,8 @@ const DATABASES = [
 export function SchemaSourcePage() {
   const { targetDb } = useWorkbench();
   const [dialect, setDialect] = useState(targetDb);
-  const { schemaFor, loading, error } = useActiveSchema();
+  const { schemaFor, errorFor, loading } = useActiveSchema();
+  const error = errorFor(dialect);
 
   return (
     <div>

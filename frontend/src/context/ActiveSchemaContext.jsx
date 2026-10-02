@@ -13,7 +13,7 @@ export function ActiveSchemaProvider({ children }) {
   const { targetDb } = useWorkbench();
   const [schemas, setSchemas] = useState({ [TargetDb.SQL]: null, [TargetDb.MONGODB]: null });
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [errors, setErrors] = useState({ [TargetDb.SQL]: null, [TargetDb.MONGODB]: null });
 
   useEffect(() => {
     let cancelled = false;
@@ -24,8 +24,10 @@ export function ActiveSchemaProvider({ children }) {
         [TargetDb.SQL]: sql.status === 'fulfilled' ? sql.value : null,
         [TargetDb.MONGODB]: mongo.status === 'fulfilled' ? mongo.value : null,
       });
-      const failed = [sql, mongo].find((result) => result.status === 'rejected');
-      if (failed) setError(messageOf(failed.reason));
+      setErrors({
+        [TargetDb.SQL]: sql.status === 'rejected' ? messageOf(sql.reason) : null,
+        [TargetDb.MONGODB]: mongo.status === 'rejected' ? messageOf(mongo.reason) : null,
+      });
       setLoading(false);
     });
 
@@ -41,11 +43,11 @@ export function ActiveSchemaProvider({ children }) {
 
   const refresh = useCallback(async (db = targetDb) => {
     setLoading(true);
-    setError(null);
+    setErrors((previous) => ({ ...previous, [db]: null }));
     try {
       applySchema(await getActiveSchema(db));
     } catch (err) {
-      setError(messageOf(err));
+      setErrors((previous) => ({ ...previous, [db]: messageOf(err) }));
     } finally {
       setLoading(false);
     }
@@ -58,6 +60,7 @@ export function ActiveSchemaProvider({ children }) {
   }, [targetDb, applySchema]);
 
   const schemaFor = useCallback((db) => schemas[db] ?? null, [schemas]);
+  const errorFor = useCallback((db) => errors[db] ?? null, [errors]);
 
   const value = useMemo(
     () => ({
@@ -65,12 +68,13 @@ export function ActiveSchemaProvider({ children }) {
       schemas,
       schemaFor,
       loading,
-      error,
+      error: errors[targetDb] ?? null,
+      errorFor,
       refresh,
       applySchema,
       reset,
     }),
-    [schemas, targetDb, schemaFor, loading, error, refresh, applySchema, reset],
+    [schemas, targetDb, schemaFor, loading, errors, errorFor, refresh, applySchema, reset],
   );
 
   return <ActiveSchemaContext.Provider value={value}>{children}</ActiveSchemaContext.Provider>;
