@@ -822,7 +822,7 @@ It was built in eight steps, each recorded as a session in §7, from
 The live checklists in the step 4–8 sessions in §7 are the outstanding
 checks.
 
-### Planned: a rule engine that adapts to any schema — sub-project 1 of 4 planned 2026-10-02
+### Planned: a rule engine that adapts to any schema — all four sub-projects designed and planned 2026-10-02
 
 The rule engine already binds to whatever schema is active (§2). These four
 sub-projects lift the limits where it still expects particular words or
@@ -832,11 +832,43 @@ run in this order, each with its own spec, plan and commits:
 | # | Sub-project | Status |
 |---|---|---|
 | 1 | **Vocabulary:** declared aliases, built-in synonyms, one-letter typos, irregular plurals, multi-word values, numbers beyond ten | **Planned.** Spec `docs/superpowers/specs/2026-10-02-rule-engine-vocabulary-design.md`; plan `docs/superpowers/plans/2026-10-02-rule-engine-vocabulary.md`, 11 tasks. Not started. |
-| 2 | **More question shapes:** top-N / highest, average per group, DISTINCT, NOT / without, OR | Not designed |
-| 3 | **Joins across three or more tables:** a path of declared foreign keys | Not designed |
-| 4 | **Dates:** "last month", "in 2025", "since january" as real ranges | Not designed |
+| 2 | **Question shapes:** ranking and superlatives, `at least`/`at most`/`between`, not-equal and exclusion, `without` (anti-join), DISTINCT, OR across conditions, several totals | **Planned.** Spec `docs/superpowers/specs/2026-10-02-rule-engine-question-shapes-design.md`; plan `docs/superpowers/plans/2026-10-02-rule-engine-question-shapes.md`, 9 tasks + reconcile. Not started. |
+| 3 | **Joins across up to four tables:** the shortest chain of declared foreign keys, filters on any table in it | **Planned.** Spec `docs/superpowers/specs/2026-10-02-rule-engine-multi-table-joins-design.md`; plan `docs/superpowers/plans/2026-10-02-rule-engine-multi-table-joins.md`, 5 tasks + reconcile. Not started. |
+| 4 | **Dates:** relative, named, single and ranged dates as real ranges, plus recency superlatives; replaces E3 | **Planned.** Spec `docs/superpowers/specs/2026-10-02-rule-engine-dates-design.md`; plan `docs/superpowers/plans/2026-10-02-rule-engine-dates.md`, 5 tasks + reconcile. Not started. |
 
-**Sub-project 1, as planned:**
+**Order and dependency.** The plans run in order 1 → 2 → 3 → 4. Each later
+plan is written against the code the earlier ones produce, and opens with a
+Task 0 that rereads those files and records a ruling wherever a name
+differs.
+
+**Decisions taken for 2–4 (2026-10-02):**
+- **Sub-project 2:** all four shape groups.
+  - "The highest X" with no number keeps building `MAX` as today.
+  - It deliberately fixes two silent drops in questions that build today: a
+    second comparison, and a `with` filter beside another filter.
+- **Sub-project 3:** up to four tables; filters on any table; two equally
+  short chains decline.
+  - When filters sit on joined tables, each subject row comes back once.
+  - One intended change: a comparison on a column only the joined table has
+    now filters it instead of counting.
+- **Sub-project 4:**
+  - Today is the server's date in `querysense.rules.time-zone` (default
+    `Asia/Kolkata`), pinnable with `querysense.rules.today`; weeks start on
+    Monday.
+  - It reads relative, named, single and ranged dates, plus recency.
+  - The date column is the one named (by name or stem, as in `hired` →
+    `hire_date`), otherwise the only one. Several, none named, declines.
+  - MongoDB gets `ISODate(...)` bounds at local midnight.
+
+**When all four are built, the rule engine** answers questions in the
+user's own words; ranks, ranges, excludes, finds rows without related rows,
+lists distinct values, ORs conditions and totals several ways; joins up to
+four tables along declared keys; and reads dates. It does all of this on any
+uploaded schema, in MySQL and MongoDB alike, and declines whenever a
+question could mean two things. The language model remains the fallback for
+everything else.
+
+**Sub-project 1 (vocabulary), as planned:**
 - **Aliases:**
   - Declared by the schema itself with `aka:` in a SQL `COMMENT` or a
     MongoDB `description`, or in an `aliases` upload block.
