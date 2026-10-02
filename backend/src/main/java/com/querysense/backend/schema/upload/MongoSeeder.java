@@ -30,11 +30,15 @@ import java.math.BigDecimal;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
+import java.util.NoSuchElementException;
 import java.util.Random;
+import java.util.Set;
 
 /** Fills uploaded MongoDB collections with generated documents that satisfy their $jsonSchema. */
 @Component
@@ -72,14 +76,14 @@ public class MongoSeeder implements SchemaSeeding {
     }
 
     public SeedReport seed(ParsedSchema schema, String database) {
-        Map<String, List<Document>> documents = generate(schema);
+        Map<String, List<Object>> pools = referencePools(schema);
         MongoDatabase db = client.getDatabase(database);
         Map<String, Integer> counts = new LinkedHashMap<>();
         List<String> warnings = new ArrayList<>();
         try {
             for (ParsedTable collection : schema.tables()) {
                 counts.put(collection.name(), insert(db.getCollection(collection.name()), collection.name(),
-                        documents.get(collection.name()), warnings));
+                        documents(collection, pools), warnings));
             }
         } catch (MongoTimeoutException | MongoSocketException e) {
             throw new MongoUnavailableException(
@@ -90,34 +94,101 @@ public class MongoSeeder implements SchemaSeeding {
     }
 
     Map<String, List<Document>> generate(ParsedSchema schema) {
+        Map<String, List<Object>> pools = referencePools(schema);
         Map<String, List<Document>> documents = new LinkedHashMap<>();
         for (ParsedTable collection : schema.tables()) {
-            documents.put(collection.name(), generateCollection(collection));
-        }
-        for (ParsedTable collection : schema.tables()) {
-            for (KnownSchema.ForeignKey reference : collection.foreignKeys()) {
-                fillReference(documents, reference);
-            }
+            List<Document> generated = new ArrayList<>(seedRows);
+            documents(collection, pools).forEachRemaining(generated::add);
+            documents.put(collection.name(), generated);
         }
         return documents;
     }
 
-    private List<Document> generateCollection(ParsedTable collection) {
+    Map<String, List<Object>> referencePools(ParsedSchema schema) {
+        Map<String, List<Object>> pools = new LinkedHashMap<>();
+        for (ParsedTable collection : schema.tables()) {
+            for (KnownSchema.ForeignKey reference : collection.foreignKeys()) {
+                pool(schema, reference.toTable(), reference.toColumn(), pools, new HashSet<>());
+            }
+        }
+        return pools;
+    }
+
+    private List<Object> pool(ParsedSchema schema, String table, String field, Map<String, List<Object>> pools,
+                              Set<String> resolving) {
+        List<Object> known = pools.get(table + "." + field);
+        if (known != null) {
+            return known;
+        }
+        ParsedTable target = schema.tables().stream().filter(t -> t.name().equals(table)).findFirst().orElse(null);
+        if (target == null) {
+            return List.of();
+        }
+        boolean resolvingHere = resolving.add(table);
+        Map<String, List<Object>> targetPools = new HashMap<>();
+        if (resolvingHere) {
+            for (KnownSchema.ForeignKey reference : target.foreignKeys()) {
+                targetPools.put(poolKey(reference),
+                        pool(schema, reference.toTable(), reference.toColumn(), pools, resolving));
+            }
+            resolving.remove(table);
+        }
+        List<Object> values = new ArrayList<>(seedRows);
+        Iterator<Document> documents = documents(target, targetPools);
+        while (documents.hasNext()) {
+            Object value = valueAt(documents.next(), field);
+            if (value != null) {
+                values.add(value);
+            }
+        }
+        if (resolvingHere) {
+            pools.put(table + "." + field, values);
+        }
+        return values;
+    }
+
+    private static String poolKey(KnownSchema.ForeignKey reference) {
+        return reference.toTable() + "." + reference.toColumn();
+    }
+
+    private Iterator<Document> documents(ParsedTable collection, Map<String, List<Object>> pools) {
         ValueGenerator values = new ValueGenerator(seed + collection.name().hashCode());
         Random random = new Random(seed + collection.name().hashCode() + 1);
         Document jsonSchema = jsonSchemaOf(collection);
         Document idSchema = propertiesOf(jsonSchema).get("_id") instanceof Document d ? d : null;
+        List<KnownSchema.ForeignKey> references = collection.foreignKeys().stream()
+                .filter(r -> !pools.getOrDefault(poolKey(r), List.of()).isEmpty())
+                .toList();
+        List<Random> pickers = references.stream()
+                .map(r -> new Random(seed + r.fromTable().hashCode() + r.fromColumn().hashCode()))
+                .toList();
 
-        List<Document> out = new ArrayList<>(seedRows);
-        for (int row = 0; row < seedRows; row++) {
-            Object id = idSchema == null
-                    ? objectId(random, row)
-                    : valueFor(collection, "_id", idSchema, values, random, row);
-            Document document = new Document("_id", id);
-            fillObject(collection, "", jsonSchema, document, values, random, row);
-            out.add(document);
-        }
-        return out;
+        return new Iterator<>() {
+            private int row;
+
+            @Override
+            public boolean hasNext() {
+                return row < seedRows;
+            }
+
+            @Override
+            public Document next() {
+                if (!hasNext()) {
+                    throw new NoSuchElementException();
+                }
+                Object id = idSchema == null
+                        ? objectId(random, row)
+                        : valueFor(collection, "_id", idSchema, values, random, row);
+                Document document = new Document("_id", id);
+                fillObject(collection, "", jsonSchema, document, values, random, row);
+                for (int r = 0; r < references.size(); r++) {
+                    assign(document, references.get(r).fromColumn().split("\\."), 0,
+                            pools.get(poolKey(references.get(r))), pickers.get(r));
+                }
+                row++;
+                return document;
+            }
+        };
     }
 
     private void fillObject(ParsedTable collection, String prefix, Document schema, Document target,
@@ -238,21 +309,6 @@ public class MongoSeeder implements SchemaSeeding {
         return value instanceof List<?> list ? list.stream().map(String::valueOf).toList() : List.of();
     }
 
-    private void fillReference(Map<String, List<Document>> documents, KnownSchema.ForeignKey reference) {
-        List<Object> pool = documents.getOrDefault(reference.toTable(), List.of()).stream()
-                .map(d -> valueAt(d, reference.toColumn()))
-                .filter(Objects::nonNull)
-                .toList();
-        if (pool.isEmpty()) {
-            return;
-        }
-        Random picker = new Random(seed + reference.fromTable().hashCode() + reference.fromColumn().hashCode());
-        String[] segments = reference.fromColumn().split("\\.");
-        for (Document document : documents.getOrDefault(reference.fromTable(), List.of())) {
-            assign(document, segments, 0, pool, picker);
-        }
-    }
-
     private static Object valueAt(Document document, String path) {
         Object current = document;
         for (String segment : path.split("\\.")) {
@@ -289,12 +345,17 @@ public class MongoSeeder implements SchemaSeeding {
         }
     }
 
-    private int insert(MongoCollection<Document> collection, String name, List<Document> documents,
+    private int insert(MongoCollection<Document> collection, String name, Iterator<Document> documents,
                        List<String> warnings) {
         int inserted = 0;
+        int generated = 0;
         String firstFailure = null;
-        for (int from = 0; from < documents.size(); from += BATCH_SIZE) {
-            List<Document> batch = documents.subList(from, Math.min(from + BATCH_SIZE, documents.size()));
+        while (documents.hasNext()) {
+            List<Document> batch = new ArrayList<>(BATCH_SIZE);
+            while (documents.hasNext() && batch.size() < BATCH_SIZE) {
+                batch.add(documents.next());
+            }
+            generated += batch.size();
             try {
                 collection.insertMany(batch, new InsertManyOptions().ordered(false));
                 inserted += batch.size();
@@ -310,8 +371,8 @@ public class MongoSeeder implements SchemaSeeding {
                 }
             }
         }
-        if (inserted < documents.size()) {
-            warnings.add("Seeded only " + inserted + " of " + documents.size() + " documents into '" + name + "'"
+        if (inserted < generated) {
+            warnings.add("Seeded only " + inserted + " of " + generated + " documents into '" + name + "'"
                     + (firstFailure == null ? "." : " -- " + firstFailure + ".")
                     + " Document estimates for this collection describe what was actually inserted.");
         }

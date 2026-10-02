@@ -265,4 +265,36 @@ class MongoSeederTest {
 
         assertThatThrownBy(() -> seeder(10).seed(schema)).isInstanceOf(MongoUnavailableException.class);
     }
+
+    @Test
+    @DisplayName("only the referenced fields are held in memory: one pool per target, the target's own values")
+    void referencePoolsHoldOnlyReferencedFields() {
+        Map<String, List<Document>> docs = seeder(80).generate(schema);
+
+        Map<String, List<Object>> pools = seeder(80).referencePools(schema);
+
+        assertThat(pools).containsOnlyKeys("customers._id", "products._id", "employees._id");
+        assertThat(pools.get("customers._id")).hasSize(80).containsExactlyElementsOf(
+                docs.get("customers").stream().map(d -> d.get("_id")).toList());
+    }
+
+    @Test
+    @DisplayName("seeding streams each collection in batches and inserts exactly what generate() describes")
+    @SuppressWarnings("unchecked")
+    void streamedSeedMatchesGenerated() {
+        Map<String, List<Document>> inserted = new java.util.LinkedHashMap<>();
+        when(database.getCollection(anyString())).thenAnswer(inv -> {
+            String name = inv.getArgument(0);
+            MongoCollection<Document> target = mock(MongoCollection.class);
+            when(target.insertMany(anyList(), any(InsertManyOptions.class))).thenAnswer(call -> {
+                inserted.computeIfAbsent(name, k -> new java.util.ArrayList<>()).addAll(call.getArgument(0));
+                return null;
+            });
+            return target;
+        });
+
+        seeder(1500).seed(schema);
+
+        assertThat(inserted).isEqualTo(seeder(1500).generate(schema));
+    }
 }
