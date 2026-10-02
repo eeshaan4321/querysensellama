@@ -33,4 +33,11 @@ describe('useBackendHealth', () => {
     await waitFor(() => expect(result.current.status).toBe('mock'));
     expect(check).not.toHaveBeenCalled();
   });
+
+  it('reports MongoDB status alongside the backend status', async () => {
+    const { result } = renderHook(() => useBackendHealth({ check: async () => ({ status: 'up', mongo: 'DOWN' }) }));
+
+    await waitFor(() => expect(result.current.mongo).toBe('DOWN'));
+    expect(result.current.status).toBe('up');
+  });
 });

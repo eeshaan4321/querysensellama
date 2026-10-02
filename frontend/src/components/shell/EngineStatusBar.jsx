@@ -44,8 +44,12 @@ export function EngineStatusBar() {
         className={`engine-status-bar__schema engine-status-bar__schema--${uploaded ? 'uploaded' : 'builtin'}`}
         title={
           uploaded
-            ? `Uploaded schema, provisioned into ${schema.catalog}. Its tables hold generated rows.`
-            : 'The built-in demo schema, in the connected database.'
+            ? schema.dialect === 'MONGODB'
+              ? `Uploaded MongoDB schema, provisioned into ${schema.catalog}. Its collections hold generated documents.`
+              : `Uploaded schema, provisioned into ${schema.catalog}. Its tables hold generated rows.`
+            : schema?.dialect === 'MONGODB'
+              ? 'The built-in MongoDB demo, in the querysense database.'
+              : 'The built-in demo schema, in the connected database.'
         }
       >
         <span className="engine-status-bar__dot" aria-hidden="true" />
@@ -53,8 +57,8 @@ export function EngineStatusBar() {
           {!schema
             ? 'Schema unknown'
             : schema.builtIn
-              ? 'Built-in demo schema'
-              : `${schema.label} · ${schema.tables.length} tables · generated data`}
+              ? schema.dialect === 'MONGODB' ? 'Built-in MongoDB demo' : 'Built-in demo schema'
+              : `${schema.label} · ${schema.tables.length} ${schema.dialect === 'MONGODB' ? 'collections' : 'tables'} · generated data`}
         </span>
       </div>
     </header>

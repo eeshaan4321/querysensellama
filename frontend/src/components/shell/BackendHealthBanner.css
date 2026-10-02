@@ -58,3 +58,12 @@
 .backend-health__retry:hover {
   background: rgba(255, 255, 255, 0.06);
 }
+
+.backend-health--mongo {
+  border-bottom-color: var(--warning);
+  color: var(--ink);
+}
+
+.backend-health--mongo .backend-health__dot {
+  background: var(--warning);
+}

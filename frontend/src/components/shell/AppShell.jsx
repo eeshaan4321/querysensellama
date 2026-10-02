@@ -6,7 +6,7 @@ import { useBackendHealth } from '../../hooks/useBackendHealth';
 import './AppShell.css';
 
 export function AppShell() {
-  const { status, refresh } = useBackendHealth();
+  const { status, mongo, refresh } = useBackendHealth();
 
   return (
     <div className="app-shell">
@@ -14,6 +14,7 @@ export function AppShell() {
       <div className="app-shell__main">
         <EngineStatusBar />
         <BackendHealthBanner
+          mongo={mongo}
           status={status}
           baseUrl={import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}
           onRetry={refresh}
