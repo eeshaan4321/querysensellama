@@ -64,6 +64,7 @@ export function OptimizationPage() {
       const result = await compareQueries({
         query: build.generatedQuery,
         targetDb: activeDb,
+        userInput: build.naturalLanguageQuery,
       });
       setComparison(result);
     } catch (err) {
@@ -99,7 +100,9 @@ export function OptimizationPage() {
 
         {schema && !schema.builtIn && (
           <p className="page-note">
-            Anchored to EXPLAIN over your uploaded schema, whose tables hold generated rows.
+            {isMongo
+              ? 'Anchored to MongoDB explain over your uploaded collections, which hold generated documents.'
+              : 'Anchored to EXPLAIN over your uploaded schema, whose tables hold generated rows.'}
           </p>
         )}
 
@@ -111,12 +114,12 @@ export function OptimizationPage() {
           <EmptyState
             title="No schema changes recommended"
             detail={
-              schema?.builtIn
+              schema?.builtIn && !isMongo
                 ? "This query didn't trigger an indexing or structural recommendation. The built-in demo tables hold 5–49 rows, so most queries never produce a finding worth acting on — upload a schema to see the advisor work against realistic volume."
                 : "This query didn't trigger an indexing, normalization, or structural recommendation."
             }
             action={
-              schema?.builtIn && (
+              schema?.builtIn && !isMongo && (
                 <Button variant="secondary" onClick={() => navigate('/schema-source')}>
                   Upload a schema
                 </Button>
@@ -151,25 +154,26 @@ export function OptimizationPage() {
           <h3 style={{ fontSize: 'var(--text-sm)', color: 'var(--ink-secondary)', margin: 0 }}>
             Query rewrite
           </h3>
-          {!isMongo && !comparison && (
+          {!comparison && (
             <Button onClick={runComparison} loading={loading}>Compare rewrite</Button>
           )}
         </div>
 
         <p className="page-note">
-          Every rule here preserves the rows the query returns. The row and cost figures come from
-          EXPLAIN over both versions — they are the optimiser&apos;s estimates, not measurements.
+          {isMongo
+            ? "Every rule here keeps the documents the query returns. The figures come from MongoDB's explain over both versions — counted while running each plan, so they are measured, not estimated."
+            : "Every rule here preserves the rows the query returns. The row and cost figures come from EXPLAIN over both versions — they are the optimiser's estimates, not measurements."}
         </p>
 
-        {isMongo ? (
-          <EmptyState
-            title="SQL only, for now"
-            detail="The rewriter has no MongoDB rules, so there is nothing to compare for a Mongo query. The schema changes above are real and do apply to MongoDB."
-          />
-        ) : compareError ? (
+        {compareError ? (
           <EmptyState title="Comparison failed" detail={compareError} />
         ) : !comparison && !loading ? (
-          <EmptyState title="Not compared yet" detail="Click Compare rewrite to run the rewriter and EXPLAIN both versions." />
+          <EmptyState
+            title="Not compared yet"
+            detail={isMongo
+              ? 'Click Compare rewrite to run the rewriter and explain both versions in MongoDB.'
+              : 'Click Compare rewrite to run the rewriter and EXPLAIN both versions.'}
+          />
         ) : comparison && !comparison.rewritten ? (
           <EmptyState title="No rewrite applied" detail={comparison.summary} />
         ) : comparison ? (
@@ -182,16 +186,23 @@ export function OptimizationPage() {
             <section style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-6)' }}>
               <div>
                 <h4 style={{ fontSize: 'var(--text-sm)', color: 'var(--ink-secondary)', marginBottom: 'var(--space-3)' }}>
-                  Estimated rows read
+                  {isMongo ? 'Documents examined' : 'Estimated rows read'}
                 </h4>
                 {comparison.originalAnalysis?.estimatedRows != null
                   && comparison.optimizedAnalysis?.estimatedRows != null ? (
                   <CostDeltaChart
                     before={comparison.originalAnalysis.estimatedRows}
                     after={comparison.optimizedAnalysis.estimatedRows}
+                    caption={isMongo
+                      ? 'Documents examined, measured by MongoDB while running each plan with explain — not an estimate.'
+                      : undefined}
                   />
                 ) : (
-                  <p className="page-note">EXPLAIN reported no row estimate for one of the two plans.</p>
+                  <p className="page-note">
+                    {isMongo
+                      ? 'MongoDB reported no documents-examined figure for one of the two plans.'
+                      : 'EXPLAIN reported no row estimate for one of the two plans.'}
+                  </p>
                 )}
               </div>
               <div>

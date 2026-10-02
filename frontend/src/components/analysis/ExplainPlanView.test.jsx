@@ -1,11 +1,7 @@
 import { render, screen } from '@testing-library/react';
-import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { ExplainPlanView } from './ExplainPlanView';
 import { ActiveSchemaContext } from '../../context/activeSchema.js';
-
-beforeAll(() => {
-  window.matchMedia ??= vi.fn(() => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} }));
-});
 
 const MONGO_UPLOAD = { builtIn: false, catalog: 'querysense_uploads', dialect: 'MONGODB' };
 
