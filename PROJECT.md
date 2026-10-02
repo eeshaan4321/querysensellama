@@ -2620,10 +2620,9 @@ the rule engine `customers in mumbai` with the target set to MongoDB, and
 confirm it answers built, with `"Mumbai"` — the stored value, not the
 lowercased input — inside the `$match` filter.
 
-**Next:** steps 1–7 are complete; steps 4–7 are recorded in the 2026-10-01
-sessions below. Step 8 (the frontend's MongoDB side) is in progress and was
-stopped partway: tasks 1–4 of 9 are done, task 5 had only its tests written.
-See the step 8 session below for exactly where it stopped. The progress
+**Next:** steps 1–8 are complete; steps 4–8 are recorded in the sessions
+below. Step 9 is next: docs. `PROJECT.md` §5 records the decision and drops
+the two Mongo non-goal sections, and `RULES.md` is renumbered. The progress
 ledger for steps 1–3 is at
 `.superpowers/sdd/2026-09-26-mongodb-parity-steps-1-3/progress.md`, which is
 git-ignored.
@@ -2909,52 +2908,82 @@ for the live checklist. The full backend suite is 694/694.
    naming it at confidence 0.2, and asking again does not come back as
    `CACHE`.
 
-### Session of 2026-10-01 — MongoDB parity, step 8 (frontend), stopped partway
+### Session of 2026-10-01 and 2026-10-02 — MongoDB parity, step 8 (frontend)
 
 Plan: `docs/superpowers/plans/2026-10-01-mongodb-parity-step-8-frontend.md`,
-9 tasks, executed inline, test first. Stopped on request during task 5.
-
-**Done and committed:**
+9 tasks, executed inline, test first. Tasks 1–4 ran on 2026-10-01. Work
+stopped during task 5 and resumed on 2026-10-02.
 
 | Task | Delivered | Commit |
 |---|---|---|
-| 1 | `/api/health` gains `mongo: UP \| DOWN \| NOT_CONFIGURED` (a `ping` on `admin`; `NOT_CONFIGURED` when `spring.data.mongodb.uri` is blank, without contacting MongoDB). | `543ad84` |
-| 2 | API layer names its database: schema calls send `dialect`, compare sends `userInput`, health returns `{ status, mongo }`. Mock fixtures cover MongoDB for every call (demo collections, uploads, explain-shaped analysis, measured compare). | `d105683` |
-| 3 | `ActiveSchemaProvider` holds one snapshot per database, moved inside `WorkbenchProvider`; `schema` follows the Workbench toggle and `schemaFor(db)` reads either. | `d663a82` |
-| 4 | Schema source page: a MySQL \| MongoDB switch (opens on the Workbench's target), each side with its own upload (`.sql` / `.json`), paste box and reset; the MongoDB card shows typed paths, embedded arrays, references, indexes and document counts. | `3ae0226` |
+| 1 | `/api/health` gains `mongo: UP \| DOWN \| NOT_CONFIGURED`. It pings `admin`, and reports `NOT_CONFIGURED` without contacting MongoDB when `spring.data.mongodb.uri` is blank. | `543ad84` |
+| 2 | The API layer names its database: schema calls send `dialect`, compare sends `userInput`, and health returns `{ status, mongo }`. The mock fixtures cover MongoDB for every call. | `d105683` |
+| 3 | `ActiveSchemaProvider` holds one snapshot per database and moves inside `WorkbenchProvider`. `schema` follows the Workbench toggle, and `schemaFor(db)` reads either database. | `d663a82` |
+| 4 | Schema source page: a MySQL \| MongoDB switch, opening on the Workbench's target. Each side has its own upload (`.sql` / `.json`), paste box and reset. The MongoDB card shows typed paths, embedded arrays, references, indexes and document counts. | `3ae0226` |
+| 5 | Analysis uses the same views for both databases. In MongoDB's words: plan stage, documents examined, collection scan and in-memory sort. MongoDB gets an execution-time tile instead of the cost tile. There is no "Wasted work" tile without a discard figure, and the plan tree shows MongoDB's stages. `SuggestionsList` shows a suggestion's `suggestedChange`. `MongoFindingsList` is deleted. | `3e0ba2d` |
+| 6 | Optimization compares MongoDB rewrites, sends the Workbench question as `userInput`, and words MongoDB's figures as measured. `CostDeltaChart` takes a `caption`. | `b2109fd` |
+| 7 | History gains a Database column. | `4077dd3` |
+| 8 | `useBackendHealth` returns `mongo`. The shell banner says when MongoDB is down or not configured while the backend is up. The schema indicator names the MongoDB demo and counts collections. | `6a47647` |
 
-Backend suite after task 1: 697/697. Frontend after task 4: 82/82 tests,
-`oxlint` clean. Ruling made: task 3's test captures the context in an
-effect, because reassigning an outer variable during render trips oxlint.
+**Departures from the spec, on purpose:**
+1. The schema switch opens on the Workbench's current target and is local to
+   the page. The shell indicator follows the Workbench toggle, as the spec
+   says.
+2. Suggestions show their `suggestedChange` under the message. §9 doesn't list
+   it, but without this the field would never be seen.
+3. History gains the Database column only. `resourceLevel` is already shown,
+   and `optimizedQuery` isn't added as a column.
 
-**Where it stopped — task 5 (Analysis shows MongoDB's real plan):** only its
-tests were written, and they are **uncommitted** in the working tree:
-- `frontend/src/components/analysis/ExplainPlanView.test.jsx` (new)
-- `frontend/src/components/analysis/PlanMetrics.test.jsx` (new)
-- `frontend/src/components/analysis/SuggestionsList.test.jsx` (new)
-- `frontend/src/components/analysis/PlanTreeView.test.jsx` (one case added)
+**Calls made during execution:**
+- Task 3's test captures the context in an effect, because reassigning an
+  outer variable during render trips oxlint.
+- Two of the plan's task 5 tests were faulty:
+  - The MySQL `PlanMetrics` test matched a phrase that appears twice. It now
+    matches only the footnote.
+  - jsdom has no `window.matchMedia`, which `useReducedMotion` needs. A stub
+    now lives in `src/setupTests.js`, since the Optimization test needs it too.
+- The plan's MongoDB chart caption couldn't satisfy its own test's
+  `/measured by MongoDB/`. It now reads "Documents examined, measured by
+  MongoDB while running each plan with explain — not an estimate."
+- The `.backend-health--mongo` rule sets `border-bottom-color`, as the
+  existing banner variants do, not the plan's `border-color`.
 
-The RED run showed eight failures. Six are the expected missing MongoDB
-behaviour. Two are faults in the plan's own tests, not in the code, and must
-be fixed before the implementation:
-1. `PlanMetrics.test.jsx` "MySQL keeps rows…" matches `/MySQL's own estimate/`
-   with `getByText`, but that phrase appears twice (the cost tile's gloss and
-   the footnote). It needs a narrower query, such as the footnote's selector.
-2. `ExplainPlanView.test.jsx` fails on `window.matchMedia is not a function`.
-   `useReducedMotion` needs `matchMedia`, which jsdom lacks. The test file
-   needs a `matchMedia` stub, or the tests a mocked `useReducedMotion`.
+**Final review (by the executor, not a separate reviewer):** one fix. The
+Optimization page read the schema of the Workbench's current target rather
+than the database the query was built for. Building a MongoDB query and then
+switching the toggle to MySQL gave a wrong uploaded-schema note and the MySQL
+catalog in the apply script. It now reads `schemaFor(build.targetDb)`
+(`6d62ca0`). Two minors are left open:
+- The Schema advisor page has the same lookup, and its uploaded-schema note
+  is worded for MySQL even on MongoDB.
+- The Schema source page shows a single error when either database's active
+  schema fails to load, so a MongoDB failure also appears on the MySQL side.
 
-No production code for task 5 exists yet. `MongoFindingsList` is still in
-place, so the current Analysis page still shows the old MongoDB text checks.
+**Checks:** frontend 95/95 tests, `oxlint` clean, and `npm run build`
+succeeds. Backend 697/697.
 
-**Not started:** task 6 (Optimization compares MongoDB rewrites), task 7
-(History's Database column), task 8 (shell: MongoDB status banner and
-indicator wording), task 9 (build check and the session record).
+**Not verified:** no screen was opened in a browser. Everything above is
+unit-tested against mocked contexts and API calls only.
 
-**To resume:** fix the two test faults above, then continue task 5 from its
-step 3 in the plan. The ledger is at
-`.superpowers/sdd/2026-10-01-mongodb-parity-step-8-frontend/progress.md`
-(git-ignored).
+**Live checklist (step 8; backend on MySQL with `mongod` running, then
+`npm run dev`):**
+1. Schema source: the MySQL | MongoDB switch opens on the Workbench's target.
+   The MongoDB side shows the demo's eight collections with typed paths,
+   `items` as an embedded array, references and indexes.
+2. Upload `backend/src/main/resources/mongo/demo-collections.json` on the
+   MongoDB side. The card shows 12,000 documents per collection, and the
+   MySQL side still shows its own schema.
+3. Toggle the Workbench to MongoDB. The shell indicator names the MongoDB
+   schema.
+4. Workbench (MongoDB): build `customers in mumbai`, then open Analysis. It
+   shows the verdict, plan stage `COLLSCAN`, "Documents examined", execution
+   time, no cost tile, and the plan tree. There is no "text checks" note.
+5. Optimization (MongoDB): the advisor shows
+   `db.customers.createIndex({ "city": 1 });`. Compare rewrite runs and says
+   the figures are measured.
+6. History shows a Database column.
+7. Stop `mongod`. Within 20 seconds the shell shows "MongoDB is not
+   answering", and MySQL screens keep working.
 
 ### Not verified
 
