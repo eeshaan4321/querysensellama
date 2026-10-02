@@ -2918,11 +2918,16 @@ Optimization page read the schema of the Workbench's current target rather
 than the database the query was built for. Building a MongoDB query and then
 switching the toggle to MySQL gave a wrong uploaded-schema note and the MySQL
 catalog in the apply script. It now reads `schemaFor(build.targetDb)`
-(`6d62ca0`). Two minors are left open:
-- The Schema advisor page has the same lookup, and its uploaded-schema note
-  is worded for MySQL even on MongoDB.
-- The Schema source page shows a single error when either database's active
-  schema fails to load, so a MongoDB failure also appears on the MySQL side.
+(`6d62ca0`). Two minors were left open, then fixed on 2026-10-02 (`f0932e5`):
+- The Schema advisor page had the same lookup, and its uploaded-schema note
+  was worded for MySQL even on MongoDB. It now reads the build's database,
+  and words the note for MongoDB.
+- The Schema source page showed a single error when either database's
+  active schema failed to load, so a MongoDB failure also appeared on the
+  MySQL side. Load errors are now kept per database (`errorFor(db)`), and
+  each side shows only its own.
+
+The frontend suite is 100/100 after the fix.
 
 **Checks:** frontend 95/95 tests, `oxlint` clean, and `npm run build`
 succeeds. Backend 697/697.
