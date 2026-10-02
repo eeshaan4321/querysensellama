@@ -734,8 +734,9 @@ UI; and any widening of the upload path's DDL execution beyond the isolated
 one place this project emits DDL, and it does so only into a scratch catalog
 it owns — never the connected database (§3, §6). Since 2026-10-01 the same
 holds for MongoDB: uploaded collections go only into the `querysense_uploads`
-database. The built-in demo is created in `querysense` only when that
-database has none of its collections.
+database. The built-in demo is created in `querysense`. If a seeding was
+interrupted, the next startup drops and recreates only the demo's own eight
+collections there.
 
 The UI carries this in its wording. The Optimization screen's real half is
 headed **"Recommended schema changes"** and its script block **"Copy as one
@@ -795,8 +796,9 @@ It was built in eight steps, each recorded as a session in §7, from
 - `$out` and `$merge` are refused before anything reaches `mongod`.
 - Advisor output is shown, never applied.
 - Uploads write only to `querysense_uploads`. The built-in demo is seeded
-  into `querysense` only when that database has none of its collections, and
-  nothing there is ever dropped.
+  into `querysense` until one seeding completes, which a marker document in
+  `querysense_demo_seed` records. A retry after an interrupted seeding drops
+  and recreates the demo's own eight collections and nothing else.
 
 **Where MongoDB still differs, on purpose** (pinned in `DialectParityTest`):
 - An aggregate over no documents returns nothing, where SQL returns one
@@ -2199,6 +2201,27 @@ There was no plan file; the spec's §12 row was the brief.
   - Only the RW IDs ever reach an API response, and they didn't change.
   - `MongoOptimizationRulesTest`'s display names follow; it ran 10/10.
 
+### Session of 2026-10-02 — the three step 4 upload gaps closed
+
+Test first, one commit each. The backend suite is 705/705. The three MongoDB
+integration test classes ran against the local `mongod`, none skipped. That
+includes `MongoUploadIntegrationTest`, which seeds the demo through the new
+streaming seeder.
+
+| Gap | Fix | Commit |
+|---|---|---|
+| Output pasted from mongosh was refused | `JsonSchemaUploadParser.fromShell` converts mongosh's shell constructors to MongoDB Extended JSON before parsing, outside strings only. It covers `ObjectId`, `ISODate`, `new Date`, `UUID`, `NumberLong`, `NumberInt`, `NumberDecimal`, `Timestamp`, `BinData`, `MinKey` and `MaxKey`. A validator keeps its BSON types: `Long('0')` arrives as a long. Unquoted keys and single quotes were already accepted. Text that still isn't JSON says to paste `JSON.stringify(db.getCollectionInfos())`. | `1cedd98` |
+| Seeding held every document in memory | Each collection is generated as an iterator and inserted 1,000 at a time. References draw from a pool holding only the referenced field's values, which are regenerated deterministically from the target's seed. A chain of references now resolves in dependency order rather than in upload order. The output is identical to before (`streamedSeedMatchesGenerated`). | `51cf7b5` |
+| An interrupted demo seeding was never retried | A completed seeding writes `{_id: "demo"}` to `querysense_demo_seed`. Without that marker, the demo is complete only if all eight collections exist with at least `seed-rows` documents each; it is then marked and left alone. Otherwise it is provisioned and seeded again. A failed seeding writes no marker, so the next startup retries. | `7cf2f01` |
+
+**Departure from the earlier rule, on purpose:** the step 4 session said the
+demo seeder "never drops anything" in `querysense`. A retry now does drop
+and recreate the demo's own eight collections, because a half-seeded demo
+can't be fixed in place. Nothing else in that database is touched.
+
+**Not verified:** the startup listener against a real interrupted seeding.
+The marker logic is unit-tested with a mocked client only.
+
 ### Not verified
 
 - No `/analyze` call was made after the restart; the user is testing it.
@@ -2676,21 +2699,21 @@ is among the cities. Afterwards the server listed only `admin`, `config` and
 duplicate-key warning, the endpoints' `dialect` handling, and everything in
 the live checklist below. The app was not started.
 
-**Known gaps, not fixed:**
-- Raw `db.getCollectionInfos()` output pasted from mongosh contains shell
-  constructors such as `UUID('...')`, which are not JSON. The upload refuses
-  it with the line and column. Paste `JSON.stringify(db.getCollectionInfos())`
-  or `EJSON.stringify(...)` instead.
-- `MongoSeeder` builds every collection's documents in memory before
-  inserting. At 12,000 per collection that is fine for the demo, but a
-  40-collection upload holds about 480,000 documents at once.
-- If the demo's first seeding fails partway, its collections exist, so
-  later startups leave it alone. Drop the `querysense` database to retry.
+**Known gaps — all three fixed on 2026-10-02** (see the session of that
+date below):
+- ~~Raw `db.getCollectionInfos()` output pasted from mongosh contains shell
+  constructors such as `UUID('...')`, which are not JSON.~~ It is now read
+  (`1cedd98`).
+- ~~`MongoSeeder` builds every collection's documents in memory before
+  inserting.~~ It now streams batches of 1,000 (`51cf7b5`).
+- ~~If the demo's first seeding fails partway, later startups leave it
+  alone.~~ They now seed it again (`7cf2f01`).
 
 **Live checklist (step 4):**
 1. Start the backend with `mongod` running. The log shows
-   `Seeded the MongoDB demo into 'querysense'`, or `already has demo
-   collections` if it was seeded before.
+   `Seeded the MongoDB demo into 'querysense'`, or `is already seeded` if it
+   was seeded before. If the demo was seeded before 2026-10-02, the first
+   startup logs `is complete; marked as seeded` instead.
 2. In the Workbench, with the target set to MongoDB, ask `customers in
    mumbai`. It builds, with `"Mumbai"` in the `$match` filter.
 3. `curl -F file=@backend/src/main/resources/mongo/demo-collections.json -F
