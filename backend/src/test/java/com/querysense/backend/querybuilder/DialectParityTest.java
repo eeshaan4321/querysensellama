@@ -68,6 +68,17 @@ class DialectParityTest {
             "top twenty products",
             "products with price above two hundred and fifty",
             "show emial of customers",
+            "top 5 products by price",
+            "cheapest product",
+            "products with price at least 500",
+            "products with price between 100 and 500",
+            "orders with status not shipped",
+            "customers excluding pune and delhi",
+            "customers without orders",
+            "how many customers without orders",
+            "distinct cities of customers",
+            "customers in mumbai or pune",
+            "average and highest price of products",
     })
     void sameOutcome(String question) {
         RuleBuildResult mysql = parser.parse(question, Dialect.MYSQL);

@@ -12,7 +12,7 @@ lowercased before it is read.
 
 | Module | Rules | IDs | Source |
 |---|---|---|---|
-| **Rule engine** (question → SQL) | **23** | E1–E23 | `querybuilder/` |
+| **Rule engine** (question → SQL) | **30** | E1–E30 | `querybuilder/` |
 | Routing between the three layers | 3 | R1–R3 | `QueryGenerationServiceImpl`, `GeneratedQueryValidator` |
 | Checks before EXPLAIN | 2 | P1–P2 | `analysis/SqlPreflightValidator`, `analysis/MongoPreflightValidator` (P2 only) |
 | EXPLAIN warnings | 4 | W1–W4 | `analysis/MySqlExplainAnalyzer`, `analysis/MongoExplainParser` (W1, W3, W4) |
@@ -22,12 +22,12 @@ lowercased before it is read.
 | Resource optimisation | 4 | RS1–RS4 | `optimization/ResourceConsciousService` |
 | Schema advisor | 3 | SA1–SA3 | `advisor/MySqlIndexAdvisor`, `advisor/MongoIndexAdvisor` |
 | Query rewrite | 4 | RW1–RW4 (RW4 MongoDB only) | `optimization/QueryRewriter`, `optimization/MongoQueryRewriter` |
-| **Total** | **60** | | |
+| **Total** | **67** | | |
 
-**The rule engine has 23 rules.** Of those, 22 are conditions under which it
+**The rule engine has 30 rules.** Of those, 34 are conditions under which it
 refuses a question and hands it to the language model. The other 37 rules
 belong to the modules that analyse and optimise a query after it has been
-generated. None of the 60 uses a model.
+generated. None of the 67 uses a model.
 
 **Renumbered 2026-10-02 (MongoDB parity, step 9).** The four MongoDB-only
 IDs folded on 2026-10-01 are gone: the old TX6 lives in TX1, the old RS4 in
@@ -46,7 +46,7 @@ into others then, and their IDs were retired on 2026-10-02.
 
 ---
 
-## 1. The rule engine — 23 rules
+## 1. The rule engine — 30 rules
 
 The rule engine is layer 1 of query generation. It turns a plain-English
 question into SQL without a model, or it declines, and the question moves
@@ -328,9 +328,19 @@ one of five kinds, strictest first:
 - **Example:** `products with price above 500` →
   `SELECT * FROM products WHERE price > 500;`
   `which customers placed more than three orders` →
-  `SELECT customers.id, customers.name FROM customers JOIN orders ON
-  customers.id = orders.customer_id GROUP BY customers.id, customers.name
-  HAVING COUNT(orders.id) > 3;`
+  `SELECT customers.name, customers.id, COUNT(orders.id) FROM customers JOIN
+  orders ON customers.id = orders.customer_id GROUP BY customers.name,
+  customers.id HAVING COUNT(orders.id) > 3;` (corrected 2026-10-03: this
+  example used to show `customers.id, customers.name` without the count,
+  which is not what the code writes).
+- **Every comparison is read, since 2026-10-03 (sub-project 2).** Until then
+  only the first comparison was used, so `products with price below 100 or
+  price above 900` silently built `price < 100`. Now each comparison adds a
+  condition, joined by the words between them (E29). A second comparison that
+  would also need the count of the related table declines: `The question
+  compares two counts, which this engine won't combine.` The operators gain
+  `at least`, `no less than` (`>=`) and `at most`, `no more than`, `up to`
+  (`<=`); see E25.
 
 #### E14 · Filter checked against the data
 - **What it does:** takes the word after `from`, `in`, `at`, `located in`,
@@ -373,6 +383,11 @@ one of five kinds, strictest first:
 - **Declines when:** the named column is not a column of the subject table.
 - **Example:** `orders with status pending` →
   `SELECT * FROM orders WHERE status = 'pending';`
+- **Beside other filters, since 2026-10-03 (sub-project 2).** Until then this
+  rule only ran when nothing else had produced a `WHERE`, so `customers in
+  mumbai with name asha` silently dropped the name. Now a `with` filter is
+  added whenever its words are not already part of another condition (a
+  comparison such as `with price at least 500` stays one condition).
 
 #### E16 · Choosing what to select
 - **What it does:** decides the output columns from what the earlier rules
@@ -387,6 +402,100 @@ one of five kinds, strictest first:
   When two tables are joined, every column is prefixed with its table name.
 - **Why:** one fixed order gives the same output shape for the same kind
   of question every time.
+
+### Question shapes (sub-project 2, added 2026-10-03)
+
+Each shape is written by both emitters, so it builds in MySQL and MongoDB
+alike.
+
+#### E24 · Ranking and superlatives
+- **What it does:** orders and limits by a column in three ways:
+  - `top N <table> by <column>` / `bottom N … by …` → `ORDER BY column
+    DESC/ASC LIMIT N`;
+  - `the N highest/lowest <column>` → the same, with `N` as the limit;
+  - a superlative adjective from `querybuilder/adjectives.json`
+    (`cheapest`, `largest`, `most expensive`, `least costly` …), whose entry
+    names the column words it can reach. `least` reverses the direction.
+
+  With no number, a singular subject (`cheapest product`) gets `LIMIT 1`; a
+  plural one is only sorted.
+- **Why:** "the cheapest product" is one of the most common questions, and
+  until now it went to the language model.
+- **Kept as before:** `highest price of products` with no number still
+  builds `MAX(price)` (E11).
+- **Declines when:** `top … by` names something that isn't a column; an
+  adjective's words reach two columns (`"cheapest" could mean listings.price
+  or listings.cost …`); or none.
+- **Interpretation:** an adjective binding is recorded as a `SYNONYM`, so the
+  query reports 0.85.
+- **Example:** `top 5 products by price` →
+  `SELECT * FROM products ORDER BY price DESC LIMIT 5;`. `cheapest product`
+  → `… ORDER BY price ASC LIMIT 1;`
+
+#### E25 · Inclusive bounds and between
+- **What it does:** `at least` / `no less than` → `>=`; `at most` / `no more
+  than` / `up to` → `<=`; `<column> between A and B` → `BETWEEN A AND B`
+  (MongoDB `$gte`/`$lte`). Both ends are read by `NumberReader`, the first
+  one whole before the separating `and`, so `between two hundred and fifty
+  and 500` reads 250 to 500.
+- **Declines when:** the ends aren't both numbers, or the column isn't one of
+  the subject table's.
+- **Example:** `products with price between 100 and 500` →
+  `SELECT * FROM products WHERE price BETWEEN 100 AND 500;`
+
+#### E26 · Not-equal and exclusion
+- **What it does:**
+  - `<column> [is] not <value>` → `!=`, the value checked within that
+    column;
+  - `other than`, `excluding`, `except`, `not in`, `not from` + values →
+    `!=` for one value, `NOT IN` for several, the column found from the
+    stored data exactly as E14 finds it (runs of words, value typos, a value
+    in two columns declines).
+
+  The excluded words are consumed, so the `in` of `not in pune` is never
+  read again as an equality.
+- **Declines when:** no stored value follows.
+- **Example:** `customers excluding pune and delhi` →
+  `SELECT * FROM customers WHERE city NOT IN ('pune', 'delhi');`
+
+#### E27 · Without (anti-join)
+- **What it does:** `without`, `with no`, `who have no`, `that have no`,
+  `having no`, `with zero` + a table, or `never <verb>ed` whose stem names a
+  table, builds a `LEFT JOIN … WHERE <key> IS NULL` (MongoDB: `$lookup`, then
+  `$match` on an empty array). The join key comes from a declared foreign key
+  exactly as in E6.
+- **Declines when:** no second table is named; there is no key or more than
+  one (E6's messages); or the question also compares a count of the related
+  table.
+- **Example:** `customers without orders` →
+  `SELECT customers.* FROM customers LEFT JOIN orders ON customers.id =
+  orders.customer_id WHERE orders.customer_id IS NULL;`
+
+#### E28 · Distinct
+- **What it does:** `distinct/unique/different <column> of …` and `which/what
+  <column> do/does/are/have …` select the distinct values of that column
+  (MongoDB: a `$group` on it). When the word after `which` names a table
+  (`which customers are in mumbai`), the question is read as before.
+- **Example:** `which cities do customers live in` →
+  `SELECT DISTINCT city FROM customers;`
+
+#### E29 · OR across conditions
+- **What it does:** every condition records the stretch of the question it
+  came from. The words between consecutive conditions decide how they join:
+  `or` → `(a OR b)` (MongoDB `$or`), otherwise `AND`. Inside a value list,
+  `or` separates values like `and`, so `customers in mumbai or pune` is an
+  `IN`.
+- **Declines when:** both `and` and `or` join conditions (`… so this engine
+  can't tell how they group.`), or `or` is combined with `without`.
+- **Example:** `customers in mumbai or with name asha` →
+  `SELECT * FROM customers WHERE (city = 'mumbai' OR name = 'asha');`
+
+#### E30 · Several totals
+- **What it does:** two or more aggregate words joined by `and` or commas,
+  sharing one column, give one output column each. `count` in the list means
+  `COUNT(*)`. A single aggregate keeps E11's path.
+- **Example:** `count and average amount of payments per method` →
+  `SELECT method, COUNT(*), AVG(amount) FROM payments GROUP BY method;`
 
 ### Safety checks
 
@@ -447,7 +556,7 @@ one of five kinds, strictest first:
   layer passed. Without the trace, "rule-based and explainable" is a claim;
   with it, it can be checked. The Analysis screen shows it.
 
-### The 22 ways the rule engine declines
+### The 34 ways the rule engine declines
 
 | Group | Count | Rules |
 |---|---|---|
@@ -461,6 +570,12 @@ one of five kinds, strictest first:
 | A word reaches two schema items (synonym or typo) | 1 | E4 · E5 |
 | A value is stored in two columns | 1 | E14 |
 | A limit isn't a whole number | 1 | E20 |
+| Two comparisons both need a count | 1 | E13 |
+| Ranking: by a non-column, or an adjective reaching two columns or none | 3 | E24 |
+| A range whose ends aren't two numbers, or of a non-column | 2 | E25 |
+| An exclusion with no stored value after it, by value or by column | 2 | E26 |
+| Without: no second table, or combined with a count | 2 | E27 |
+| `and` and `or` mixed between conditions, or `or` with `without` | 2 | E29 |
 
 ---
 

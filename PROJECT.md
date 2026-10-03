@@ -822,7 +822,7 @@ It was built in eight steps, each recorded as a session in §7, from
 The live checklists in the step 4–8 sessions in §7 are the outstanding
 checks.
 
-### A rule engine that adapts to any schema — all four sub-projects designed and planned 2026-10-02; sub-project 1 built 2026-10-03
+### A rule engine that adapts to any schema — all four sub-projects designed and planned 2026-10-02; sub-projects 1 and 2 built 2026-10-03
 
 The rule engine already binds to whatever schema is active (§2). These four
 sub-projects lift the limits where it still expects particular words or
@@ -831,8 +831,8 @@ run in this order, each with its own spec, plan and commits:
 
 | # | Sub-project | Status |
 |---|---|---|
-| 1 | **Vocabulary:** declared aliases, built-in synonyms, one-letter typos, irregular plurals, multi-word values, numbers beyond ten | **Built 2026-10-03** (`4744bfe`..`9b0bedf`, docs after). Spec `docs/superpowers/specs/2026-10-02-rule-engine-vocabulary-design.md`; plan `docs/superpowers/plans/2026-10-02-rule-engine-vocabulary.md`. Sub-project 2 (question shapes) is next. |
-| 2 | **Question shapes:** ranking and superlatives, `at least`/`at most`/`between`, not-equal and exclusion, `without` (anti-join), DISTINCT, OR across conditions, several totals | **Planned.** Spec `docs/superpowers/specs/2026-10-02-rule-engine-question-shapes-design.md`; plan `docs/superpowers/plans/2026-10-02-rule-engine-question-shapes.md`, 9 tasks + reconcile. Not started. |
+| 1 | **Vocabulary:** declared aliases, built-in synonyms, one-letter typos, irregular plurals, multi-word values, numbers beyond ten | **Built 2026-10-03** (`4744bfe`..`9b0bedf`, docs after). Spec `docs/superpowers/specs/2026-10-02-rule-engine-vocabulary-design.md`; plan `docs/superpowers/plans/2026-10-02-rule-engine-vocabulary.md`. |
+| 2 | **Question shapes:** ranking and superlatives, `at least`/`at most`/`between`, not-equal and exclusion, `without` (anti-join), DISTINCT, OR across conditions, several totals | **Built 2026-10-03** (`898b54b`..`0212c54`, docs after). Spec `docs/superpowers/specs/2026-10-02-rule-engine-question-shapes-design.md`; plan `docs/superpowers/plans/2026-10-02-rule-engine-question-shapes.md`. Sub-project 3 (joins) is next. |
 | 3 | **Joins across up to four tables:** the shortest chain of declared foreign keys, filters on any table in it | **Planned.** Spec `docs/superpowers/specs/2026-10-02-rule-engine-multi-table-joins-design.md`; plan `docs/superpowers/plans/2026-10-02-rule-engine-multi-table-joins.md`, 5 tasks + reconcile. Not started. |
 | 4 | **Dates:** relative, named, single and ranged dates as real ranges, plus recency superlatives; replaces E3 | **Planned.** Spec `docs/superpowers/specs/2026-10-02-rule-engine-dates-design.md`; plan `docs/superpowers/plans/2026-10-02-rule-engine-dates.md`, 5 tasks + reconcile. Not started. |
 
@@ -2315,6 +2315,66 @@ can't be fixed in place. Nothing else in that database is touched.
 
 **Not verified:** the startup listener against a real interrupted seeding.
 The marker logic is unit-tested with a mocked client only.
+
+### Session of 2026-10-03 — rule engine question shapes (sub-project 2 of 4)
+
+Plan: `docs/superpowers/plans/2026-10-02-rule-engine-question-shapes.md`,
+executed inline, test first, one commit per task.
+
+| Task | What | Commit |
+|---|---|---|
+| 1 | `QueryIntent` gains `NE`, `NOT_IN`, `BETWEEN`, `TableStar`, an `ANTI` join kind, `distinct` and `anyOf`; both emitters write them | `898b54b` |
+| 2 | `at least`, `at most`, `up to`, `no less/more than`, and `between` (E25) | `d01db20` |
+| 3 | Not-equal and exclusion through one shared value reader (E26) | `b55d503` |
+| 4 | `without`, `with no`, `never <verb>ed` build an anti-join (E27) | `16cc114` |
+| 5 | `distinct`/`unique` and `which <column> do …` (E28) | `de080e1` |
+| 6 | OR across conditions, every comparison read, `with` beside other filters (E29) | `011cde9` |
+| 7 | Several totals of one column (E30) | `40eb7fe` |
+| 8 | `top/bottom … by`, `the N highest/lowest`, superlative adjectives (E24) | `0212c54` |
+
+**Departures from the spec, on purpose (from the plan):**
+1. The anti-join's `IS NULL` is added inside `SqlEmitter`, not as a parser
+   predicate. MongoDB expresses it structurally (`$size: 0`).
+2. Declines raised inside helpers use `DeclineException`, which
+   `AmbiguousWordException` now extends; the parser's single catch turns
+   either into a decline.
+
+**The two silent drops fixed (spec §3.8), the only changes to questions
+that built before:**
+1. A second comparison was ignored (`products with price below 100 or price
+   above 900` built `price < 100`). Every comparison is now read.
+2. A `with` filter beside another filter was ignored (`customers in mumbai
+   with name asha` built only the city). It is now added.
+
+**Rulings made while executing:**
+- `at least` / `at most` were also read by the `at` value preposition, so
+  `products with price at least 500` declined on the value "least".
+  `PREPOSITION` gains a negative lookahead for `at least|most`.
+- The plan's expected SQL for `which customers placed at least three orders`
+  was copied from RULES.md's E13 example, which never matched what the code
+  writes. The test is pinned to the real shape, `SELECT customers.name,
+  customers.id, COUNT(orders.id) … GROUP BY customers.name, customers.id`.
+  RULES.md's example is corrected.
+- E10's implied column request read `customers except mumbai` as a request
+  for a column named "except mumbai". `except` and `excluding` join
+  `NON_COLUMN_WORDS`.
+- The `ADJECTIVE` pattern's optional leading-number group swallowed `least`
+  in `least expensive products`. That group now excludes `most`/`least`.
+- `DeclineBoundaryTest` regained `list the top 5 buyers by total spend` (set
+  aside in sub-project 1). It declines again, now because ranking by a
+  non-column declines.
+
+**Tests:** backend 804/804 (`./mvnw test`), frontend 102/102, `npm run lint`
+clean.
+
+**Not run in the app:** no screen was opened and no question was sent to
+Ollama. Live checklist:
+1. Workbench, MySQL: `cheapest product`, `top 5 products by price`,
+   `customers without orders`, `distinct cities of customers`, `customers in
+   mumbai or pune` each build; the trace shows a `RANKING` or `FILTER` line.
+2. The same questions with the Workbench on MongoDB build the matching
+   `find`/`aggregate`, run them in mongosh.
+3. `customers in mumbai with name <a real name>` now includes the name.
 
 ### Session of 2026-10-03 — rule engine vocabulary (sub-project 1 of 4)
 
