@@ -216,4 +216,12 @@ class QuestionShapesTest {
                 .contains("both \"and\" and \"or\"");
         assertThat(declineReason("customers in pune or with name asha without orders")).contains("without");
     }
+
+    @Test
+    @DisplayName("several totals share one column; count means COUNT(*)")
+    void severalTotals() {
+        assertThat(sql("average and highest price of products")).isEqualTo("SELECT AVG(price), MAX(price) FROM products;");
+        assertThat(sql("count and average amount of payments per method"))
+                .isEqualTo("SELECT method, COUNT(*), AVG(amount) FROM payments GROUP BY method;");
+    }
 }

@@ -72,6 +72,12 @@ public class QueryIntentParser {
     private static final Pattern WHICH_PHRASE = Pattern.compile(
             "^(?:which|what)\\s+([a-z_]+(?:\\s+[a-z_]+)?)\\s+(?:do|does|did|are|have|has)\\b");
 
+    private static final String AGGREGATE_WORDS = "average|avg|mean|sum|maximum|max|highest|minimum|min|lowest|count";
+
+    private static final Pattern AGGREGATES = Pattern.compile(
+            "\\b((?:" + AGGREGATE_WORDS + ")(?:\\s*(?:,|and)\\s*(?:" + AGGREGATE_WORDS + "))+)\\s+"
+                    + "(?:of\\s+)?(?:the\\s+)?([a-z_ ]+?)\\b");
+
     private static final Pattern EXCLUDING = Pattern.compile(
             "\\b(?:other than|excluding|except|not in|not from)\\s+(?=[a-z])");
 
@@ -340,13 +346,33 @@ public class QueryIntentParser {
             }
         }
 
-        String aggregateFunction = null;
-        String aggregateColumn = null;
+        List<QueryIntent.Aggregate> aggregates = new ArrayList<>();
 
         if (!projectionRequested) {
+            Matcher many = AGGREGATES.matcher(text);
             Matcher agg = AGGREGATE_PHRASE.matcher(text);
-            if (agg.find()) {
-                aggregateFunction = AGGREGATE_FUNCTIONS.get(agg.group(1));
+            if (many.find()) {
+                Optional<String> col = column(subject, many.group(2), interpretations);
+                if (col.isEmpty()) {
+                    return RuleBuildResult.declined(
+                            "The question asks for " + many.group(1) + " of \"" + many.group(2)
+                                    + "\", which is not a column of " + subject.name() + ".",
+                            bindings);
+                }
+                List<String> rendered = new ArrayList<>();
+                for (String word : many.group(1).split("\\s*(?:,|and)\\s*")) {
+                    QueryIntent.Aggregate aggregate = "count".equals(word)
+                            ? new QueryIntent.Aggregate(QueryIntent.Fn.COUNT, null)
+                            : new QueryIntent.Aggregate(QueryIntent.Fn.valueOf(AGGREGATE_FUNCTIONS.get(word)),
+                                    qualify(col.get(), subject, joined));
+                    aggregates.add(aggregate);
+                    rendered.add(aggregate.column() == null ? "COUNT(*)"
+                            : aggregate.fn().name() + "(" + subject.name() + "." + col.get() + ")");
+                }
+                bindings.add(new RuleTrace.Binding(many.group(1) + " " + many.group(2), "AGGREGATE",
+                        String.join(", ", rendered)));
+            } else if (agg.find()) {
+                String fn = AGGREGATE_FUNCTIONS.get(agg.group(1));
                 Optional<String> col = column(subject, agg.group(2), interpretations);
                 if (col.isEmpty()) {
                     return RuleBuildResult.declined(
@@ -354,9 +380,9 @@ public class QueryIntentParser {
                                     + "\", which is not a column of " + subject.name() + ".",
                             bindings);
                 }
-                aggregateColumn = col.get();
+                aggregates.add(new QueryIntent.Aggregate(QueryIntent.Fn.valueOf(fn), qualify(col.get(), subject, joined)));
                 bindings.add(new RuleTrace.Binding(agg.group(2), "AGGREGATE",
-                        aggregateFunction + "(" + subject.name() + "." + aggregateColumn + ")"));
+                        fn + "(" + subject.name() + "." + col.get() + ")"));
             }
         }
 
@@ -471,7 +497,7 @@ public class QueryIntentParser {
                     bindings);
         }
 
-        if (groupColumn != null && aggregateFunction == null && !countRequested && countTargetColumn == null) {
+        if (groupColumn != null && aggregates.isEmpty() && !countRequested && countTargetColumn == null) {
             return RuleBuildResult.declined(
                     "The question asks for a breakdown by \"" + groupPhrase + "\" but not for a total, "
                             + "average or count of anything, so there is nothing to group.",
@@ -604,10 +630,8 @@ public class QueryIntentParser {
         if (groupColumn != null) {
             selectItems.add(new QueryIntent.SelectItem(qualify(groupColumn, subject, joined)));
         }
-        if (aggregateFunction != null) {
-            selectItems.add(new QueryIntent.SelectItem(new QueryIntent.Aggregate(
-                    QueryIntent.Fn.valueOf(aggregateFunction),
-                    qualify(aggregateColumn, subject, joined))));
+        if (!aggregates.isEmpty()) {
+            aggregates.forEach(a -> selectItems.add(new QueryIntent.SelectItem(a)));
         } else if (countTargetColumn != null) {
             for (String col : identifyingColumns(subject)) {
                 selectItems.add(0, new QueryIntent.SelectItem(
