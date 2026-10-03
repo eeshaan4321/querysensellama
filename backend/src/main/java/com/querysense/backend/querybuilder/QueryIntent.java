@@ -1,5 +1,6 @@
 package com.querysense.backend.querybuilder;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 /** A question resolved against the active schema, in a form any dialect's emitter can write. */
@@ -44,6 +45,18 @@ public record QueryIntent(
     public record Literal(String text, boolean numeric, Object value) {
         public static Literal number(int n) {
             return new Literal(String.valueOf(n), true, n);
+        }
+
+        public static Literal number(BigDecimal n) {
+            BigDecimal plain = n.stripTrailingZeros();
+            Object value;
+            if (plain.scale() <= 0 && plain.abs().compareTo(BigDecimal.valueOf(Long.MAX_VALUE)) <= 0) {
+                long whole = plain.longValueExact();
+                value = whole >= Integer.MIN_VALUE && whole <= Integer.MAX_VALUE ? (Object) (int) whole : (Object) whole;
+            } else {
+                value = plain.doubleValue();
+            }
+            return new Literal(plain.toPlainString(), true, value);
         }
 
         public static Literal text(String typed, String stored) {
