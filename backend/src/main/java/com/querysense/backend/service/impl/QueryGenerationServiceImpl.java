@@ -15,6 +15,7 @@ import com.querysense.backend.service.QueryGenerationService;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 /** Generates queries through the rule engine, cache and LLM, and records history. */
@@ -32,6 +33,7 @@ public class QueryGenerationServiceImpl implements QueryGenerationService {
     private static final String SOURCE_LLM = "OLLAMA";
 
     private static final double CONFIDENCE_RULE_ENGINE = 0.95;
+    private static final double CONFIDENCE_RULE_ENGINE_INTERPRETED = 0.85;
     private static final double CONFIDENCE_CACHE = 1.0;
     private static final double CONFIDENCE_LLM = 0.65;
     private static final double CONFIDENCE_LLM_INCOMPLETE = 0.4;
@@ -66,7 +68,7 @@ public class QueryGenerationServiceImpl implements QueryGenerationService {
         if (ruleResult.built()) {
             generatedSql = ruleResult.sql();
             source = SOURCE_RULE_ENGINE;
-            confidence = CONFIDENCE_RULE_ENGINE;
+            confidence = ruleResult.interpreted() ? CONFIDENCE_RULE_ENGINE_INTERPRETED : CONFIDENCE_RULE_ENGINE;
 
         } else {
             Optional<QueryHistory> cached = servableCacheHit(input, databaseType);
@@ -99,7 +101,8 @@ public class QueryGenerationServiceImpl implements QueryGenerationService {
             saveToHistory(input, generatedSql, databaseType, source, confidence, durationMs, resourceLevel);
         }
 
-        return new QueryResponse(generatedSql, databaseType, source, confidence, trace, schemaWarning);
+        return new QueryResponse(generatedSql, databaseType, source, confidence, trace, schemaWarning,
+                ruleResult.built() ? ruleResult.interpretations() : List.of());
     }
 
     /** A cached answer serves only if it was written for the active schema and still fits it. */

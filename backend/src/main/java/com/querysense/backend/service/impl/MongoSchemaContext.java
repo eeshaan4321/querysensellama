@@ -1,6 +1,7 @@
 package com.querysense.backend.service.impl;
 
 import com.querysense.backend.schema.KnownSchema;
+import com.querysense.backend.schema.SchemaAliases;
 import com.querysense.backend.schema.SchemaSnapshot;
 
 import java.util.List;
@@ -27,9 +28,9 @@ final class MongoSchemaContext {
             Map<String, String> types = snapshot.fieldTypesFor(table.name());
             Map<String, List<String>> enums = snapshot.enumsFor(table.name());
             String fields = table.columns().stream()
-                    .map(column -> describeField(column, types.get(column), enums.get(column)))
+                    .map(column -> SchemaAliases.describe(describeField(column, types.get(column), enums.get(column)), snapshot.aliasesFor(table.name()).column(column)))
                     .collect(Collectors.joining(", "));
-            out.append(INDENT).append("- ").append(table.name()).append(": ").append(fields);
+            out.append(INDENT).append("- ").append(SchemaAliases.describe(table.name(), snapshot.aliasesFor(table.name()).table())).append(": ").append(fields);
             if (!table.embeddedArrays().isEmpty()) {
                 out.append("; embedded array").append(table.embeddedArrays().size() == 1 ? "" : "s").append(": ")
                         .append(String.join(", ", table.embeddedArrays()));

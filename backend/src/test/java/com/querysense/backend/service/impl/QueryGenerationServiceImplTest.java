@@ -1,5 +1,7 @@
 package com.querysense.backend.service.impl;
 
+import com.querysense.backend.querybuilder.SchemaLexicon;
+import com.querysense.backend.querybuilder.Interpretation;
 import com.querysense.backend.dto.QueryResponse;
 import com.querysense.backend.dto.RuleTrace;
 import com.querysense.backend.model.QueryHistory;
@@ -157,5 +159,29 @@ class QueryGenerationServiceImplTest {
         service.generateQuery("Show all customers", "MySQL");
 
         verify(history, times(1)).save(any());
+    }
+
+    @Test
+    @DisplayName("a query built through a synonym or typo reports 0.85 and carries its interpretations")
+    void interpretedIsLower() {
+        RuleTrace trace = new RuleTrace(RuleTrace.BUILT, "SELECT", List.of(), null, List.of(), null);
+        List<Interpretation> read = List.of(new Interpretation("clients", "customers", SchemaLexicon.MatchKind.SYNONYM));
+        when(rules.build(anyString(), anyString()))
+                .thenReturn(RuleBuildResult.built("SELECT * FROM customers;", trace, read));
+
+        QueryResponse response = service.generateQuery("clients", "MySQL");
+
+        assertThat(response.getConfidence()).isEqualTo(0.85);
+        assertThat(response.getInterpretations()).isEqualTo(read);
+    }
+
+    @Test
+    @DisplayName("a schema-declared alias keeps 0.95")
+    void aliasKeepsFullConfidence() {
+        RuleTrace trace = new RuleTrace(RuleTrace.BUILT, "SELECT", List.of(), null, List.of(), null);
+        when(rules.build(anyString(), anyString())).thenReturn(RuleBuildResult.built("SELECT * FROM customers;", trace,
+                List.of(new Interpretation("buyers", "customers", SchemaLexicon.MatchKind.SCHEMA_ALIAS))));
+
+        assertThat(service.generateQuery("buyers", "MySQL").getConfidence()).isEqualTo(0.95);
     }
 }

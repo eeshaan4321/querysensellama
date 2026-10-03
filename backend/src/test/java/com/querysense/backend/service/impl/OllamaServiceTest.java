@@ -213,4 +213,14 @@ class OllamaServiceTest {
         assertThat(service.generateQuery("customers", "MongoDB"))
                 .isEqualTo("db.customers.find({\"name\": \"a)b\"}).sort({\"name\": 1}).limit(5)");
     }
+
+    @Test
+    @DisplayName("the MySQL schema block names a table's declared aliases")
+    void mysqlPromptNamesAliases() {
+        modelReplies("SELECT 1;");
+
+        service.generateQuery("customers in pune", "MySQL");
+
+        assertThat(promptSent()).contains("- customers(id, name, email, city, phone) — also called: buyers");
+    }
 }

@@ -4,6 +4,8 @@ import com.querysense.backend.dialect.Dialect;
 import com.querysense.backend.exception.LlmUnavailableException;
 import com.querysense.backend.schema.ActiveSchemaProvider;
 import com.querysense.backend.schema.KnownSchema;
+import com.querysense.backend.schema.SchemaAliases;
+import com.querysense.backend.schema.SchemaSnapshot;
 import com.querysense.backend.service.LlmFallbackService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
@@ -17,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /** LLM fallback backed by a local Ollama model. */
 @Service
@@ -171,9 +174,17 @@ public class OllamaService implements LlmFallbackService {
 
         StringBuilder schema = new StringBuilder(
                 "\n            Real schema — use ONLY these tables and columns; never invent a column or table name:\n");
+        SchemaSnapshot snapshot = activeSchema.active(Dialect.MYSQL);
         for (KnownSchema.Table table : tables) {
-            schema.append("            - ").append(table.name())
-                    .append("(").append(String.join(", ", table.columns())).append(")\n");
+            SchemaAliases.TableAliases aliases = snapshot.aliasesFor(table.name());
+            String columns = table.columns().stream()
+                    .map(c -> SchemaAliases.describe(c, aliases.column(c)))
+                    .collect(Collectors.joining(", "));
+            schema.append("            - ").append(table.name()).append("(").append(columns).append(")");
+            if (!aliases.table().isEmpty()) {
+                schema.append(" — also called: ").append(String.join(", ", aliases.table()));
+            }
+            schema.append("\n");
         }
 
         for (KnownSchema.ForeignKey fk : activeSchema.foreignKeys(Dialect.MYSQL)) {

@@ -2,6 +2,7 @@ package com.querysense.backend.service.impl;
 
 import com.querysense.backend.schema.KnownMongoSchema;
 import com.querysense.backend.schema.KnownSchema;
+import com.querysense.backend.schema.SchemaAliases;
 import com.querysense.backend.schema.SchemaSnapshot;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -29,7 +30,7 @@ class MongoSchemaContextTest {
 
                             Real MongoDB schema — use ONLY these collections and fields; never invent a collection or field name:
                             - orders: _id (objectId), customer_id (objectId), employee_id (objectId), order_date (date), status (string, one of "NEW", "PENDING", "PAID", "SHIPPED", "CANCELLED"), items.product_id (objectId), items.quantity (int), items.unit_price (decimal); embedded array: items
-                            - customers: _id (objectId), name (string), email (string), city (string), phone (string)
+                            - customers (also called: buyers): _id (objectId), name (string), email (string), city (string), phone (string)
                             - Reference: orders.customer_id → customers._id — use $lookup with localField "customer_id" and foreignField "_id" to combine them.
                 """);
     }
@@ -40,7 +41,7 @@ class MongoSchemaContextTest {
         String context = MongoSchemaContext.describe(DEMO, List.of());
 
         for (KnownSchema.Table t : DEMO.tables()) {
-            assertThat(context).contains("- " + t.name() + ": ");
+            assertThat(context).contains("- " + SchemaAliases.describe(t.name(), DEMO.aliasesFor(t.name()).table()) + ": ");
         }
         assertThat(context).contains("- Reference: employees.manager_id → employees._id");
     }
