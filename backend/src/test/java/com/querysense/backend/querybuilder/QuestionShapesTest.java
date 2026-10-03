@@ -104,4 +104,32 @@ class QuestionShapesTest {
     void betweenNonNumbers() {
         assertThat(declineReason("products with price between cheap and dear")).contains("two numbers");
     }
+
+    @Test
+    @DisplayName("not-equal on a named column")
+    void notEqualColumn() {
+        assertThat(sql("orders with status not shipped")).isEqualTo("SELECT * FROM orders WHERE status != 'shipped';");
+        assertThat(sql("orders with status is not shipped")).isEqualTo("SELECT * FROM orders WHERE status != 'shipped';");
+    }
+
+    @Test
+    @DisplayName("exclusion finds its column from the data")
+    void exclusion() {
+        assertThat(sql("customers other than pune")).isEqualTo("SELECT * FROM customers WHERE city != 'pune';");
+        assertThat(sql("customers excluding pune and delhi"))
+                .isEqualTo("SELECT * FROM customers WHERE city NOT IN ('pune', 'delhi');");
+        assertThat(sql("customers except mumbai")).isEqualTo("SELECT * FROM customers WHERE city != 'mumbai';");
+    }
+
+    @Test
+    @DisplayName("notInIsOnePredicate: 'not in pune' is one not-equal, never also an equality")
+    void notInIsOnePredicate() {
+        assertThat(sql("customers not in pune")).isEqualTo("SELECT * FROM customers WHERE city != 'pune';");
+    }
+
+    @Test
+    @DisplayName("an exclusion whose value is nowhere declines")
+    void exclusionUnknownValue() {
+        assertThat(declineReason("customers excluding atlantis")).contains("\"atlantis\"");
+    }
 }
