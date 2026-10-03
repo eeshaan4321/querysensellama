@@ -40,8 +40,10 @@ public class QueryIntentParser {
     private static final Pattern PER_GROUP = Pattern.compile(
             "\\b(?:per|for each|grouped by|group by)\\s+([a-z_ ]+?)\\b");
 
-    private static final Pattern PREPOSITION_VALUE = Pattern.compile(
-            "\\b(?:from|in|at|located in|living in|based in|residing in)\\s+([a-z]+(?:\\s+and\\s+[a-z]+)*)\\b");
+    private static final Pattern PREPOSITION = Pattern.compile(
+            "\\b(?:from|in|at|located in|living in|based in|residing in)\\s+(?=[a-z])");
+
+    private static final int LONGEST_VALUE_WORDS = 4;
 
     private static final Pattern LEADING_DELETE = Pattern.compile(
             "^(?:please )?(?:delete|remove)\\b");
@@ -177,7 +179,7 @@ public class QueryIntentParser {
                     || NON_COLUMN_WORDS.contains(word)
                     || VALUE_STOPWORDS.contains(word)
                     || tables.stream().anyMatch(t -> binder.bindColumn(t, word).isPresent())
-                    || tables.stream().anyMatch(t -> columnHolding(t, word, metadata).isPresent());
+                    || tables.stream().anyMatch(t -> !columnsHolding(t, word, metadata).isEmpty());
             if (!known && word.endsWith("s")) {
                 return RuleBuildResult.declined(
                         "\"" + word + "\" isn't a table in the active schema, so this engine can't tell "
@@ -359,49 +361,60 @@ public class QueryIntentParser {
                     bindings);
         }
 
-        Matcher preposition = PREPOSITION_VALUE.matcher(text);
+        Matcher preposition = PREPOSITION.matcher(text);
         while (preposition.find()) {
+            String rest = text.substring(preposition.end()).split("[^a-z\\s]", 2)[0].trim();
+            String[] words = rest.isEmpty() ? new String[0] : rest.split("\\s+");
             List<String> values = new ArrayList<>();
-            List<String> storedValues = new ArrayList<>();
+            List<QueryIntent.Literal> literals = new ArrayList<>();
             String valueColumn = null;
 
-            for (String candidate : preposition.group(1).split("\s+and\s+")) {
-                if (VALUE_STOPWORDS.contains(candidate)
-                        || binder.tableNamed(candidate, dialect).isPresent()
-                        || isColumnOfEither(candidate, subject, related)) {
+            int i = 0;
+            while (i < words.length) {
+                String first = words[i];
+                if (VALUE_STOPWORDS.contains(first)
+                        || binder.tableNamed(first, dialect).isPresent()
+                        || isColumnOfEither(first, subject, related)) {
                     break;
                 }
-                Optional<ValueMatch> match = columnHolding(subject, candidate, metadata);
-                if (match.isEmpty()) {
+                ValueRun run = valueRun(subject, words, i, metadata);
+                if (run == null) {
                     if (!values.isEmpty()) {
                         break;
                     }
                     return RuleBuildResult.declined(
-                            "No column of " + subject.name() + " contains the value \"" + candidate
+                            "No column of " + subject.name() + " contains the value \"" + first
                                     + "\", so this engine cannot tell which field the question means.",
                             bindings);
                 }
-                String column = match.get().column();
-                if (valueColumn != null && !valueColumn.equals(column)) {
+                if (valueColumn != null && !valueColumn.equals(run.column())) {
                     return RuleBuildResult.declined(
-                            "\"" + values.get(0) + "\" and \"" + candidate + "\" are values of different "
-                                    + "columns (" + valueColumn + " and " + column + "), so this "
+                            "\"" + values.get(0) + "\" and \"" + run.typed() + "\" are values of different "
+                                    + "columns (" + valueColumn + " and " + run.column() + "), so this "
                                     + "engine cannot tell which one the question filters on.",
                             bindings);
                 }
-                valueColumn = column;
-                values.add(candidate);
-                storedValues.add(match.get().stored());
+                valueColumn = run.column();
+                values.add(run.typed());
+                if (run.typo()) {
+                    literals.add(QueryIntent.Literal.text(run.stored(), run.stored()));
+                    note(run.typed(), subject.name() + "." + run.column() + " = " + run.stored(),
+                            SchemaLexicon.MatchKind.TYPO, interpretations);
+                } else {
+                    literals.add(QueryIntent.Literal.text(run.typed(), run.stored()));
+                }
+                i += run.words();
+                if (i < words.length && "and".equals(words[i])) {
+                    i++;
+                    continue;
+                }
+                break;
             }
 
             if (values.isEmpty()) {
                 continue;
             }
 
-            List<QueryIntent.Literal> literals = new ArrayList<>();
-            for (int i = 0; i < values.size(); i++) {
-                literals.add(QueryIntent.Literal.text(values.get(i), storedValues.get(i)));
-            }
             where.add(new QueryIntent.Predicate(qualify(valueColumn, subject, joined),
                     values.size() == 1 ? QueryIntent.Op.EQ : QueryIntent.Op.IN, List.copyOf(literals)));
             bindings.add(new RuleTrace.Binding(String.join(" and ", values), "FILTER",
@@ -599,15 +612,46 @@ public class QueryIntentParser {
 
     private record ValueMatch(String column, String stored) {}
 
-    private Optional<ValueMatch> columnHolding(KnownSchema.Table table, String value,
-                                              SchemaMetadata metadata) {
+    private record ValueRun(String typed, String column, String stored, int words, boolean typo) {}
+
+    private List<ValueMatch> columnsHolding(KnownSchema.Table table, String value, SchemaMetadata metadata) {
+        List<ValueMatch> matches = new ArrayList<>();
         for (String column : table.columns()) {
-            Optional<String> stored = storedValueOf(table, column, value, metadata);
-            if (stored.isPresent()) {
-                return Optional.of(new ValueMatch(column, stored.get()));
+            storedValueOf(table, column, value, metadata).ifPresent(stored -> matches.add(new ValueMatch(column, stored)));
+        }
+        return matches;
+    }
+
+    private ValueRun valueRun(KnownSchema.Table table, String[] words, int from, SchemaMetadata metadata) {
+        for (int n = Math.min(LONGEST_VALUE_WORDS, words.length - from); n >= 1; n--) {
+            String phrase = String.join(" ", java.util.Arrays.copyOfRange(words, from, from + n));
+            List<ValueMatch> matches = columnsHolding(table, phrase, metadata);
+            if (matches.size() > 1) {
+                List<String> columns = matches.stream().map(m -> table.name() + "." + m.column()).toList();
+                throw new AmbiguousWordException("\"" + matches.get(0).stored() + "\" is stored in "
+                        + (columns.size() == 2 ? "both " : "") + listWith("and", columns)
+                        + ", so this engine can't tell which one the question means.");
+            }
+            if (matches.size() == 1) {
+                return new ValueRun(phrase, matches.get(0).column(), matches.get(0).stored(), n, false);
             }
         }
-        return Optional.empty();
+        String word = words[from];
+        if (word.length() < Edits.MIN_TYPO_LENGTH) {
+            return null;
+        }
+        List<ValueMatch> near = new ArrayList<>();
+        for (String column : table.columns()) {
+            metadata.getDistinctValues(table.name(), column).stream()
+                    .filter(v -> v != null && Edits.withinOne(word, v.toLowerCase(Locale.ROOT)))
+                    .distinct()
+                    .forEach(v -> near.add(new ValueMatch(column, v)));
+        }
+        if (near.size() > 1) {
+            throw new AmbiguousWordException(ambiguityMessage(word,
+                    near.stream().map(m -> table.name() + "." + m.column() + " = " + m.stored()).toList()));
+        }
+        return near.size() == 1 ? new ValueRun(word, near.get(0).column(), near.get(0).stored(), 1, true) : null;
     }
 
     private Optional<String> storedValueOf(KnownSchema.Table table, String column, String value,

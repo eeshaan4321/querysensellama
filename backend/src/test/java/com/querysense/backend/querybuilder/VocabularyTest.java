@@ -132,4 +132,39 @@ class VocabularyTest {
         assertThat(result.sql()).isEqualTo("SELECT * FROM customers WHERE city = 'pune';");
         assertThat(result.interpretations()).isEmpty();
     }
+
+    @Test
+    @DisplayName("a two-word value is matched as one value")
+    void multiWordValue() {
+        assertThat(sql("customers in new delhi").sql()).isEqualTo("SELECT * FROM customers WHERE city = 'new delhi';");
+        assertThat(sql("customers in new delhi and pune").sql())
+                .isEqualTo("SELECT * FROM customers WHERE city IN ('new delhi', 'pune');");
+    }
+
+    @Test
+    @DisplayName("a one-letter typo in a value writes the stored value and is recorded")
+    void valueTypo() {
+        RuleBuildResult result = sql("customers in mumbia");
+
+        assertThat(result.sql()).isEqualTo("SELECT * FROM customers WHERE city = 'Mumbai';");
+        assertThat(result.interpretations()).containsExactly(
+                new Interpretation("mumbia", "customers.city = Mumbai", SchemaLexicon.MatchKind.TYPO));
+    }
+
+    @Test
+    @DisplayName("a value stored in two columns declines, naming both")
+    void valueInTwoColumns() {
+        RuleBuildResult result = sql("stores in central");
+
+        assertThat(result.built()).isFalse();
+        assertThat(result.trace().declineReason()).isEqualTo(
+                "\"Central\" is stored in both stores.city and stores.region, so this engine can't tell which one "
+                        + "the question means.");
+    }
+
+    @Test
+    @DisplayName("punctuationEndsTheValue: a question mark after the value doesn't lose the filter")
+    void punctuationEndsTheValue() {
+        assertThat(sql("clients in mumbai?").sql()).isEqualTo("SELECT * FROM customers WHERE city = 'mumbai';");
+    }
 }
