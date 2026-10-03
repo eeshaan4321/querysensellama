@@ -61,6 +61,11 @@ public class QueryIntentParser {
     private static final Pattern PREPOSITION = Pattern.compile(
             "\\b(?:from|in|at(?!\\s+(?:least|most)\\b)|located in|living in|based in|residing in)\\s+(?=[a-z])");
 
+    private static final Pattern WITHOUT = Pattern.compile(
+            "\\b(?:without|with no|who have no|that have no|having no|with zero)\\s+(?:any\\s+)?");
+
+    private static final Pattern NEVER = Pattern.compile("\\bnever\\s+([a-z]+?)(?:ed|d)\\b");
+
     private static final Pattern EXCLUDING = Pattern.compile(
             "\\b(?:other than|excluding|except|not in|not from)\\s+(?=[a-z])");
 
@@ -204,6 +209,28 @@ public class QueryIntentParser {
             }
         }
 
+        boolean anti = false;
+        Matcher without = WITHOUT.matcher(text);
+        Matcher never = NEVER.matcher(text);
+        if (without.find()) {
+            if (tables.size() != 2) {
+                return RuleBuildResult.declined(
+                        "The question asks for " + tables.get(0).name() + " without something, but doesn't name one "
+                                + "other table to check against.",
+                        bindings);
+            }
+            anti = true;
+        } else if (never.find()) {
+            List<SchemaLexicon.TableHit> stem = binder.tableMatches(never.group(1), dialect).hits();
+            if (stem.size() == 1 && !stem.get(0).table().equals(tables.get(0))) {
+                if (tables.size() == 1) {
+                    tables = List.of(tables.get(0), stem.get(0).table());
+                    bindings.add(new RuleTrace.Binding(never.group(), "TABLE", stem.get(0).table().name()));
+                }
+                anti = true;
+            }
+        }
+
         KnownSchema.Table subject = tables.get(0);
         KnownSchema.Table related = tables.size() == 2 ? tables.get(1) : null;
 
@@ -230,6 +257,10 @@ public class QueryIntentParser {
             }
             KnownSchema.ForeignKey edge = ((JoinPathResolver.Resolved) resolution).edge();
             joinSpec = joinSpecFor(edge, subject, related);
+            if (anti) {
+                joinSpec = new QueryIntent.JoinSpec(joinSpec.table(), joinSpec.left(), joinSpec.right(),
+                        QueryIntent.JoinKind.ANTI);
+            }
             joinEdge = new RuleTrace.JoinEdge(edge.fromTable(), edge.fromColumn(),
                     edge.toTable(), edge.toColumn(), JOIN_ORIGIN);
         }
@@ -402,6 +433,13 @@ public class QueryIntentParser {
             }
         }
 
+        if (anti && !having.isEmpty()) {
+            return RuleBuildResult.declined(
+                    "The question asks for " + subject.name() + " without " + related.name()
+                            + " and also counts them, which this engine won't combine.",
+                    bindings);
+        }
+
         if (groupColumn != null && aggregateFunction == null && !countRequested && countTargetColumn == null) {
             return RuleBuildResult.declined(
                     "The question asks for a breakdown by \"" + groupPhrase + "\" but not for a total, "
@@ -522,7 +560,9 @@ public class QueryIntentParser {
             projected.forEach(c -> selectItems.add(
                     new QueryIntent.SelectItem(qualify(c, subject, joined))));
         } else if (verb == QueryIntent.Verb.SELECT && selectItems.isEmpty()) {
-            selectItems.add(new QueryIntent.SelectItem(QueryIntent.Star.INSTANCE));
+            selectItems.add(new QueryIntent.SelectItem(anti
+                    ? new QueryIntent.TableStar(subject.name())
+                    : QueryIntent.Star.INSTANCE));
         }
 
         if (verb == QueryIntent.Verb.DELETE) {
@@ -894,6 +934,9 @@ public class QueryIntentParser {
         StringBuilder shape = new StringBuilder(intent.verb().name());
         if (intent.join() != null) {
             shape.append(" + JOIN");
+        }
+        if (intent.join() != null && intent.join().kind() == QueryIntent.JoinKind.ANTI) {
+            shape.append(" (without)");
         }
         if (intent.hasAggregate()
                 && intent.selectItems().stream().anyMatch(i -> !i.aggregated())) {

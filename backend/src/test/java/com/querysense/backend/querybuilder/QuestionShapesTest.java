@@ -132,4 +132,40 @@ class QuestionShapesTest {
     void exclusionUnknownValue() {
         assertThat(declineReason("customers excluding atlantis")).contains("\"atlantis\"");
     }
+
+    @Test
+    @DisplayName("without: rows with no related row")
+    void without() {
+        String expected = "SELECT customers.* FROM customers LEFT JOIN orders ON customers.id = orders.customer_id "
+                + "WHERE orders.customer_id IS NULL;";
+        assertThat(sql("customers without orders")).isEqualTo(expected);
+        assertThat(sql("customers with no orders")).isEqualTo(expected);
+        assertThat(sql("customers who have no orders")).isEqualTo(expected);
+    }
+
+    @Test
+    @DisplayName("without, counted and filtered")
+    void withoutCountedAndFiltered() {
+        assertThat(sql("how many customers without orders")).isEqualTo(
+                "SELECT COUNT(*) FROM customers LEFT JOIN orders ON customers.id = orders.customer_id "
+                        + "WHERE orders.customer_id IS NULL;");
+        assertThat(sql("customers in pune without orders")).isEqualTo(
+                "SELECT customers.* FROM customers LEFT JOIN orders ON customers.id = orders.customer_id "
+                        + "WHERE customers.city = 'pune' AND orders.customer_id IS NULL;");
+    }
+
+    @Test
+    @DisplayName("never <verb>ed reads the verb's stem as a table; with no direct key it declines")
+    void never() {
+        assertThat(sql("customers who never ordered")).isEqualTo(
+                "SELECT customers.* FROM customers LEFT JOIN orders ON customers.id = orders.customer_id "
+                        + "WHERE orders.customer_id IS NULL;");
+        assertThat(declineReason("products never ordered")).contains("no relationship");
+    }
+
+    @Test
+    @DisplayName("an anti-join with no linking key declines")
+    void withoutNoKey() {
+        assertThat(declineReason("products without payments")).contains("no relationship");
+    }
 }
