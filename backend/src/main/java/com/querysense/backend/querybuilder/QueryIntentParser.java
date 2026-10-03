@@ -292,6 +292,7 @@ public class QueryIntentParser {
 
         List<QueryIntent.SelectItem> selectItems = new ArrayList<>();
         List<QueryIntent.Predicate> where = new ArrayList<>();
+        List<int[]> conditionSpans = new ArrayList<>();
         List<QueryIntent.Predicate> having = new ArrayList<>();
 
         boolean countRequested = COUNT_WORDS.stream().anyMatch(text::contains);
@@ -401,6 +402,8 @@ public class QueryIntentParser {
             QueryIntent.Literal to = QueryIntent.Literal.number(high.get().value());
             where.add(new QueryIntent.Predicate(qualify(rangeColumn.get(), subject, joined),
                     QueryIntent.Op.BETWEEN, List.of(from, to)));
+            conditionSpans.add(new int[]{between.start(), between.start(2)
+                    + rest.indexOf(high.get().phrase(), low.get().phrase().length()) + high.get().phrase().length()});
             String lhs = joined ? subject.name() + "." + rangeColumn.get() : rangeColumn.get();
             bindings.add(new RuleTrace.Binding(
                     between.group(1) + " between " + low.get().phrase() + " and " + high.get().phrase(),
@@ -409,34 +412,46 @@ public class QueryIntentParser {
 
         Matcher comparison = COMPARISON.matcher(text);
         String countTargetColumn = null;
-        if (comparison.find()) {
+        int searchFrom = 0;
+        while (searchFrom < text.length() && comparison.find(searchFrom)) {
+            if (insideAny(comparison.start(), conditionSpans)) {
+                searchFrom = comparison.end(2);
+                continue;
+            }
             QueryIntent.Op op = COMPARISON_OPS.get(comparison.group(2));
             String operator = op.sql();
             String rest = comparison.group(3);
             Optional<NumberReader.Reading> reading = NumberReader.leading(rest);
             if (reading.isEmpty()) {
                 return RuleBuildResult.declined(
-                        "The question compares against \"" + rest.split("\\s+")[0]
+                        "The question compares against \"" + rest.split("\s+")[0]
                                 + "\", which is not a number this engine can read.",
                         bindings);
             }
             QueryIntent.Literal number = QueryIntent.Literal.number(reading.get().value());
+            int[] span = {comparison.start(), comparison.start(3) + reading.get().phrase().length()};
 
             Optional<String> lhsColumn = column(subject, comparison.group(1), interpretations);
             if (lhsColumn.isPresent()) {
                 String lhs = joined ? subject.name() + "." + lhsColumn.get() : lhsColumn.get();
                 where.add(new QueryIntent.Predicate(qualify(lhsColumn.get(), subject, joined), op,
                         List.of(number)));
+                conditionSpans.add(span);
                 bindings.add(new RuleTrace.Binding(
                         comparison.group(1) + " " + comparison.group(2) + " " + reading.get().phrase(),
                         "COMPARISON", lhs + " " + operator + " " + number.text()));
             } else if (joined) {
+                if (countTargetColumn != null) {
+                    return RuleBuildResult.declined(
+                            "The question compares two counts, which this engine won't combine.", bindings);
+                }
                 countTargetColumn = related.columns().get(0);
                 String rendered = "COUNT(" + related.name() + "." + countTargetColumn + ")";
                 having.add(new QueryIntent.Predicate(
                         new QueryIntent.Aggregate(QueryIntent.Fn.COUNT,
                                 new QueryIntent.ColumnRef(related.name(), countTargetColumn)),
                         op, List.of(number)));
+                conditionSpans.add(span);
                 bindings.add(new RuleTrace.Binding(
                         comparison.group(2) + " " + reading.get().phrase() + " " + related.name(),
                         "COMPARISON", rendered + " " + operator + " " + number.text()));
@@ -446,6 +461,7 @@ public class QueryIntentParser {
                                 + "column of " + subject.name() + ".",
                         bindings);
             }
+            searchFrom = span[1];
         }
 
         if (anti && !having.isEmpty()) {
@@ -479,6 +495,7 @@ public class QueryIntentParser {
             bindings.add(new RuleTrace.Binding("not " + String.join(" and ", list.get().typed()), "FILTER",
                     subject.name() + "." + list.get().column()));
             consumed.add(new int[]{excluding.start(), list.get().end()});
+            conditionSpans.add(new int[]{excluding.start(), list.get().end()});
         } else {
             Matcher notValue = NOT_VALUE.matcher(text);
             if (notValue.find()) {
@@ -499,6 +516,7 @@ public class QueryIntentParser {
                             + String.join(" and ", list.get().typed()), "FILTER",
                             subject.name() + "." + notColumn.get()));
                     consumed.add(new int[]{notValue.start(), list.get().end()});
+                    conditionSpans.add(new int[]{notValue.start(), list.get().end()});
                 }
             }
         }
@@ -519,12 +537,14 @@ public class QueryIntentParser {
             bindings.add(new RuleTrace.Binding(String.join(" and ", list.get().typed()), "FILTER",
                     subject.name() + "." + list.get().column()));
             consumed.add(new int[]{preposition.start(), list.get().end()});
+            conditionSpans.add(new int[]{preposition.start(), list.get().end()});
             break;
         }
 
         Matcher with = WITH_VALUE.matcher(text);
-        if (where.isEmpty() && with.find() && !VALUE_STOPWORDS.contains(with.group(1))
-                && !NON_COLUMN_WORDS.contains(with.group(1))) {
+        if (with.find() && !insideAny(with.start(1), conditionSpans) && !insideAny(with.start(), conditionSpans)
+                && !VALUE_STOPWORDS.contains(with.group(1)) && !NON_COLUMN_WORDS.contains(with.group(1))
+                && conditionSpans.stream().noneMatch(s -> s[0] >= with.start() && s[0] < with.end())) {
             Optional<String> withColumn = column(subject, with.group(1), interpretations);
             if (withColumn.isEmpty()) {
                 return RuleBuildResult.declined(
@@ -551,8 +571,34 @@ public class QueryIntentParser {
             }
             where.add(new QueryIntent.Predicate(qualify(withColumn.get(), subject, joined),
                     QueryIntent.Op.EQ, List.of(literalValue)));
+            conditionSpans.add(new int[]{with.start(), number.isPresent() ? with.start(2) + number.get().phrase().length() : with.end()});
             bindings.add(new RuleTrace.Binding(with.group(1) + " " + value, "FILTER",
                     subject.name() + "." + withColumn.get()));
+        }
+
+        boolean anyOf = false;
+        if (where.size() >= 2) {
+            List<int[]> ordered = new ArrayList<>(conditionSpans);
+            ordered.sort(java.util.Comparator.comparingInt(s -> s[0]));
+            boolean or = false;
+            boolean and = false;
+            for (int k = 0; k + 1 < ordered.size(); k++) {
+                String gap = text.substring(Math.min(ordered.get(k)[1], ordered.get(k + 1)[0]), ordered.get(k + 1)[0]);
+                or |= gap.matches(".*\\bor\\b.*");
+                and |= gap.matches(".*\\band\\b.*");
+            }
+            if (or && and) {
+                return RuleBuildResult.declined(
+                        "The question joins its conditions with both \"and\" and \"or\", so this engine can't tell "
+                                + "how they group.",
+                        bindings);
+            }
+            anyOf = or;
+        }
+        if (anyOf && joinSpec != null && joinSpec.kind() == QueryIntent.JoinKind.ANTI) {
+            return RuleBuildResult.declined(
+                    "The question combines \"or\" with \"without\", which this engine won't build.",
+                    bindings);
         }
 
         if (groupColumn != null) {
@@ -638,7 +684,7 @@ public class QueryIntentParser {
 
         QueryIntent intent = new QueryIntent(verb, subject.name(), joinSpec,
                 List.copyOf(selectItems), List.copyOf(where), List.copyOf(having),
-                List.copyOf(orderBy), limit, distinct, false);
+                List.copyOf(orderBy), limit, distinct, anyOf);
 
         String sql;
         try {
@@ -824,7 +870,7 @@ public class QueryIntentParser {
             }
             i += run.words();
             end = ends.get(i - 1);
-            if (i < array.length && "and".equals(array[i])) {
+            if (i < array.length && ("and".equals(array[i]) || "or".equals(array[i]))) {
                 i++;
                 continue;
             }

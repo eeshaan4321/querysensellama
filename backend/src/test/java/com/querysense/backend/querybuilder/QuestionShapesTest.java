@@ -183,4 +183,37 @@ class QuestionShapesTest {
     void whichTableIsNotDistinct() {
         assertThat(sql("which customers are in mumbai")).isEqualTo("SELECT * FROM customers WHERE city = 'mumbai';");
     }
+
+    @Test
+    @DisplayName("or inside a value list is IN; or between conditions is OR")
+    void or() {
+        assertThat(sql("customers in mumbai or pune")).isEqualTo("SELECT * FROM customers WHERE city IN ('mumbai', 'pune');");
+        assertThat(sql("customers in mumbai or with name asha"))
+                .isEqualTo("SELECT * FROM customers WHERE (city = 'mumbai' OR name = 'asha');");
+        assertThat(sql("products with price below 100 or price above 900"))
+                .isEqualTo("SELECT * FROM products WHERE (price < 100 OR price > 900);");
+    }
+
+    @Test
+    @DisplayName("every condition is used: a second comparison and a with-filter beside another filter (spec §3.8)")
+    void silentDropsFixed() {
+        assertThat(sql("products with price above 100 and price below 900"))
+                .isEqualTo("SELECT * FROM products WHERE price > 100 AND price < 900;");
+        assertThat(sql("customers in mumbai with name asha"))
+                .isEqualTo("SELECT * FROM customers WHERE city = 'mumbai' AND name = 'asha';");
+    }
+
+    @Test
+    @DisplayName("withInsideComparisonIsNotAFilter: 'with price at least 500' is one predicate")
+    void withInsideComparisonIsNotAFilter() {
+        assertThat(sql("products with price at least 500")).isEqualTo("SELECT * FROM products WHERE price >= 500;");
+    }
+
+    @Test
+    @DisplayName("and mixed with or between conditions declines; or with an anti-join declines")
+    void mixedDeclines() {
+        assertThat(declineReason("products with price below 100 or price above 900 and price below 950"))
+                .contains("both \"and\" and \"or\"");
+        assertThat(declineReason("customers in pune or with name asha without orders")).contains("without");
+    }
 }
