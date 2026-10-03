@@ -277,17 +277,18 @@ class MongoEmitterTest {
     }
 
     @Test
-    @DisplayName("a WHERE predicate on a joined table's column is refused; $match cannot see it before $lookup")
-    void whereOnJoinedTableColumnDeclines() {
+    @DisplayName("a WHERE predicate on a joined table's column is matched right after that table's $unwind")
+    void whereOnJoinedTableColumnMatchesAfterUnwind() {
         QueryIntent intent = new QueryIntent(QueryIntent.Verb.SELECT, "customers",
                 new JoinSpec("orders", col("customers", "_id"), col("orders", "customer_id")),
                 List.of(new SelectItem(Star.INSTANCE)),
                 List.of(new Predicate(col("orders", "status"), Op.EQ, List.of(Literal.text("shipped", "SHIPPED")))),
                 List.of(), List.of(), null);
 
-        assertThatThrownBy(() -> emitter.emit(intent))
-                .isInstanceOf(UnexpressibleIntentException.class)
-                .hasMessageContaining("status");
+        assertThat(emitter.emit(intent)).isEqualTo("db.customers.aggregate(["
+                + "{\"$lookup\": {\"from\": \"orders\", \"localField\": \"_id\", \"foreignField\": \"customer_id\", \"as\": \"orders\"}}, "
+                + "{\"$unwind\": \"$orders\"}, "
+                + "{\"$match\": {\"orders.status\": \"SHIPPED\"}}])");
     }
 
     @Test
@@ -310,12 +311,6 @@ class MongoEmitterTest {
                 select("orders",
                         List.of(new SelectItem(col("status")), new SelectItem(new Aggregate(Fn.COUNT, null))),
                         List.of(), List.of(new OrderItem(col("order_date"), Direction.ASC)), null),
-                new QueryIntent(QueryIntent.Verb.SELECT, "customers",
-                        new JoinSpec("orders", col("customers", "_id"), col("orders", "customer_id")),
-                        List.of(new SelectItem(Star.INSTANCE)),
-                        List.of(new Predicate(col("orders", "status"), Op.EQ,
-                                List.of(Literal.text("shipped", "SHIPPED")))),
-                        List.of(), List.of(), null),
                 select("orders",
                         List.of(new SelectItem(new Aggregate(Fn.SUM, col("items.quantity")))),
                         List.of(new Predicate(col("items.product_id"), Op.EQ, List.of(Literal.number(3)))),

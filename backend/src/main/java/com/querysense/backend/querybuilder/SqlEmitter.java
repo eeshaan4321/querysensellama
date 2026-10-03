@@ -19,23 +19,26 @@ public class SqlEmitter implements QueryEmitter {
     @Override
     public String emit(QueryIntent intent) {
         StringBuilder sql = new StringBuilder();
+        boolean countOnce = intent.distinct() && intent.selectItems().size() == 1
+                && intent.selectItems().get(0).operand() instanceof QueryIntent.Aggregate agg
+                && agg.fn() == QueryIntent.Fn.COUNT && agg.column() != null;
 
         if (intent.verb() == QueryIntent.Verb.DELETE) {
             sql.append("DELETE FROM ").append(intent.fromTable());
         } else {
-            sql.append(intent.distinct() ? "SELECT DISTINCT " : "SELECT ")
-                    .append(intent.selectItems().stream()
-                            .map(item -> operand(item.operand()))
-                            .collect(Collectors.joining(", ")))
+            sql.append(intent.distinct() && !countOnce ? "SELECT DISTINCT " : "SELECT ")
+                    .append(countOnce
+                            ? "COUNT(DISTINCT " + column(((QueryIntent.Aggregate) intent.selectItems().get(0).operand()).column()) + ")"
+                            : intent.selectItems().stream().map(item -> operand(item.operand())).collect(Collectors.joining(", ")))
                     .append(" FROM ")
                     .append(intent.fromTable());
         }
 
         boolean anti = intent.join() != null && intent.join().kind() == QueryIntent.JoinKind.ANTI;
-        if (intent.join() != null) {
-            sql.append(anti ? " LEFT JOIN " : " JOIN ").append(intent.join().table())
-                    .append(" ON ").append(column(intent.join().left()))
-                    .append(" = ").append(column(intent.join().right()));
+        for (QueryIntent.JoinSpec join : intent.joins()) {
+            sql.append(join.kind() == QueryIntent.JoinKind.ANTI ? " LEFT JOIN " : " JOIN ").append(join.table())
+                    .append(" ON ").append(column(join.left()))
+                    .append(" = ").append(column(join.right()));
         }
 
         List<String> conditions = new ArrayList<>();
@@ -51,7 +54,7 @@ public class SqlEmitter implements QueryEmitter {
             sql.append(" WHERE ").append(String.join(" AND ", conditions));
         }
 
-        if (intent.hasAggregate()) {
+        if (intent.hasAggregate() && !countOnce) {
             List<String> grouped = intent.selectItems().stream()
                     .filter(item -> !item.aggregated())
                     .map(item -> operand(item.operand()))

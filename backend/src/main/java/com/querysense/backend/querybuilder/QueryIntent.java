@@ -1,6 +1,7 @@
 package com.querysense.backend.querybuilder;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 
 /** A question resolved against the active schema, in a form any dialect's emitter can write. */
@@ -14,11 +15,27 @@ public record QueryIntent(
         List<OrderItem> orderBy,
         Integer limit,
         boolean distinct,
-        boolean anyOf) {
+        boolean anyOf,
+        List<JoinSpec> furtherJoins) {
 
     public QueryIntent(Verb verb, String fromTable, JoinSpec join, List<SelectItem> selectItems,
                        List<Predicate> where, List<Predicate> having, List<OrderItem> orderBy, Integer limit) {
         this(verb, fromTable, join, selectItems, where, having, orderBy, limit, false, false);
+    }
+
+    public QueryIntent(Verb verb, String fromTable, JoinSpec join, List<SelectItem> selectItems,
+                       List<Predicate> where, List<Predicate> having, List<OrderItem> orderBy, Integer limit,
+                       boolean distinct, boolean anyOf) {
+        this(verb, fromTable, join, selectItems, where, having, orderBy, limit, distinct, anyOf, List.of());
+    }
+
+    public List<JoinSpec> joins() {
+        List<JoinSpec> all = new ArrayList<>();
+        if (join != null) {
+            all.add(join);
+        }
+        all.addAll(furtherJoins);
+        return List.copyOf(all);
     }
 
     public enum Verb { SELECT, DELETE }

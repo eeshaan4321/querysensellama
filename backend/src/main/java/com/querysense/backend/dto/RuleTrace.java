@@ -9,10 +9,17 @@ public record RuleTrace(
         List<Binding> bindings,
         JoinEdge joinEdge,
         List<String> checksPassed,
-        String declineReason) {
+        String declineReason,
+        List<JoinEdge> joinEdges) {
 
     public static final String BUILT = "BUILT";
     public static final String DECLINED = "DECLINED";
+
+    public RuleTrace(String outcome, String shape, List<Binding> bindings, JoinEdge joinEdge,
+                     List<String> checksPassed, String declineReason) {
+        this(outcome, shape, bindings, joinEdge, checksPassed, declineReason,
+                joinEdge == null ? List.of() : List.of(joinEdge));
+    }
 
     public record Binding(String phrase, String kind, String resolvedTo) {}
 

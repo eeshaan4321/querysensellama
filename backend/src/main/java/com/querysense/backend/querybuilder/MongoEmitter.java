@@ -37,7 +37,10 @@ public class MongoEmitter implements QueryEmitter {
     @Override
     public String emit(QueryIntent intent) {
         String target = "db." + intent.fromTable();
-        Document filter = filter(intent, intent.where());
+        boolean orTouchesJoins = intent.anyOf() && intent.where().stream().anyMatch(p -> isJoined(intent, p));
+        List<QueryIntent.Predicate> basePredicates = orTouchesJoins ? List.of()
+                : intent.where().stream().filter(p -> !isJoined(intent, p)).toList();
+        Document filter = filter(intent, basePredicates);
 
         if (intent.verb() == QueryIntent.Verb.DELETE) {
             return target + ".deleteMany(" + json(filter) + ")";
@@ -46,7 +49,7 @@ public class MongoEmitter implements QueryEmitter {
         List<String> unwinds = intent.hasAggregate() ? embeddedArraysUsed(intent) : List.of();
         boolean bareCount = isBareCount(intent);
 
-        if (intent.join() == null && unwinds.isEmpty() && intent.having().isEmpty() && !intent.distinct()) {
+        if (intent.joins().isEmpty() && unwinds.isEmpty() && intent.having().isEmpty() && !intent.distinct()) {
             if (bareCount) {
                 return target + ".countDocuments(" + json(filter) + ")";
             }
@@ -81,8 +84,8 @@ public class MongoEmitter implements QueryEmitter {
         if (!filter.isEmpty()) {
             stages.add(new Document("$match", filter));
         }
-        if (intent.join() != null) {
-            QueryIntent.JoinSpec join = intent.join();
+        boolean orTouchesJoins = intent.anyOf() && intent.where().stream().anyMatch(p -> isJoined(intent, p));
+        for (QueryIntent.JoinSpec join : intent.joins()) {
             stages.add(new Document("$lookup", new Document("from", join.table())
                     .append("localField", field(intent, join.left()))
                     .append("foreignField", join.right().column())
@@ -90,12 +93,37 @@ public class MongoEmitter implements QueryEmitter {
             if (join.kind() == QueryIntent.JoinKind.ANTI) {
                 stages.add(new Document("$match", new Document(join.table(), new Document("$size", 0))));
                 stages.add(new Document("$project", new Document(join.table(), 0)));
-            } else {
-                stages.add(new Document("$unwind", "$" + join.table()));
+                continue;
             }
+            stages.add(new Document("$unwind", "$" + join.table()));
+            if (!orTouchesJoins) {
+                List<QueryIntent.Predicate> here = intent.where().stream()
+                        .filter(p -> join.table().equals(((QueryIntent.ColumnRef) p.lhs()).table()))
+                        .toList();
+                if (!here.isEmpty()) {
+                    stages.add(new Document("$match", matchDocument(here, p -> field(intent, (QueryIntent.ColumnRef) p.lhs()))));
+                }
+            }
+        }
+        if (orTouchesJoins) {
+            stages.add(new Document("$match", new Document("$or", intent.where().stream()
+                    .map(p -> new Document(field(intent, (QueryIntent.ColumnRef) p.lhs()), condition(p)))
+                    .toList())));
         }
         unwinds.forEach(array -> stages.add(new Document("$unwind", "$" + array)));
         if (intent.distinct()) {
+            boolean wholeSubject = intent.selectItems().stream().noneMatch(i -> i.operand() instanceof QueryIntent.ColumnRef);
+            if (wholeSubject) {
+                stages.add(new Document("$group", new Document("_id", "$_id").append("doc", new Document("$first", "$$ROOT"))));
+                stages.add(new Document("$replaceRoot", new Document("newRoot", "$doc")));
+                Document drop = new Document();
+                intent.joins().forEach(j -> drop.append(j.table(), 0));
+                stages.add(new Document("$project", drop));
+                if (intent.hasAggregate()) {
+                    stages.add(new Document("$count", "count"));
+                }
+                return stages;
+            }
             List<QueryIntent.ColumnRef> keys = groupKeys(intent);
             stages.add(new Document("$group", new Document("_id", groupId(intent, keys))));
             if (!intent.orderBy().isEmpty()) {
@@ -187,13 +215,12 @@ public class MongoEmitter implements QueryEmitter {
         return matchDocument(predicates, p -> field(intent, (QueryIntent.ColumnRef) p.lhs()));
     }
 
+    private static boolean isJoined(QueryIntent intent, QueryIntent.Predicate p) {
+        QueryIntent.ColumnRef ref = (QueryIntent.ColumnRef) p.lhs();
+        return ref.table() != null && !ref.table().equals(intent.fromTable());
+    }
+
     private void requireFilterable(QueryIntent intent, QueryIntent.ColumnRef ref) {
-        if (ref.table() != null && !ref.table().equals(intent.fromTable())) {
-            throw new UnexpressibleIntentException("The question filters on " + ref.table() + "."
-                    + ref.column() + ", a field of the connected " + ref.table() + ", but MongoDB would"
-                    + " apply that filter before the " + ref.table() + " are brought in, so this engine"
-                    + " won't build it.");
-        }
         if (!intent.hasAggregate()) {
             return;
         }
