@@ -12,7 +12,14 @@ public record QueryIntent(
         List<Predicate> where,
         List<Predicate> having,
         List<OrderItem> orderBy,
-        Integer limit) {
+        Integer limit,
+        boolean distinct,
+        boolean anyOf) {
+
+    public QueryIntent(Verb verb, String fromTable, JoinSpec join, List<SelectItem> selectItems,
+                       List<Predicate> where, List<Predicate> having, List<OrderItem> orderBy, Integer limit) {
+        this(verb, fromTable, join, selectItems, where, having, orderBy, limit, false, false);
+    }
 
     public enum Verb { SELECT, DELETE }
 
@@ -21,7 +28,7 @@ public record QueryIntent(
     public enum Direction { ASC, DESC }
 
     public enum Op {
-        EQ("="), GT(">"), GTE(">="), LT("<"), LTE("<="), IN("IN");
+        EQ("="), GT(">"), GTE(">="), LT("<"), LTE("<="), IN("IN"), NE("!="), NOT_IN("NOT IN"), BETWEEN("BETWEEN");
 
         private final String sql;
 
@@ -34,13 +41,17 @@ public record QueryIntent(
         }
     }
 
-    public sealed interface Operand permits ColumnRef, Aggregate, Star {}
+    public sealed interface Operand permits ColumnRef, Aggregate, Star, TableStar {}
 
     public record ColumnRef(String table, String column) implements Operand {}
 
     public record Aggregate(Fn fn, ColumnRef column) implements Operand {}
 
     public enum Star implements Operand { INSTANCE }
+
+    public record TableStar(String table) implements Operand {}
+
+    public enum JoinKind { INNER, ANTI }
 
     public record Literal(String text, boolean numeric, Object value) {
         public static Literal number(int n) {
@@ -74,7 +85,11 @@ public record QueryIntent(
 
     public record OrderItem(ColumnRef column, Direction direction) {}
 
-    public record JoinSpec(String table, ColumnRef left, ColumnRef right) {}
+    public record JoinSpec(String table, ColumnRef left, ColumnRef right, JoinKind kind) {
+        public JoinSpec(String table, ColumnRef left, ColumnRef right) {
+            this(table, left, right, JoinKind.INNER);
+        }
+    }
 
     public boolean hasAggregate() {
         return selectItems.stream().anyMatch(SelectItem::aggregated);

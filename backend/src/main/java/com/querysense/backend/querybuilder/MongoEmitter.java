@@ -46,7 +46,7 @@ public class MongoEmitter implements QueryEmitter {
         List<String> unwinds = intent.hasAggregate() ? embeddedArraysUsed(intent) : List.of();
         boolean bareCount = isBareCount(intent);
 
-        if (intent.join() == null && unwinds.isEmpty() && intent.having().isEmpty()) {
+        if (intent.join() == null && unwinds.isEmpty() && intent.having().isEmpty() && !intent.distinct()) {
             if (bareCount) {
                 return target + ".countDocuments(" + json(filter) + ")";
             }
@@ -87,9 +87,29 @@ public class MongoEmitter implements QueryEmitter {
                     .append("localField", field(intent, join.left()))
                     .append("foreignField", join.right().column())
                     .append("as", join.table())));
-            stages.add(new Document("$unwind", "$" + join.table()));
+            if (join.kind() == QueryIntent.JoinKind.ANTI) {
+                stages.add(new Document("$match", new Document(join.table(), new Document("$size", 0))));
+                stages.add(new Document("$project", new Document(join.table(), 0)));
+            } else {
+                stages.add(new Document("$unwind", "$" + join.table()));
+            }
         }
         unwinds.forEach(array -> stages.add(new Document("$unwind", "$" + array)));
+        if (intent.distinct()) {
+            List<QueryIntent.ColumnRef> keys = groupKeys(intent);
+            stages.add(new Document("$group", new Document("_id", groupId(intent, keys))));
+            if (!intent.orderBy().isEmpty()) {
+                Document sort = new Document();
+                for (QueryIntent.OrderItem o : intent.orderBy()) {
+                    sort.append(groupedPath(intent, keys, o.column()), direction(o));
+                }
+                stages.add(new Document("$sort", sort));
+            }
+            if (intent.limit() != null) {
+                stages.add(new Document("$limit", intent.limit()));
+            }
+            return stages;
+        }
 
         if (bareCount && intent.having().isEmpty()) {
             stages.add(new Document("$count", "count"));
@@ -158,6 +178,12 @@ public class MongoEmitter implements QueryEmitter {
         for (QueryIntent.Predicate p : predicates) {
             requireFilterable(intent, (QueryIntent.ColumnRef) p.lhs());
         }
+        if (intent.anyOf() && predicates.size() > 1) {
+            List<Document> branches = predicates.stream()
+                    .map(p -> new Document(field(intent, (QueryIntent.ColumnRef) p.lhs()), condition(p)))
+                    .toList();
+            return new Document("$or", branches);
+        }
         return matchDocument(predicates, p -> field(intent, (QueryIntent.ColumnRef) p.lhs()));
     }
 
@@ -212,6 +238,9 @@ public class MongoEmitter implements QueryEmitter {
             case GTE -> new Document("$gte", values.get(0));
             case LT -> new Document("$lt", values.get(0));
             case LTE -> new Document("$lte", values.get(0));
+            case NE -> new Document("$ne", values.get(0));
+            case NOT_IN -> new Document("$nin", values);
+            case BETWEEN -> new Document("$gte", values.get(0)).append("$lte", values.get(1));
         };
     }
 
@@ -320,6 +349,7 @@ public class MongoEmitter implements QueryEmitter {
                 case QueryIntent.ColumnRef c -> c;
                 case QueryIntent.Aggregate a -> a.column();
                 case QueryIntent.Star s -> null;
+                case QueryIntent.TableStar t -> null;
             };
             if (ref == null) {
                 continue;

@@ -3,6 +3,7 @@ package com.querysense.backend.querybuilder;
 import com.querysense.backend.dialect.Dialect;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -22,7 +23,7 @@ public class SqlEmitter implements QueryEmitter {
         if (intent.verb() == QueryIntent.Verb.DELETE) {
             sql.append("DELETE FROM ").append(intent.fromTable());
         } else {
-            sql.append("SELECT ")
+            sql.append(intent.distinct() ? "SELECT DISTINCT " : "SELECT ")
                     .append(intent.selectItems().stream()
                             .map(item -> operand(item.operand()))
                             .collect(Collectors.joining(", ")))
@@ -30,14 +31,24 @@ public class SqlEmitter implements QueryEmitter {
                     .append(intent.fromTable());
         }
 
+        boolean anti = intent.join() != null && intent.join().kind() == QueryIntent.JoinKind.ANTI;
         if (intent.join() != null) {
-            sql.append(" JOIN ").append(intent.join().table())
+            sql.append(anti ? " LEFT JOIN " : " JOIN ").append(intent.join().table())
                     .append(" ON ").append(column(intent.join().left()))
                     .append(" = ").append(column(intent.join().right()));
         }
 
+        List<String> conditions = new ArrayList<>();
         if (!intent.where().isEmpty()) {
-            sql.append(" WHERE ").append(renderAll(intent.where()));
+            conditions.add(intent.anyOf() && intent.where().size() > 1
+                    ? "(" + render(intent.where(), " OR ") + ")"
+                    : render(intent.where(), " AND "));
+        }
+        if (anti) {
+            conditions.add(column(intent.join().right()) + " IS NULL");
+        }
+        if (!conditions.isEmpty()) {
+            sql.append(" WHERE ").append(String.join(" AND ", conditions));
         }
 
         if (intent.hasAggregate()) {
@@ -51,7 +62,7 @@ public class SqlEmitter implements QueryEmitter {
         }
 
         if (!intent.having().isEmpty()) {
-            sql.append(" HAVING ").append(renderAll(intent.having()));
+            sql.append(" HAVING ").append(render(intent.having(), " AND "));
         }
 
         if (!intent.orderBy().isEmpty()) {
@@ -67,6 +78,24 @@ public class SqlEmitter implements QueryEmitter {
         return sql.append(";").toString();
     }
 
+    private String render(List<QueryIntent.Predicate> predicates, String joiner) {
+        return predicates.stream().map(this::predicate).collect(Collectors.joining(joiner));
+    }
+
+    private String predicate(QueryIntent.Predicate p) {
+        String lhs = operand(p.lhs());
+        return switch (p.op()) {
+            case IN -> lhs + " IN " + p.values().stream()
+                    .map(v -> "'" + v.text() + "'")
+                    .collect(Collectors.joining(", ", "(", ")"));
+            case NOT_IN -> lhs + " NOT IN " + p.values().stream()
+                    .map(SqlEmitter::literal)
+                    .collect(Collectors.joining(", ", "(", ")"));
+            case BETWEEN -> lhs + " BETWEEN " + literal(p.values().get(0)) + " AND " + literal(p.values().get(1));
+            default -> lhs + " " + p.op().sql() + " " + literal(p.values().get(0));
+        };
+    }
+
     public static String column(QueryIntent.ColumnRef ref) {
         return ref.table() == null ? ref.column() : ref.table() + "." + ref.column();
     }
@@ -74,26 +103,11 @@ public class SqlEmitter implements QueryEmitter {
     private static String operand(QueryIntent.Operand operand) {
         return switch (operand) {
             case QueryIntent.Star star -> "*";
+            case QueryIntent.TableStar star -> star.table() + ".*";
             case QueryIntent.ColumnRef ref -> column(ref);
             case QueryIntent.Aggregate agg -> agg.fn().name() + "("
                     + (agg.column() == null ? "*" : column(agg.column())) + ")";
         };
-    }
-
-    private String renderAll(List<QueryIntent.Predicate> predicates) {
-        return predicates.stream()
-                .map(this::predicate)
-                .collect(Collectors.joining(" AND "));
-    }
-
-    private String predicate(QueryIntent.Predicate p) {
-        String lhs = operand(p.lhs());
-        if (p.op() == QueryIntent.Op.IN) {
-            return lhs + " IN " + p.values().stream()
-                    .map(v -> "'" + v.text() + "'")
-                    .collect(Collectors.joining(", ", "(", ")"));
-        }
-        return lhs + " " + p.op().sql() + " " + literal(p.values().get(0));
     }
 
     private static String literal(QueryIntent.Literal literal) {
