@@ -822,7 +822,7 @@ It was built in eight steps, each recorded as a session in §7, from
 The live checklists in the step 4–8 sessions in §7 are the outstanding
 checks.
 
-### A rule engine that adapts to any schema — all four sub-projects designed and planned 2026-10-02; sub-projects 1 and 2 built 2026-10-03
+### A rule engine that adapts to any schema — all four sub-projects designed and planned 2026-10-02; sub-projects 1–3 built 2026-10-03
 
 The rule engine already binds to whatever schema is active (§2). These four
 sub-projects lift the limits where it still expects particular words or
@@ -832,8 +832,8 @@ run in this order, each with its own spec, plan and commits:
 | # | Sub-project | Status |
 |---|---|---|
 | 1 | **Vocabulary:** declared aliases, built-in synonyms, one-letter typos, irregular plurals, multi-word values, numbers beyond ten | **Built 2026-10-03** (`4744bfe`..`9b0bedf`, docs after). Spec `docs/superpowers/specs/2026-10-02-rule-engine-vocabulary-design.md`; plan `docs/superpowers/plans/2026-10-02-rule-engine-vocabulary.md`. |
-| 2 | **Question shapes:** ranking and superlatives, `at least`/`at most`/`between`, not-equal and exclusion, `without` (anti-join), DISTINCT, OR across conditions, several totals | **Built 2026-10-03** (`898b54b`..`0212c54`, docs after). Spec `docs/superpowers/specs/2026-10-02-rule-engine-question-shapes-design.md`; plan `docs/superpowers/plans/2026-10-02-rule-engine-question-shapes.md`. Sub-project 3 (joins) is next. |
-| 3 | **Joins across up to four tables:** the shortest chain of declared foreign keys, filters on any table in it | **Planned.** Spec `docs/superpowers/specs/2026-10-02-rule-engine-multi-table-joins-design.md`; plan `docs/superpowers/plans/2026-10-02-rule-engine-multi-table-joins.md`, 5 tasks + reconcile. Not started. |
+| 2 | **Question shapes:** ranking and superlatives, `at least`/`at most`/`between`, not-equal and exclusion, `without` (anti-join), DISTINCT, OR across conditions, several totals | **Built 2026-10-03** (`898b54b`..`0212c54`, docs after). Spec `docs/superpowers/specs/2026-10-02-rule-engine-question-shapes-design.md`; plan `docs/superpowers/plans/2026-10-02-rule-engine-question-shapes.md`. |
+| 3 | **Joins across up to four tables:** the shortest chain of declared foreign keys, filters on any table in it | **Built 2026-10-03** (`553dbd0`..`f12e0f2`, docs after). Spec `docs/superpowers/specs/2026-10-02-rule-engine-multi-table-joins-design.md`; plan `docs/superpowers/plans/2026-10-02-rule-engine-multi-table-joins.md`. Sub-project 4 (dates) is next. |
 | 4 | **Dates:** relative, named, single and ranged dates as real ranges, plus recency superlatives; replaces E3 | **Planned.** Spec `docs/superpowers/specs/2026-10-02-rule-engine-dates-design.md`; plan `docs/superpowers/plans/2026-10-02-rule-engine-dates.md`, 5 tasks + reconcile. Not started. |
 
 **Order and dependency.** The plans run in order 1 → 2 → 3 → 4. Each later
@@ -2315,6 +2315,59 @@ can't be fixed in place. Nothing else in that database is touched.
 
 **Not verified:** the startup listener against a real interrupted seeding.
 The marker logic is unit-tested with a mocked client only.
+
+### Session of 2026-10-03 — rule engine joins across up to four tables (sub-project 3 of 4)
+
+Plan: `docs/superpowers/plans/2026-10-02-rule-engine-multi-table-joins.md`,
+executed inline, test first, one commit per task.
+
+| Task | What | Commit |
+|---|---|---|
+| 1 | `JoinPathResolver.resolveChain`: the shortest chain of declared keys, at most four tables | `553dbd0` |
+| 2 | `QueryIntent.furtherJoins`, `RuleTrace.joinEdges`; one `JOIN` per edge; MongoDB filters a joined collection right after its `$lookup`; each subject once | `905853d` |
+| 3 | The parser joins up to four tables along the chain; tables passed through are named | `be99ead` |
+| 4 | Columns and values bind across the chain; `orders of customers` and `ordered by customers` are no longer read as a column or a sort | `f12e0f2` |
+| 5 | The rule trace lists every edge; parity cases; this record | (docs commit) |
+
+**Departures from the spec, on purpose (from the plan):**
+1. `QueryIntent` keeps `join` and gains `furtherJoins`, rather than replacing
+   `join` with a list, so no existing constructor call becomes ambiguous.
+2. No table-qualified column reading (`customer city`), per the revised
+   spec §5.
+
+**The one intended change to an existing build (spec §7):** with two
+tables, a comparison on a column only the joined table has (`orders with
+payments amount over 100`) used to build `HAVING COUNT(payments.id) > 100`.
+It now builds `WHERE payments.amount > 100`, with each order once.
+
+**Rulings made while executing:**
+- `MongoEmitterTest.whereOnJoinedTableColumnDeclines` asserted the refusal
+  spec §6 removes. It is now `whereOnJoinedTableColumnMatchesAfterUnwind`.
+- `twoTableQuestionUnchanged` was pinned to the real HAVING shape, as in
+  sub-project 2.
+- `show orders with products` now builds in MySQL through `order_items`, as
+  spec §3 intends. Its documented-difference test now says both dialects
+  build, by different routes.
+- `orders, customers and products together` builds as a four-table chain,
+  so it left `DeclineBoundaryTest`'s must-decline list.
+- **New documented difference:** `customers and suppliers` builds in MongoDB.
+  The embedded `items.product_id` makes that chain four collections long,
+  while MySQL needs `order_items` too (five tables) and declines. The plan
+  expected both to decline. The MongoDB-decline lists now use `departments
+  and suppliers`.
+
+**Tests:** backend 827/827, frontend 103/103, `npm run lint` clean,
+`npm run build` succeeds.
+
+**Not run in the app:** no screen was opened and no question was sent to
+Ollama. Live checklist:
+1. Workbench, MySQL: `customers and products` builds three `JOIN`s; Analysis
+   lists three edges and "through orders, order_items".
+2. `orders of customers in mumbai` builds `SELECT DISTINCT orders.* … WHERE
+   customers.city = 'Mumbai'`; `how many orders of customers in mumbai`
+   counts distinct orders. EXPLAIN both.
+3. The same on MongoDB builds the `$lookup`/`$unwind`/`$match`/`$group`
+   pipeline. Run it in mongosh and check each order appears once.
 
 ### Session of 2026-10-03 — rule engine question shapes (sub-project 2 of 4)
 

@@ -90,4 +90,21 @@ describe('RuleTracePanel', () => {
     expect(screen.getByText('one letter off')).toBeInTheDocument();
     expect(screen.getByText('alias declared by the schema')).toBeInTheDocument();
   });
+
+  it('lists every edge of a multi-table chain', () => {
+    const edge = (fromTable, fromColumn, toTable) => ({ fromTable, fromColumn, toTable, toColumn: 'id', origin: 'declared foreign key' });
+    render(
+      <RuleTracePanel
+        handledBy="RULE_ENGINE"
+        trace={{
+          outcome: 'BUILT', shape: 'SELECT + JOIN', bindings: [], checksPassed: [], declineReason: null,
+          joinEdge: edge('orders', 'customer_id', 'customers'),
+          joinEdges: [edge('orders', 'customer_id', 'customers'), edge('order_items', 'order_id', 'orders')],
+        }}
+      />
+    );
+
+    expect(screen.getByText('order_items.order_id')).toBeInTheDocument();
+    expect(screen.getByText('orders.customer_id')).toBeInTheDocument();
+  });
 });

@@ -917,7 +917,7 @@ public class QueryIntentParser {
     private ValueRun valueRun(KnownSchema.Table table, String[] words, int from, SchemaMetadata metadata,
                              String onlyColumn) {
         for (int n = Math.min(LONGEST_VALUE_WORDS, words.length - from); n >= 1; n--) {
-            String phrase = String.join(" ", java.util.Arrays.copyOfRange(words, from, from + n));
+            String phrase = String.join(" ", Arrays.copyOfRange(words, from, from + n));
             List<ValueMatch> matches = columnsHolding(table, phrase, metadata).stream()
                     .filter(m -> onlyColumn == null || m.column().equals(onlyColumn)).toList();
             if (matches.size() > 1) {

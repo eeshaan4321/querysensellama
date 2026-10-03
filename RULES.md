@@ -24,7 +24,7 @@ lowercased before it is read.
 | Query rewrite | 4 | RW1–RW4 (RW4 MongoDB only) | `optimization/QueryRewriter`, `optimization/MongoQueryRewriter` |
 | **Total** | **67** | | |
 
-**The rule engine has 30 rules.** Of those, 34 are conditions under which it
+**The rule engine has 30 rules.** Of those, 37 are conditions under which it
 refuses a question and hands it to the language model. The other 37 rules
 belong to the modules that analyse and optimise a query after it has been
 generated. None of the 67 uses a model.
@@ -123,10 +123,11 @@ The rules run in the order below. The first decline stops the build.
   order items` matched `orders` on the word "order", and `order_items` could
   never match at all, because nobody types an underscore. Letting the
   longest match win fixes both.
-- **Declines when:** no table matches, or more than two do. The engine
-  joins two tables at most.
+- **Declines when:** no table matches, or more than four do. Since
+  2026-10-03 (sub-project 3) the engine joins up to four tables (E6); until
+  then it joined two at most.
 - **Example:** `show all order items` → `order_items`. `customers, orders
-  and payments` → declined (three tables).
+  and payments` → three tables, joined along their declared keys (E6).
 - **Vocabulary, added 2026-10-03 (sub-project 1):** a table is also reached
   by:
   - an alias the schema declares (`aka:` in a comment or description, or an
@@ -191,11 +192,30 @@ one of five kinds, strictest first:
 - The synonym list holds no word the parser reads as an instruction
   (`count`, `total`, `top` …); `SynonymListTest` enforces it.
 
-#### E6 · Joins come from a declared foreign key
-- **What it does:** when two tables are named, looks for the declared foreign
-  keys that link them and writes `JOIN … ON` from the one it finds.
-  Foreign keys that point back at their own table (`employees.manager_id →
-  employees.id`) are ignored.
+#### E6 · Joins come from declared foreign keys, along the shortest chain
+- **What it does:** when two or more tables are named, it follows the
+  **shortest chain of declared foreign keys** from the subject (the first
+  table named) to each other named table, at most three keys long, and writes
+  one `JOIN … ON` per key. Tables the chain passes through are joined too and
+  named in the trace ("through orders"). The whole chain may hold at most
+  four tables. Two directly linked tables give exactly the join they always
+  did. Foreign keys that point back at their own table
+  (`employees.manager_id → employees.id`) are ignored.
+- **Since 2026-10-03 (sub-project 3):**
+  - **Columns and values across the chain.** A column phrase binds in the
+    subject first, then in the other chain tables in order; a stored value
+    is searched the same way. One fitting table qualifies it; two decline,
+    naming both (`"name" could mean products.name or categories.name, so this
+    engine won't pick one.`).
+  - **Each subject row once.** When a filter sits on a joined table and only
+    the subject's rows are asked for, the result is `SELECT DISTINCT
+    subject.*`, and a count is `COUNT(DISTINCT subject.<key>)`. MongoDB
+    filters each joined collection right after its `$lookup` and then keeps
+    one document per subject.
+  - **Phrases that name a table are not columns.** `orders of customers` is
+    not a request for a column called "orders", and `products ordered by
+    customers` is not a sort.
+  - An anti-join (E27) still needs one direct key.
 - **Why:** the `ON` clause is the easiest part of a join to get wrong and the
   hardest to spot. Reading it from the schema's own constraints, never
   guessing from a name like `client_id`, is what makes a rule-built join
@@ -203,14 +223,23 @@ one of five kinds, strictest first:
   because "employees and their managers" and "managers and their reports"
   need opposite sides of the key, and nothing in the wording says which one
   is meant.
-- **Declines when:** the schema declares **no** key between the two
-  tables, or **more than one**. Example: `orders.billing_address_id` and
-  `orders.shipping_address_id` both point at `addresses`. Here "orders with
-  addresses" has two right answers, so the engine declines instead of
-  picking one.
+- **Declines when:**
+  - there is **no** chain within four tables (`The schema declares no
+    relationship between …` for two tables, `… no chain of relationships
+    linking … within four tables` for more);
+  - the chain would need **more than four** tables;
+  - two chains are **equally short**: two keys between the same pair
+    (`orders.billing_address_id` and `orders.shipping_address_id` both point
+    at `addresses`, so "orders with addresses" has two right answers), or two
+    different routes of the same length (`There are two equally short ways to
+    connect …`).
 - **Example:** `which customers placed more than three orders` → `customers
   JOIN orders ON customers.id = orders.customer_id`. `customers and products`
-  → declined (no direct key).
+  → `customers JOIN orders … JOIN order_items … JOIN products …` (until
+  2026-10-03 this declined, because there is no direct key).
+- **Documented difference:** in the MongoDB demo, orders embed
+  `items.product_id`, so `customers and suppliers` is a four-collection chain
+  and builds, while MySQL needs `order_items` too (five tables) and declines.
 
 #### E23 · A second unbound noun declines, naming it
 - **Added 2026-09-26.** Runs here, right after table binding and before the
@@ -341,6 +370,13 @@ one of five kinds, strictest first:
   compares two counts, which this engine won't combine.` The operators gain
   `at least`, `no less than` (`>=`) and `at most`, `no more than`, `up to`
   (`<=`); see E25.
+- **A column only the joined table has, since 2026-10-03 (sub-project 3).**
+  Until then, with two tables, a comparison on a column found only in the
+  related table (`orders with payments amount over 100`) built a `HAVING
+  COUNT(…)` on the related table, which counts rows rather than comparing the
+  column. It now filters that column: `WHERE payments.amount > 100`. A word
+  that is no column of any chain table keeps the count reading, counting the
+  last table named.
 
 #### E14 · Filter checked against the data
 - **What it does:** takes the word after `from`, `in`, `at`, `located in`,
@@ -556,12 +592,12 @@ alike.
   layer passed. Without the trace, "rule-based and explainable" is a claim;
   with it, it can be checked. The Analysis screen shows it.
 
-### The 34 ways the rule engine declines
+### The 37 ways the rule engine declines
 
 | Group | Count | Rules |
 |---|---|---|
 | Gates | 3 | E1 empty · E2 dialect · E3 date expression |
-| Tables and joins | 4 | E4 no table · E4 more than two tables · E6 no foreign key · E6 two or more foreign keys |
+| Tables and joins | 5 | E4 no table · E4 more than four tables · E6 no chain within four tables · E6 two equally short chains · E6 a chain needing more than four tables |
 | A second noun binds to nothing | 1 | E23 |
 | Delete across a join | 1 | E7 |
 | A named thing matches no column | 7 | E9 · E10 · E11 · E12 · E13 · E14 · E19 |
@@ -576,6 +612,7 @@ alike.
 | An exclusion with no stored value after it, by value or by column | 2 | E26 |
 | Without: no second table, or combined with a count | 2 | E27 |
 | `and` and `or` mixed between conditions, or `or` with `without` | 2 | E29 |
+| A column, or a stored value, on two chain tables | 2 | E6 |
 
 ---
 

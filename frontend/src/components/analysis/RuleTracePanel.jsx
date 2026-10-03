@@ -56,22 +56,18 @@ export function RuleTracePanel({ trace, handledBy, interpretations = [] }) {
             </div>
           )}
 
-          {trace.joinEdge && (
-            <p className="rule-trace__join">
+          {(trace.joinEdges?.length ? trace.joinEdges : trace.joinEdge ? [trace.joinEdge] : []).map((edge, i) => (
+            <p className="rule-trace__join" key={i}>
               <span className="rule-trace__join-edge">
-                <code>
-                  {trace.joinEdge.fromTable}.{trace.joinEdge.fromColumn}
-                </code>
+                <code>{edge.fromTable}.{edge.fromColumn}</code>
                 <span aria-hidden="true"> → </span>
-                <code>
-                  {trace.joinEdge.toTable}.{trace.joinEdge.toColumn}
-                </code>
+                <code>{edge.toTable}.{edge.toColumn}</code>
               </span>
               <span className="rule-trace__origin">
-                read from your schema&rsquo;s {trace.joinEdge.origin}, not inferred
+                read from your schema&rsquo;s {edge.origin}, not inferred
               </span>
             </p>
-          )}
+          ))}
 
           {trace.bindings?.length > 0 && (
             <dl className="rule-trace__bindings">

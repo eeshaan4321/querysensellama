@@ -78,6 +78,11 @@ class DialectParityTest {
             "distinct cities of customers",
             "customers in mumbai or pune",
             "average and highest price of products",
+            "employees and customers",
+            "customers and products",
+            "orders of customers in mumbai",
+            "how many orders of customers in mumbai",
+            "orders and customers sorted by city",
     })
     void sameOutcome(String question) {
         RuleBuildResult mysql = parser.parse(question, Dialect.MYSQL);
