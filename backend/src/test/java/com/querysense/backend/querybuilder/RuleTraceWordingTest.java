@@ -74,7 +74,7 @@ class RuleTraceWordingTest {
                 "orders with status shipped",
                 "total amount of payments per method",
                 "show all order items",
-                "customers and suppliers",
+                "departments and suppliers",
                 "delete all customers");
 
         for (String input : inputs) {

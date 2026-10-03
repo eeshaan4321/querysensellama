@@ -53,7 +53,6 @@ class DialectParityTest {
             "delete customers in pune",
             "delete all customers",
             "orders from last month",
-            "customers and suppliers",
             "orders, customers and products together",
             "show me everything interesting",
             "customers sorted by flurb",
@@ -101,11 +100,20 @@ class DialectParityTest {
 
     @ParameterizedTest(name = "{0}")
     @DisplayName("documented difference: MongoDB reaches products through orders.items.product_id,"
-            + " a reference MySQL has only via the order_items table, so MySQL finds no direct relationship")
+            + " while MySQL goes through the order_items table; both build")
     @ValueSource(strings = {"show orders with products", "show products and orders"})
     void embeddedReferenceJoinsDiffer(String question) {
-        assertThat(parser.parse(question, Dialect.MYSQL).built()).isFalse();
+        assertThat(parser.parse(question, Dialect.MYSQL).sql()).contains("JOIN order_items");
         assertThat(parser.parse(question, Dialect.MONGODB).sql()).contains("items.product_id");
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @DisplayName("documented difference: the embedded reference makes MongoDB's customers-to-suppliers chain"
+            + " four collections long, while MySQL's runs through order_items to five tables and declines")
+    @ValueSource(strings = {"customers and suppliers"})
+    void embeddedReferenceShortensChains(String question) {
+        assertThat(parser.parse(question, Dialect.MYSQL).built()).isFalse();
+        assertThat(parser.parse(question, Dialect.MONGODB).sql()).contains("\"from\": \"suppliers\"");
     }
 
     @ParameterizedTest(name = "{0}")

@@ -42,7 +42,6 @@ class DeclineBoundaryTest {
             "list the top 5 punters by total spend",
             "list the top 5 buyers by total spend",
             "customers and suppliers",
-            "orders, customers and products together",
             "delete all customers",
             "average of the flurb of customers",
             "how many customers are there per flurb",
@@ -57,7 +56,7 @@ class DeclineBoundaryTest {
 
     @ParameterizedTest
     @DisplayName("MongoDB declines the same questions MySQL does")
-    @ValueSource(strings = {"orders from last month", "customers and suppliers", "delete all customers"})
+    @ValueSource(strings = {"orders from last month", "departments and suppliers", "delete all customers"})
     void mongoDeclinesWhatMysqlDeclines(String input) {
         assertThat(builder.build(input, "MongoDB").built()).as("input: %s", input).isFalse();
     }

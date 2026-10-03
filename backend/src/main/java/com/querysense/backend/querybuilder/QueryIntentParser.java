@@ -16,6 +16,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /** Parses a natural-language question into a QueryIntent. */
 @Component
@@ -211,9 +213,9 @@ public class QueryIntentParser {
                     "Nothing in the question matches a table in the schema that is currently active.",
                     bindings);
         }
-        if (tables.size() > 2) {
+        if (tables.size() > JoinPathResolver.MAX_TABLES) {
             return RuleBuildResult.declined(
-                    "The question names " + tables.size() + " tables. This engine joins two at most.",
+                    "The question names " + tables.size() + " tables. This engine joins four at most.",
                     bindings);
         }
         tables.forEach(t -> bindings.add(new RuleTrace.Binding(t.name(), "TABLE", t.name())));
@@ -260,38 +262,51 @@ public class QueryIntentParser {
         KnownSchema.Table subject = tables.get(0);
         String subjectPhrase = tableMatches.hits().get(0).binding().phrase();
         boolean singular = !subjectPhrase.endsWith("s");
-        KnownSchema.Table related = tables.size() == 2 ? tables.get(1) : null;
+        KnownSchema.Table related = tables.size() >= 2 ? tables.get(tables.size() - 1) : null;
 
         QueryIntent.JoinSpec joinSpec = null;
-        RuleTrace.JoinEdge joinEdge = null;
+        List<QueryIntent.JoinSpec> furtherJoins = new ArrayList<>();
+        List<RuleTrace.JoinEdge> joinEdges = new ArrayList<>();
+        List<KnownSchema.Table> chainTables = new ArrayList<>(List.of(subject));
         if (related != null) {
-            JoinPathResolver.JoinResolution resolution = joins.resolve(subject.name(), related.name(), dialect);
-            if (resolution instanceof JoinPathResolver.None) {
-                return RuleBuildResult.declined(
-                        "The schema declares no relationship between " + subject.name() + " and "
-                                + related.name() + ", so there is no reliable way to connect them.",
-                        bindings);
-            }
-            if (resolution instanceof JoinPathResolver.Ambiguous ambiguous) {
-                String columns = ambiguous.edges().stream()
-                        .map(KnownSchema.ForeignKey::fromColumn)
-                        .reduce((a, b) -> a + " and " + b)
-                        .orElse("");
-                return RuleBuildResult.declined(
-                        "There is more than one way to connect " + subject.name() + " and "
-                                + related.name() + " (" + columns + "), and the question does not "
-                                + "say which one it means.",
-                        bindings);
-            }
-            KnownSchema.ForeignKey edge = ((JoinPathResolver.Resolved) resolution).edge();
-            joinSpec = joinSpecFor(edge, subject, related);
+            List<KnownSchema.ForeignKey> edges;
             if (anti) {
-                joinSpec = new QueryIntent.JoinSpec(joinSpec.table(), joinSpec.left(), joinSpec.right(),
-                        QueryIntent.JoinKind.ANTI);
+                JoinPathResolver.JoinResolution direct = joins.resolve(subject.name(), related.name(), dialect);
+                edges = direct instanceof JoinPathResolver.Resolved resolved ? List.of(resolved.edge()) : null;
+                if (edges == null) {
+                    return declineFor(direct, subject, related, bindings);
+                }
+            } else {
+                JoinPathResolver.ChainResolution chain = joins.resolveChain(subject.name(),
+                        tables.subList(1, tables.size()).stream().map(KnownSchema.Table::name).toList(), dialect);
+                if (!(chain instanceof JoinPathResolver.Chain found)) {
+                    return declineFor(chain, subject, tables, bindings);
+                }
+                edges = found.edges();
             }
-            joinEdge = new RuleTrace.JoinEdge(edge.fromTable(), edge.fromColumn(),
-                    edge.toTable(), edge.toColumn(), JOIN_ORIGIN);
+            for (KnownSchema.ForeignKey edge : edges) {
+                boolean fromKnown = chainTables.stream().anyMatch(t -> t.name().equalsIgnoreCase(edge.fromTable()));
+                String knownTable = fromKnown ? edge.fromTable() : edge.toTable();
+                String knownColumn = fromKnown ? edge.fromColumn() : edge.toColumn();
+                String newTable = fromKnown ? edge.toTable() : edge.fromTable();
+                String newColumn = fromKnown ? edge.toColumn() : edge.fromColumn();
+                QueryIntent.JoinSpec spec = new QueryIntent.JoinSpec(newTable,
+                        new QueryIntent.ColumnRef(knownTable, knownColumn), new QueryIntent.ColumnRef(newTable, newColumn),
+                        anti ? QueryIntent.JoinKind.ANTI : QueryIntent.JoinKind.INNER);
+                if (joinSpec == null) {
+                    joinSpec = spec;
+                } else {
+                    furtherJoins.add(spec);
+                }
+                joinEdges.add(new RuleTrace.JoinEdge(edge.fromTable(), edge.fromColumn(), edge.toTable(),
+                        edge.toColumn(), JOIN_ORIGIN));
+                binder.tableNamed(newTable, dialect).ifPresent(chainTables::add);
+                if (tables.stream().noneMatch(t -> t.name().equalsIgnoreCase(newTable))) {
+                    bindings.add(new RuleTrace.Binding(newTable, "THROUGH", newTable));
+                }
+            }
         }
+        RuleTrace.JoinEdge joinEdge = joinEdges.isEmpty() ? null : joinEdges.get(0);
 
         boolean joined = joinSpec != null;
         QueryIntent.Verb verb = LEADING_DELETE.matcher(text).find()
@@ -737,7 +752,7 @@ public class QueryIntentParser {
 
         QueryIntent intent = new QueryIntent(verb, subject.name(), joinSpec,
                 List.copyOf(selectItems), List.copyOf(where), List.copyOf(having),
-                List.copyOf(orderBy), limit, distinct, anyOf);
+                List.copyOf(orderBy), limit, distinct, anyOf, List.copyOf(furtherJoins));
 
         String sql;
         try {
@@ -750,8 +765,9 @@ public class QueryIntentParser {
                 shapeOf(intent),
                 List.copyOf(bindings),
                 joinEdge,
-                checksFor(joined),
-                null);
+                checksFor(joined, joinEdges.size()),
+                null,
+                List.copyOf(joinEdges));
         return RuleBuildResult.built(sql, trace, interpretations);
     }
 
@@ -789,16 +805,46 @@ public class QueryIntentParser {
         return String.join(", ", items.subList(0, items.size() - 1)) + " " + conjunction + " " + items.get(items.size() - 1);
     }
 
-    private QueryIntent.JoinSpec joinSpecFor(KnownSchema.ForeignKey edge,
-                                             KnownSchema.Table subject,
-                                             KnownSchema.Table related) {
-        boolean subjectIsTarget = edge.toTable().equalsIgnoreCase(subject.name());
-        String subjectColumn = subjectIsTarget ? edge.toColumn() : edge.fromColumn();
-        String relatedColumn = subjectIsTarget ? edge.fromColumn() : edge.toColumn();
-        return new QueryIntent.JoinSpec(
-                related.name(),
-                new QueryIntent.ColumnRef(subject.name(), subjectColumn),
-                new QueryIntent.ColumnRef(related.name(), relatedColumn));
+    private RuleBuildResult declineFor(JoinPathResolver.JoinResolution resolution, KnownSchema.Table subject,
+                                       KnownSchema.Table related, List<RuleTrace.Binding> bindings) {
+        if (resolution instanceof JoinPathResolver.Ambiguous ambiguous) {
+            String columns = ambiguous.edges().stream().map(KnownSchema.ForeignKey::fromColumn)
+                    .reduce((a, b) -> a + " and " + b).orElse("");
+            return RuleBuildResult.declined("There is more than one way to connect " + subject.name() + " and "
+                    + related.name() + " (" + columns + "), and the question does not say which one it means.", bindings);
+        }
+        return RuleBuildResult.declined("The schema declares no relationship between " + subject.name() + " and "
+                + related.name() + ", so there is no reliable way to connect them.", bindings);
+    }
+
+    private RuleBuildResult declineFor(JoinPathResolver.ChainResolution chain, KnownSchema.Table subject,
+                                       List<KnownSchema.Table> tables, List<RuleTrace.Binding> bindings) {
+        if (chain instanceof JoinPathResolver.AmbiguousChain ambiguous) {
+            if (ambiguous.paths().stream().allMatch(p -> p.size() == 1)) {
+                String columns = ambiguous.paths().stream().map(p -> p.get(0).fromColumn())
+                        .reduce((a, b) -> a + " and " + b).orElse("");
+                return RuleBuildResult.declined("There is more than one way to connect " + subject.name() + " and "
+                        + ambiguous.table() + " (" + columns + "), and the question does not say which one it means.",
+                        bindings);
+            }
+            String ways = ambiguous.paths().stream().map(p -> "through " + p.stream()
+                            .flatMap(e -> Stream.of(e.fromTable(), e.toTable()))
+                            .filter(t -> !t.equalsIgnoreCase(subject.name()) && !t.equalsIgnoreCase(ambiguous.table()))
+                            .distinct().collect(Collectors.joining(" and ")))
+                    .collect(Collectors.joining(", or "));
+            return RuleBuildResult.declined("There are two equally short ways to connect " + subject.name() + " and "
+                    + ambiguous.table() + " (" + ways + "), and the question doesn't say which one it means.", bindings);
+        }
+        if (chain instanceof JoinPathResolver.TooFar tooFar) {
+            return RuleBuildResult.declined("Connecting these tables needs " + tooFar.tables()
+                    + " tables. This engine joins four at most.", bindings);
+        }
+        String missing = ((JoinPathResolver.NoChain) chain).table();
+        return tables.size() == 2
+                ? RuleBuildResult.declined("The schema declares no relationship between " + subject.name() + " and "
+                        + missing + ", so there is no reliable way to connect them.", bindings)
+                : RuleBuildResult.declined("The schema declares no chain of relationships linking " + subject.name()
+                        + " and " + missing + " within four tables.", bindings);
     }
 
     private QueryIntent.ColumnRef qualify(String column, KnownSchema.Table table, boolean joined) {
@@ -1156,11 +1202,13 @@ public class QueryIntentParser {
         return shape.toString();
     }
 
-    private List<String> checksFor(boolean joined) {
+    private List<String> checksFor(boolean joined, int edges) {
         List<String> checks = new ArrayList<>();
         checks.add("Every field named in the question matched a column in the active schema");
-        if (joined) {
+        if (joined && edges <= 1) {
             checks.add("Exactly one declared foreign key relates these tables");
+        } else if (joined) {
+            checks.add("Exactly one shortest chain of declared foreign keys relates these tables");
         }
         return List.copyOf(checks);
     }
