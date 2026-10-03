@@ -74,4 +74,63 @@ class MultiTableJoinTest {
                         + "ON customers.id = orders.customer_id "
                         + "GROUP BY customers.name, customers.id HAVING COUNT(orders.id) > 3;");
     }
+
+    @Test
+    @DisplayName("a value found on a joined table filters it, and each subject row comes once")
+    void valueOnJoinedTable() {
+        assertThat(mysql("orders of customers in mumbai").sql()).isEqualTo(
+                "SELECT DISTINCT orders.* FROM orders JOIN customers ON orders.customer_id = customers.id "
+                        + "WHERE customers.city = 'mumbai';");
+        assertThat(mysql("how many orders of customers in mumbai").sql()).isEqualTo(
+                "SELECT COUNT(DISTINCT orders.id) FROM orders JOIN customers ON orders.customer_id = customers.id "
+                        + "WHERE customers.city = 'mumbai';");
+    }
+
+    @Test
+    @DisplayName("orderedByTableIsNotSort: products ordered by customers in pune is a four-table chain")
+    void orderedByTableIsNotSort() {
+        assertThat(mysql("products ordered by customers in pune").sql()).isEqualTo(
+                "SELECT DISTINCT products.* FROM products JOIN order_items ON products.id = order_items.product_id "
+                        + "JOIN orders ON order_items.order_id = orders.id "
+                        + "JOIN customers ON orders.customer_id = customers.id WHERE customers.city = 'pune';");
+    }
+
+    @Test
+    @DisplayName("ofTableIsNotProjection: 'orders of customers' is not a request for an 'orders' column")
+    void ofTableIsNotProjection() {
+        assertThat(mysql("orders of customers in mumbai").built()).isTrue();
+    }
+
+    @Test
+    @DisplayName("a sort column found only on a joined table sorts by it")
+    void sortOnJoinedTable() {
+        assertThat(mysql("orders and customers sorted by city").sql()).isEqualTo(
+                "SELECT * FROM orders JOIN customers ON orders.customer_id = customers.id ORDER BY customers.city ASC;");
+    }
+
+    @Test
+    @DisplayName("a column fitting two chain tables declines, naming both")
+    void ambiguousColumn() {
+        assertThat(mysql("orders and categories sorted by name").trace().declineReason())
+                .contains("products.name").contains("categories.name");
+    }
+
+    @Test
+    @DisplayName("spec §7: a comparison on a joined table's column filters it instead of counting")
+    void comparisonOnJoinedColumn() {
+        assertThat(mysql("orders with payments amount over 100").sql()).isEqualTo(
+                "SELECT DISTINCT orders.* FROM orders JOIN payments ON orders.id = payments.order_id "
+                        + "WHERE payments.amount > 100;");
+    }
+
+    @Test
+    @DisplayName("MongoDB: the joined filter follows its lookup, each order once")
+    void mongoJoinedFilter() {
+        assertThat(parser.parse("orders of customers in mumbai", Dialect.MONGODB).sql()).isEqualTo(
+                "db.orders.aggregate([{\"$lookup\": {\"from\": \"customers\", \"localField\": \"customer_id\", "
+                        + "\"foreignField\": \"_id\", \"as\": \"customers\"}}, {\"$unwind\": \"$customers\"}, "
+                        + "{\"$match\": {\"customers.city\": \"Mumbai\"}}, "
+                        + "{\"$group\": {\"_id\": \"$_id\", \"doc\": {\"$first\": \"$$ROOT\"}}}, "
+                        + "{\"$replaceRoot\": {\"newRoot\": \"$doc\"}}, {\"$project\": {\"customers\": 0}}])");
+    }
 }
