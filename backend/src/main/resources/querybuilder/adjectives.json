@@ -9,5 +9,10 @@
   "heaviest":   {"words": ["weight"], "direction": "DESC", "needsMostOrLeast": false, "type": "column"},
   "lightest":   {"words": ["weight"], "direction": "ASC",  "needsMostOrLeast": false, "type": "column"},
   "longest":    {"words": ["length", "duration"], "direction": "DESC", "needsMostOrLeast": false, "type": "column"},
-  "shortest":   {"words": ["length", "duration"], "direction": "ASC",  "needsMostOrLeast": false, "type": "column"}
+  "shortest":   {"words": ["length", "duration"], "direction": "ASC",  "needsMostOrLeast": false, "type": "column"},
+  "latest":   {"words": [], "direction": "DESC", "needsMostOrLeast": false, "type": "date"},
+  "newest":   {"words": [], "direction": "DESC", "needsMostOrLeast": false, "type": "date"},
+  "recent":   {"words": [], "direction": "DESC", "needsMostOrLeast": true,  "type": "date"},
+  "oldest":   {"words": [], "direction": "ASC",  "needsMostOrLeast": false, "type": "date"},
+  "earliest": {"words": [], "direction": "ASC",  "needsMostOrLeast": false, "type": "date"}
 }

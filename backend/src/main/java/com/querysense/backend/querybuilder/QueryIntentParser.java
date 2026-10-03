@@ -416,7 +416,7 @@ public class QueryIntentParser {
         }
 
         Optional<Ranking> ranked = projectionRequested ? Optional.empty()
-                : ranking(text, subject, joined, singular, interpretations);
+                : ranking(text, normalized, subject, chainTables, joined, singular, interpretations);
 
         List<QueryIntent.Aggregate> aggregates = new ArrayList<>();
 
@@ -1186,7 +1186,8 @@ public class QueryIntentParser {
         return bound;
     }
 
-    private Optional<Ranking> ranking(String text, KnownSchema.Table subject, boolean joined, boolean singular,
+    private Optional<Ranking> ranking(String text, String normalized, KnownSchema.Table subject,
+                                      List<KnownSchema.Table> chainTables, boolean joined, boolean singular,
                                       List<Interpretation> interpretations) {
         Matcher top = TOP_BY.matcher(text);
         if (top.find()) {
@@ -1224,7 +1225,24 @@ public class QueryIntentParser {
         Matcher adjective = ADJECTIVE.matcher(text);
         while (adjective.find()) {
             Adjectives.Entry entry = ADJECTIVES.entries().get(adjective.group(3));
-            if (!"column".equals(entry.type()) || (entry.needsMostOrLeast() && adjective.group(2) == null)) {
+            if (entry.needsMostOrLeast() && adjective.group(2) == null) {
+                continue;
+            }
+            if ("date".equals(entry.type())) {
+                QueryIntent.ColumnRef dateRef = dateColumn(normalized, chainTables, joined, adjective.group(3)).ref();
+                QueryIntent.Direction direction = "least".equals(adjective.group(2))
+                        ? (entry.direction() == QueryIntent.Direction.ASC ? QueryIntent.Direction.DESC : QueryIntent.Direction.ASC)
+                        : entry.direction();
+                Integer limit = null;
+                for (String candidate : new String[]{adjective.group(1), adjective.group(4)}) {
+                    Optional<NumberReader.Reading> n = candidate == null ? Optional.empty() : NumberReader.leading(candidate);
+                    if (n.isPresent() && n.get().integral() && n.get().phrase().equals(candidate)) {
+                        limit = n.get().value().intValueExact();
+                    }
+                }
+                return Optional.of(new Ranking(dateRef, direction, limit != null ? limit : (singular ? 1 : null)));
+            }
+            if (!"column".equals(entry.type())) {
                 continue;
             }
             List<String> columns = new ArrayList<>();

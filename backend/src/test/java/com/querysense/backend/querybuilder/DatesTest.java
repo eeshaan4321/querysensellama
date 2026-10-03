@@ -116,4 +116,12 @@ class DatesTest {
                 "db.orders.find({\"order_date\": {\"$gte\": ISODate(\"2026-08-31T18:30:00Z\"), "
                         + "\"$lt\": ISODate(\"2026-09-30T18:30:00Z\")}})");
     }
+
+    @Test
+    @DisplayName("latest, oldest and most recent sort by the date column")
+    void recency() {
+        assertThat(sql("latest 5 orders")).isEqualTo("SELECT * FROM orders ORDER BY order_date DESC LIMIT 5;");
+        assertThat(sql("the oldest employee")).isEqualTo("SELECT * FROM employees ORDER BY hire_date ASC LIMIT 1;");
+        assertThat(sql("most recent payments")).isEqualTo("SELECT * FROM payments ORDER BY payment_date DESC;");
+    }
 }
