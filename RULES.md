@@ -24,7 +24,7 @@ lowercased before it is read.
 | Query rewrite | 4 | RW1–RW4 (RW4 MongoDB only) | `optimization/QueryRewriter`, `optimization/MongoQueryRewriter` |
 | **Total** | **60** | | |
 
-**The rule engine has 23 rules.** Of those, 19 are conditions under which it
+**The rule engine has 23 rules.** Of those, 22 are conditions under which it
 refuses a question and hands it to the language model. The other 37 rules
 belong to the modules that analyse and optimise a query after it has been
 generated. None of the 60 uses a model.
@@ -127,6 +127,18 @@ The rules run in the order below. The first decline stops the build.
   joins two tables at most.
 - **Example:** `show all order items` → `order_items`. `customers, orders
   and payments` → declined (three tables).
+- **Vocabulary, added 2026-10-03 (sub-project 1):** a table is also reached
+  by:
+  - an alias the schema declares (`aka:` in a comment or description, or an
+    `aliases` upload block);
+  - a word from the built-in synonym list (`clients` → `customers`);
+  - an `-es`/`-ies` plural or an irregular one (`people` → `person`);
+  - only when no table matched any other way, a one-edit typo of a word of
+    five or more letters (`custmers` → `customers`).
+
+  A word that reaches two tables declines with `"<word>" could mean A or B,
+  so this engine won't pick one.` The longest-match and first-named rules
+  above apply to every kind.
 
 #### E5 · Column matching
 - **What it does:** turns a word or phrase into a column of a given table,
@@ -148,6 +160,36 @@ The rules run in the order below. The first decline stops the build.
   (`orderId` matches "order id") — all by snake-casing the column before
   comparing, so the SQL-side matching above needs no change to also serve
   Mongo's field-naming conventions.
+- **Vocabulary, added 2026-10-03 (sub-project 1):** after those, a column is
+  tried in this order: exact → inflection (plurals, irregulars) → declared
+  alias → built-in synonym → one-edit typo (five or more letters, never on a
+  word that is itself a name, an alias or a synonym). Each looser kind is
+  tried only when the stricter ones found nothing, and binds only when
+  exactly one column fits. Two or more decline, naming them:
+  `"telephone" could mean suppliers.phone or suppliers.mobile, so this
+  engine won't pick one.`
+
+#### Matching words to the schema (match kinds)
+
+Added 2026-10-03. Every word that reaches a table or column does so through
+one of five kinds, strictest first:
+
+| Kind | Example | Confidence | Shown under "Read as" |
+|---|---|---|---|
+| `EXACT` | `customers` | 0.95 | no |
+| `INFLECTION` | `customer`, `people` | 0.95 | no |
+| `SCHEMA_ALIAS` | `buyers`, declared by the schema | 0.95 | yes |
+| `SYNONYM` | `clients`, from `querybuilder/synonyms.json` | **0.85** | yes |
+| `TYPO` | `custmers`, `emial` | **0.85** | yes |
+
+- A declared alias counts as exact, because the schema's owner declared it.
+  A built-in synonym or a typo correction is QuerySense's own reading, so a
+  query built through one reports 0.85.
+- Every non-exact reading is listed under "Read as" in the rule trace and
+  in the response's `interpretations` field.
+- Values never use synonyms: `bombay` does not find `Mumbai`.
+- The synonym list holds no word the parser reads as an instruction
+  (`count`, `total`, `top` …); `SynonymListTest` enforces it.
 
 #### E6 · Joins come from a declared foreign key
 - **What it does:** when two tables are named, looks for the declared foreign
@@ -270,7 +312,9 @@ The rules run in the order below. The first decline stops the build.
 #### E13 · Comparison
 - **What it does:** reads `<column> [is] more / greater / larger / higher
   than, above or over N` as `>`, and the less-than forms, `below` and
-  `under` as `<`. `N` can be a digit or a word from `one` to `ten`.
+  `under` as `<`. `N` is read by `NumberReader` (since 2026-10-03): digits
+  with thousands separators (`1,000`), decimals (`4.5`), words up to the
+  millions (`two hundred and fifty`) and `a dozen`.
   - If the column matches, it becomes a `WHERE` condition.
   - If it doesn't match **and** two tables are joined, it becomes a count of
     the related table: `HAVING COUNT(<related table's first column>)`. The
@@ -279,8 +323,8 @@ The rules run in the order below. The first decline stops the build.
 - **Why:** in "customers who **placed** more than three orders", the word
   in front of the comparison is a verb, not a column. With a join present,
   a count of the other table is the only thing it can mean.
-- **Declines when:** `N` isn't a number the engine can read (`fifty` is
-  beyond `ten`), or the column doesn't match and there is no join.
+- **Declines when:** `N` isn't a number the engine can read (`fifty-ish`),
+  or the column doesn't match and there is no join.
 - **Example:** `products with price above 500` →
   `SELECT * FROM products WHERE price > 500;`
   `which customers placed more than three orders` →
@@ -300,9 +344,19 @@ The rules run in the order below. The first decline stops the build.
   checked `customers.city`. On a schema without that column it wrote the
   wrong column, and its own safety check silently stopped working. Asking
   the data which column holds the value works on any schema.
+- **Since 2026-10-03:**
+  - a value is a run of up to four words, longest first, so `new delhi`
+    matches one stored value;
+  - the run stops at punctuation, so `clients in mumbai?` keeps its filter;
+  - when no run matches, a single word of five or more letters one edit
+    from exactly one stored value is corrected, and the stored spelling is
+    written (`mumbia` → `'Mumbai'`, recorded as a `TYPO`);
+  - a value stored in more than one column of the subject table declines.
+    Until then the engine silently took the first column, a guess at 0.95.
 - **Declines when:** the first value matches no column of the subject table,
-  or two values match different columns — the engine cannot tell which field
-  the question means.
+  two values match different columns, or one value is stored in two columns
+  (`"Central" is stored in both stores.city and stores.region, so this
+  engine can't tell which one the question means.`).
 - **Example:** `show customers in mumbai` →
   `SELECT * FROM customers WHERE city = 'mumbai';`. `customers in mumbai and
   pune` → `… WHERE city IN ('mumbai', 'pune');`. `customers in atlantis` →
@@ -312,7 +366,9 @@ The rules run in the order below. The first decline stops the build.
 - **What it does:** reads an explicit column/value pair. It only runs when
   E13 and E14 produced no `WHERE`, and comparison phrasing (`with more than
   three orders`) is excluded before the column is looked up. Numbers are left
-  unquoted; anything else is quoted.
+  unquoted; anything else is quoted. Since 2026-10-03 the value is read by
+  the same `NumberReader` as E13, so `with amount twenty five` writes
+  `amount = 25`.
 - **Why:** it covers questions that name both the column and the value.
 - **Declines when:** the named column is not a column of the subject table.
 - **Example:** `orders with status pending` →
@@ -361,8 +417,10 @@ The rules run in the order below. The first decline stops the build.
   `SELECT * FROM products ORDER BY price DESC;`
 
 #### E20 · Limit
-- **What it does:** `top N`, `first N` or `limit N` produces `LIMIT N`. Digits
-  only: `top five` isn't read.
+- **What it does:** `top N`, `first N` or `limit N` produces `LIMIT N`. Since
+  2026-10-03 `N` is read by `NumberReader`, so `top twenty customers` gives
+  `LIMIT 20`. `top` with no number builds no limit, as before.
+- **Declines when:** `N` isn't a whole, positive number of rows.
 - **Example:** `top 5 products sorted by price descending` →
   `SELECT * FROM products ORDER BY price DESC LIMIT 5;`
 
@@ -389,7 +447,7 @@ The rules run in the order below. The first decline stops the build.
   layer passed. Without the trace, "rule-based and explainable" is a claim;
   with it, it can be checked. The Analysis screen shows it.
 
-### The 19 ways the rule engine declines
+### The 22 ways the rule engine declines
 
 | Group | Count | Rules |
 |---|---|---|
@@ -400,6 +458,9 @@ The rules run in the order below. The first decline stops the build.
 | A named thing matches no column | 7 | E9 · E10 · E11 · E12 · E13 · E14 · E19 |
 | Comparison value isn't a number | 1 | E13 |
 | Safety | 2 | E17 unconditional delete · E18 column missing from the database |
+| A word reaches two schema items (synonym or typo) | 1 | E4 · E5 |
+| A value is stored in two columns | 1 | E14 |
+| A limit isn't a whole number | 1 | E20 |
 
 ---
 

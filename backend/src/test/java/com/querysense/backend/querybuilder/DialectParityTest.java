@@ -32,7 +32,7 @@ class DialectParityTest {
         when(m.dialect()).thenReturn(dialect);
         when(m.getColumnNames(anyString())).thenReturn(List.of());
         when(m.getDistinctValues(anyString(), anyString())).thenReturn(List.of());
-        when(m.getDistinctValues(eq("customers"), eq("city"))).thenReturn(List.of("Mumbai", "Pune", "Delhi"));
+        when(m.getDistinctValues(eq("customers"), eq("city"))).thenReturn(List.of("Mumbai", "Pune", "Delhi", "New Delhi"));
         when(m.getDistinctValues(eq("orders"), eq("status"))).thenReturn(List.of("PENDING", "SHIPPED"));
         return m;
     }
@@ -60,6 +60,14 @@ class DialectParityTest {
             "how many customers are there per city",
             "total amount of payments per method",
             "total quantity of orders per status",
+            "clients in pune",
+            "custmers in pune",
+            "buyers in mumbai",
+            "customers in new delhi",
+            "customers in mumbia",
+            "top twenty products",
+            "products with price above two hundred and fifty",
+            "show emial of customers",
     })
     void sameOutcome(String question) {
         RuleBuildResult mysql = parser.parse(question, Dialect.MYSQL);
@@ -97,5 +105,18 @@ class DialectParityTest {
         assertThat(parser.parse(question, Dialect.MYSQL).built()).isFalse();
         assertThat(parser.parse(question, Dialect.MONGODB).sql())
                 .isEqualTo("db.orders.find({}, {\"items.unit_price\": 1, \"_id\": 0})");
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @DisplayName("both dialects record the same interpretations")
+    @ValueSource(strings = {"clients in pune", "custmers in pune", "buyers in mumbai", "customers in mumbia",
+            "show emial of customers"})
+    void sameInterpretations(String question) {
+        RuleBuildResult sql = parser.parse(question, Dialect.MYSQL);
+        RuleBuildResult mongo = parser.parse(question, Dialect.MONGODB);
+
+        assertThat(sql.built()).isTrue();
+        assertThat(mongo.built()).isTrue();
+        assertThat(mongo.interpretations()).isEqualTo(sql.interpretations());
     }
 }

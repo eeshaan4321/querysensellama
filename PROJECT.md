@@ -822,7 +822,7 @@ It was built in eight steps, each recorded as a session in §7, from
 The live checklists in the step 4–8 sessions in §7 are the outstanding
 checks.
 
-### Planned: a rule engine that adapts to any schema — all four sub-projects designed and planned 2026-10-02
+### A rule engine that adapts to any schema — all four sub-projects designed and planned 2026-10-02; sub-project 1 built 2026-10-03
 
 The rule engine already binds to whatever schema is active (§2). These four
 sub-projects lift the limits where it still expects particular words or
@@ -831,7 +831,7 @@ run in this order, each with its own spec, plan and commits:
 
 | # | Sub-project | Status |
 |---|---|---|
-| 1 | **Vocabulary:** declared aliases, built-in synonyms, one-letter typos, irregular plurals, multi-word values, numbers beyond ten | **Planned.** Spec `docs/superpowers/specs/2026-10-02-rule-engine-vocabulary-design.md`; plan `docs/superpowers/plans/2026-10-02-rule-engine-vocabulary.md`, 11 tasks. Not started. |
+| 1 | **Vocabulary:** declared aliases, built-in synonyms, one-letter typos, irregular plurals, multi-word values, numbers beyond ten | **Built 2026-10-03** (`4744bfe`..`9b0bedf`, docs after). Spec `docs/superpowers/specs/2026-10-02-rule-engine-vocabulary-design.md`; plan `docs/superpowers/plans/2026-10-02-rule-engine-vocabulary.md`. Sub-project 2 (question shapes) is next. |
 | 2 | **Question shapes:** ranking and superlatives, `at least`/`at most`/`between`, not-equal and exclusion, `without` (anti-join), DISTINCT, OR across conditions, several totals | **Planned.** Spec `docs/superpowers/specs/2026-10-02-rule-engine-question-shapes-design.md`; plan `docs/superpowers/plans/2026-10-02-rule-engine-question-shapes.md`, 9 tasks + reconcile. Not started. |
 | 3 | **Joins across up to four tables:** the shortest chain of declared foreign keys, filters on any table in it | **Planned.** Spec `docs/superpowers/specs/2026-10-02-rule-engine-multi-table-joins-design.md`; plan `docs/superpowers/plans/2026-10-02-rule-engine-multi-table-joins.md`, 5 tasks + reconcile. Not started. |
 | 4 | **Dates:** relative, named, single and ranged dates as real ranges, plus recency superlatives; replaces E3 | **Planned.** Spec `docs/superpowers/specs/2026-10-02-rule-engine-dates-design.md`; plan `docs/superpowers/plans/2026-10-02-rule-engine-dates.md`, 5 tasks + reconcile. Not started. |
@@ -2315,6 +2315,65 @@ can't be fixed in place. Nothing else in that database is touched.
 
 **Not verified:** the startup listener against a real interrupted seeding.
 The marker logic is unit-tested with a mocked client only.
+
+### Session of 2026-10-03 — rule engine vocabulary (sub-project 1 of 4)
+
+Plan: `docs/superpowers/plans/2026-10-02-rule-engine-vocabulary.md`, executed
+inline, test first, one commit per task.
+
+| Task | What | Commit |
+|---|---|---|
+| 1 | `Edits` (one edit, adjacent swap counts as one), `NumberReader`, `Literal.number(BigDecimal)` | `4744bfe` |
+| 2 | Built-in synonym list `querybuilder/synonyms.json`, kept clear of instruction words | `30ed004` |
+| 3 | `SchemaAliases`, aliases on `SchemaSnapshot`; the demos declare `customers` aka `buyers` | `e73db46` |
+| 4 | Aliases read from SQL `COMMENT`s, MongoDB `description`s and an `aliases` upload block; collisions dropped with a warning | `0a5f66f` |
+| 5 | `SchemaLexicon` behind `SchemaBinder`: exact, inflection, alias, synonym, typo | `8fc7804` |
+| 6 | Interpretations recorded; ambiguous synonyms and typos decline, naming the candidates | `adecac9` |
+| 7 | Values of up to four words, one-edit value typos, a value in two columns declines | `154b50d` |
+| 8 | Comparisons, `with` filters and limits read through `NumberReader` | `84e630a` |
+| 9 | 0.85 when a synonym or typo was used; `interpretations` on the response; aliases in both LLM prompts | `82024dc` |
+| 10 | "Read as" block in the rule trace; Schema source cards list aliases | `9b0bedf` |
+
+**Departures from the spec, on purpose (from the plan):**
+1. Alias collisions are cleaned in `SchemaUploadService` via
+   `SchemaAliases.clean`, not in the validator, so a collision warns rather
+   than failing the upload.
+2. The lexicon rebuilds lazily when the active snapshot object changes.
+3. A comparison against an unreadable number keeps today's wording.
+4. An adjacent swap counts as one edit (`emial` → `email`).
+5. A table typo is tried only when no table matched any other way.
+6. `SchemaBinder.bindColumn` keeps its exact-or-alias meaning for the
+   parser's probe checks; real bindings go through `columnMatch`.
+
+**Rulings made while executing:**
+- `DeclineBoundaryTest` used `list the top 5 buyers by total spend` as a
+  question that must decline. `buyers` is now the demo's declared alias for
+  `customers`, so it builds `SELECT * FROM customers LIMIT 5`, dropping
+  "by total spend". That drop is older than this work:
+  `top 5 customers by total spend` already does it. The case now reads
+  `punters`. Sub-project 2's ranking task declines a rank by a non-column
+  and restores the `buyers` case.
+- `MongoSchemaContextTest.allWhenNoneMentioned` expected `- <name>: ` for
+  every collection. It now expects the described name, because `customers`
+  reads `customers (also called: buyers)`.
+
+**Tests:** backend 763/763 (`./mvnw test`), frontend 102/102 (`npm test`),
+`npm run lint` clean, `npm run build` succeeds.
+
+**Not verified:** no screen was opened in a browser, and no question was
+sent to Ollama.
+
+**Live checklist:**
+1. Workbench, MySQL: `clients in mumbai` builds at 85%, with a "Read as:
+   "clients" → customers (built-in synonym)" line on Analysis.
+2. `custmers in pune` builds at 85%; `buyers in pune` at 95% (a declared
+   alias).
+3. `customers in new delhi` builds a two-word value if the data has one;
+   `top twenty customers` has `LIMIT 20`.
+4. The same three questions with the Workbench on MongoDB build the
+   matching `find`.
+5. Upload a `.sql` with `COMMENT 'aka: town'` on a column. The Schema source
+   card shows "also: town", and a question using "town" binds it at 95%.
 
 ### Not verified
 
