@@ -18,9 +18,26 @@ public record SchemaSnapshot(
         Dialect dialect,
         List<IndexSpec> indexes,
         Map<String, Map<String, String>> fieldTypes,
-        Map<String, Map<String, List<String>>> enums) {
+        Map<String, Map<String, List<String>>> enums,
+        Map<String, SchemaAliases.TableAliases> aliases) {
 
     public static final String BUILT_IN_ID = "builtin";
+
+    public SchemaSnapshot(String id, String label, String catalog,
+                          List<KnownSchema.Table> tables,
+                          List<KnownSchema.ForeignKey> foreignKeys,
+                          Map<String, Integer> rowCounts,
+                          Instant loadedAt,
+                          Dialect dialect,
+                          List<IndexSpec> indexes,
+                          Map<String, Map<String, String>> fieldTypes,
+                          Map<String, Map<String, List<String>>> enums) {
+        this(id, label, catalog, tables, foreignKeys, rowCounts, loadedAt, dialect, indexes, fieldTypes, enums, Map.of());
+    }
+
+    public SchemaAliases.TableAliases aliasesFor(String tableName) {
+        return aliases.getOrDefault(tableName, SchemaAliases.TableAliases.NONE);
+    }
 
     public SchemaSnapshot(String id, String label, String catalog,
                           List<KnownSchema.Table> tables,

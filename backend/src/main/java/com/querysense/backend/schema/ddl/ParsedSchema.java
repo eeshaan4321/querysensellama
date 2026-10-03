@@ -2,6 +2,7 @@ package com.querysense.backend.schema.ddl;
 
 import com.querysense.backend.schema.IndexSpec;
 import com.querysense.backend.schema.KnownSchema;
+import com.querysense.backend.schema.SchemaAliases;
 import org.bson.Document;
 
 import java.util.LinkedHashMap;
@@ -10,10 +11,15 @@ import java.util.Map;
 import java.util.Optional;
 
 /** The tables parsed from an uploaded file, with their indexes and any skipped statements. */
-public record ParsedSchema(List<ParsedTable> tables, List<String> warnings, List<IndexSpec> indexes) {
+public record ParsedSchema(List<ParsedTable> tables, List<String> warnings, List<IndexSpec> indexes,
+                           Map<String, SchemaAliases.TableAliases> aliases) {
 
     public ParsedSchema(List<ParsedTable> tables, List<String> warnings) {
-        this(tables, warnings, List.of());
+        this(tables, warnings, List.of(), Map.of());
+    }
+
+    public ParsedSchema(List<ParsedTable> tables, List<String> warnings, List<IndexSpec> indexes) {
+        this(tables, warnings, indexes, Map.of());
     }
 
     public Optional<ParsedTable> table(String name) {

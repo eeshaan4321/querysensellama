@@ -1,5 +1,7 @@
 package com.querysense.backend.schema;
 
+import com.querysense.backend.dialect.Dialect;
+
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -70,6 +72,9 @@ public final class KnownSchema {
         return SchemaLookup.detectTablesMentioned(TABLES, text);
     }
 
+    public static final Map<String, SchemaAliases.TableAliases> ALIASES = Map.of(
+            "customers", new SchemaAliases.TableAliases(List.of("buyers"), Map.of()));
+
     public static SchemaSnapshot builtIn() {
         return new SchemaSnapshot(
                 SchemaSnapshot.BUILT_IN_ID,
@@ -78,6 +83,11 @@ public final class KnownSchema {
                 TABLES,
                 FOREIGN_KEYS,
                 Map.of(),
-                Instant.EPOCH);
+                Instant.EPOCH,
+                Dialect.MYSQL,
+                List.of(),
+                Map.of(),
+                Map.of(),
+                ALIASES);
     }
 }

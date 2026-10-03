@@ -75,6 +75,9 @@ public final class KnownMongoSchema {
             "orders", Map.of("status", List.of("NEW", "PENDING", "PAID", "SHIPPED", "CANCELLED")),
             "payments", Map.of("method", List.of("CARD", "UPI", "NETBANKING", "CASH")));
 
+    public static final Map<String, SchemaAliases.TableAliases> ALIASES = Map.of(
+            "customers", new SchemaAliases.TableAliases(List.of("buyers"), Map.of()));
+
     public static SchemaSnapshot builtIn() {
         return new SchemaSnapshot(
                 SchemaSnapshot.BUILT_IN_ID,
@@ -87,6 +90,7 @@ public final class KnownMongoSchema {
                 Dialect.MONGODB,
                 INDEXES,
                 FIELD_TYPES,
-                ENUMS);
+                ENUMS,
+                ALIASES);
     }
 }
