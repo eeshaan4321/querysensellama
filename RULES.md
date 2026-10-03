@@ -24,7 +24,7 @@ lowercased before it is read.
 | Query rewrite | 4 | RW1–RW4 (RW4 MongoDB only) | `optimization/QueryRewriter`, `optimization/MongoQueryRewriter` |
 | **Total** | **67** | | |
 
-**The rule engine has 30 rules.** Of those, 37 are conditions under which it
+**The rule engine has 30 rules.** Of those, 39 are conditions under which it
 refuses a question and hands it to the language model. The other 37 rules
 belong to the modules that analyse and optimise a query after it has been
 generated. None of the 67 uses a model.
@@ -57,7 +57,8 @@ Two principles run through every rule:
 - **Match against the active schema, never a word list.** Tables and
   columns are matched against whichever schema is loaded right now: the
   built-in demo or an uploaded one. Uploading a schema therefore changes what
-  the engine is willing to answer. The date check (E3) is the only exception.
+  the engine is willing to answer. Dates (E3) are read by fixed rules, then
+  placed on a date column the active schema actually has.
 - **When unsure, decline.** A declined question still gets answered, by the
   LLM, at a lower confidence. A wrong query labelled `RULE_ENGINE` at 0.95
   looks certain and isn't. So every rule that can't resolve what it read
@@ -92,21 +93,56 @@ The rules run in the order below. The first decline stops the build.
   resolve — a request error, not a rule-trace decline, and it never reaches
   the LLM.
 
-#### E3 · No date arithmetic
-- **What it does:** declines any question containing a date *expression*:
-  - `last / this / next / past` + `month / week / year / day / quarter / decade`
-  - `today`, `yesterday`, `tomorrow`, `recently`
-  - `in / during / before / after / since / by` + a month name
-  - `before / after / since / until` + a four-digit year
-  - `date range`, `last N days`
-- **Why:** turning "last month" into a correct date range depends on the
-  current date, the column's type and the time zone, and a rule can't get
-  that right in general. This is the one rule that still reads fixed
-  English words. It looks for the whole expression, not a single word. The
-  previous engine declined any sentence containing `may`, because it
-  treated `may` as a month.
-- **Example:** `orders in january` → declined. `customers who may have
-  churned` → *not* declined by this rule.
+#### E3 · Dates
+- **Replaced 2026-10-03 (sub-project 4).** Until then this rule declined
+  every question that mentioned a period of time. It now reads the first
+  date expression (`DateReader`) as a half-open range of days, `from`
+  inclusive and `until` exclusive, and filters a date column with `>=` and
+  `<` (MongoDB: `$gte`/`$lt` on `ISODate(...)` at local midnight).
+- **Today** is the server's date in `querysense.rules.time-zone` (default
+  `Asia/Kolkata`); `querysense.rules.today=2026-10-02` pins it for tests and
+  demos. Weeks start on Monday.
+- **What it reads** (today = Friday 2026-10-02):
+
+  | Expression | Range |
+  |---|---|
+  | `today` / `yesterday` | [10-02, 10-03) / [10-01, 10-02) |
+  | `this / last / previous / past / next week` | [09-28, 10-05) / [09-21, 09-28) / … / [10-05, 10-12) |
+  | `this / last / next month` | [10-01, 11-01) / [09-01, 10-01) / [11-01, 12-01) |
+  | `this / last quarter`, `this / last year` | [10-01, 2027-01-01) / [07-01, 10-01); [2026-01-01, 2027-01-01) / [2025-01-01, 2026-01-01) |
+  | `last 7 days`, `past three weeks`, `last 2 months` | [today − N units, tomorrow) |
+  | `in 2025`, `in march 2025`, `in q1 2025`, `in the first quarter of 2025` | the whole year, month or quarter |
+  | `in january` (no year) | its most recent start: [2026-01-01, 2026-02-01); `in november` is 2025 |
+  | `on 1 march 2025`, `on march 1, 2025`, `on 2025-03-01`, `on 1st march 2025` | that one day |
+  | `since X`, `from X onwards` / `before X` / `after X` / `until X`, `up to X` | [start of X, —) / [—, start of X) / [end of X, —) / [—, end of X) |
+  | `between X and Y`, `from X to Y` | [start of X, end of Y) |
+
+  An impossible date (`february 30`) reads as nothing.
+- **Which column:**
+  1. the one the question names, by name (`order date`) or by its stem
+     with `-ed`/`-d` (`hired since 2020` → `hire_date`, `received last week`
+     → `received_date`), searched across the join chain (E6);
+  2. otherwise the subject's only date-typed column; if it has none, the
+     chain's only one.
+
+  Date types come from the schema: MySQL `DATE`, `DATETIME`, `TIMESTAMP`;
+  MongoDB `date`. The built-in MySQL demo now carries its column types.
+- **The words are consumed:** `in` of `in january` is never read again as
+  a value filter (E14), and `hired` is not a requested column (E10).
+- **Declines when:**
+  - a time word is present but the expression can't be read whole
+    (`orders recently` → `The question mentions a time period ("recently")
+    this engine can't read as dates, so it went to the language model
+    instead.`);
+  - no table in the question has a date column;
+  - several date columns fit and none is named (`"last week" could be
+    checked against shipments.sent_date or shipments.received_date; name one
+    in the question.`).
+- **Confidence:** stays 0.95. A date is read by fixed rules, not
+  interpreted.
+- **Example:** `orders from last month` →
+  `SELECT * FROM orders WHERE order_date >= '2026-09-01' AND order_date <
+  '2026-10-01';`. `customers who may have churned` → not a date.
 
 ### Matching the question to the schema
 
@@ -464,6 +500,10 @@ alike.
   or listings.cost …`); or none.
 - **Interpretation:** an adjective binding is recorded as a `SYNONYM`, so the
   query reports 0.85.
+- **Recency, added 2026-10-03 (sub-project 4):** `latest`, `newest`, `most
+  recent` sort by the date column (chosen as in E3) descending; `oldest`,
+  `earliest` ascending. The same limit rules apply, and confidence stays
+  0.95. `latest 5 orders` → `ORDER BY order_date DESC LIMIT 5`.
 - **Example:** `top 5 products by price` →
   `SELECT * FROM products ORDER BY price DESC LIMIT 5;`. `cheapest product`
   → `… ORDER BY price ASC LIMIT 1;`
@@ -592,11 +632,11 @@ alike.
   layer passed. Without the trace, "rule-based and explainable" is a claim;
   with it, it can be checked. The Analysis screen shows it.
 
-### The 37 ways the rule engine declines
+### The 39 ways the rule engine declines
 
 | Group | Count | Rules |
 |---|---|---|
-| Gates | 3 | E1 empty · E2 dialect · E3 date expression |
+| Gates | 3 | E1 empty · E2 dialect · E3 an unreadable time word |
 | Tables and joins | 5 | E4 no table · E4 more than four tables · E6 no chain within four tables · E6 two equally short chains · E6 a chain needing more than four tables |
 | A second noun binds to nothing | 1 | E23 |
 | Delete across a join | 1 | E7 |
@@ -613,6 +653,7 @@ alike.
 | Without: no second table, or combined with a count | 2 | E27 |
 | `and` and `or` mixed between conditions, or `or` with `without` | 2 | E29 |
 | A column, or a stored value, on two chain tables | 2 | E6 |
+| A date with no date column, or several date columns and none named | 2 | E3 |
 
 ---
 

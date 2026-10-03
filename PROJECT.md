@@ -822,7 +822,7 @@ It was built in eight steps, each recorded as a session in §7, from
 The live checklists in the step 4–8 sessions in §7 are the outstanding
 checks.
 
-### A rule engine that adapts to any schema — all four sub-projects designed and planned 2026-10-02; sub-projects 1–3 built 2026-10-03
+### A rule engine that adapts to any schema — all four sub-projects designed and planned 2026-10-02; all four built 2026-10-03
 
 The rule engine already binds to whatever schema is active (§2). These four
 sub-projects lift the limits where it still expects particular words or
@@ -833,8 +833,8 @@ run in this order, each with its own spec, plan and commits:
 |---|---|---|
 | 1 | **Vocabulary:** declared aliases, built-in synonyms, one-letter typos, irregular plurals, multi-word values, numbers beyond ten | **Built 2026-10-03** (`4744bfe`..`9b0bedf`, docs after). Spec `docs/superpowers/specs/2026-10-02-rule-engine-vocabulary-design.md`; plan `docs/superpowers/plans/2026-10-02-rule-engine-vocabulary.md`. |
 | 2 | **Question shapes:** ranking and superlatives, `at least`/`at most`/`between`, not-equal and exclusion, `without` (anti-join), DISTINCT, OR across conditions, several totals | **Built 2026-10-03** (`898b54b`..`0212c54`, docs after). Spec `docs/superpowers/specs/2026-10-02-rule-engine-question-shapes-design.md`; plan `docs/superpowers/plans/2026-10-02-rule-engine-question-shapes.md`. |
-| 3 | **Joins across up to four tables:** the shortest chain of declared foreign keys, filters on any table in it | **Built 2026-10-03** (`553dbd0`..`f12e0f2`, docs after). Spec `docs/superpowers/specs/2026-10-02-rule-engine-multi-table-joins-design.md`; plan `docs/superpowers/plans/2026-10-02-rule-engine-multi-table-joins.md`. Sub-project 4 (dates) is next. |
-| 4 | **Dates:** relative, named, single and ranged dates as real ranges, plus recency superlatives; replaces E3 | **Planned.** Spec `docs/superpowers/specs/2026-10-02-rule-engine-dates-design.md`; plan `docs/superpowers/plans/2026-10-02-rule-engine-dates.md`, 5 tasks + reconcile. Not started. |
+| 3 | **Joins across up to four tables:** the shortest chain of declared foreign keys, filters on any table in it | **Built 2026-10-03** (`553dbd0`..`f12e0f2`, docs after). Spec `docs/superpowers/specs/2026-10-02-rule-engine-multi-table-joins-design.md`; plan `docs/superpowers/plans/2026-10-02-rule-engine-multi-table-joins.md`. |
+| 4 | **Dates:** relative, named, single and ranged dates as real ranges, plus recency superlatives; replaces E3 | **Built 2026-10-03** (`30d89ac`..`a64d28b`, docs after). Spec `docs/superpowers/specs/2026-10-02-rule-engine-dates-design.md`; plan `docs/superpowers/plans/2026-10-02-rule-engine-dates.md`. |
 
 **Order and dependency.** The plans run in order 1 → 2 → 3 → 4. Each later
 plan is written against the code the earlier ones produce, and opens with a
@@ -859,6 +859,27 @@ differs.
   - The date column is the one named (by name or stem, as in `hired` →
     `hire_date`), otherwise the only one. Several, none named, declines.
   - MongoDB gets `ISODate(...)` bounds at local midnight.
+
+**All four are built (2026-10-03).** The rule engine now:
+- reads the user's own words: declared aliases, built-in synonyms, one-letter
+  typos, multi-word values and spelled-out numbers;
+- ranks, bounds, excludes, finds rows without related rows, lists distinct
+  values, ORs conditions and gives several totals at once;
+- joins up to four tables along the shortest chain of declared keys, with
+  filters on any of them;
+- reads dates as real ranges on the right date column.
+
+It does this on any uploaded schema, in MySQL and MongoDB, at 0.95 (0.85 when
+it used a built-in synonym, typo or adjective). It still declines whenever a
+word, value, column or chain could mean two things. **Still sent to the
+language model:**
+- nested or mixed `and`/`or` logic;
+- `HAVING` with OR;
+- self-joins and chains beyond four tables;
+- times of day, holidays and fiscal periods;
+- comparisons between two columns;
+- subqueries and window-style questions ("each customer's latest order");
+- anything whose wording no rule reads in full.
 
 **When all four are built, the rule engine** answers questions in the
 user's own words; ranks, ranges, excludes, finds rows without related rows,
@@ -2315,6 +2336,55 @@ can't be fixed in place. Nothing else in that database is touched.
 
 **Not verified:** the startup listener against a real interrupted seeding.
 The marker logic is unit-tested with a mocked client only.
+
+### Session of 2026-10-03 — rule engine dates (sub-project 4 of 4)
+
+Plan: `docs/superpowers/plans/2026-10-02-rule-engine-dates.md`, executed
+inline, test first, one commit per task.
+
+| Task | What | Commit |
+|---|---|---|
+| 1 | `DateReader`: relative, named, single and ranged dates as half-open day ranges | `30d89ac` |
+| 2 | `RulesClock` (zone, pinnable today), demo MySQL column types, `Literal.date`, `ISODate` in MongoDB | `d6f5bb7` |
+| 3 | The parser reads dates on the named or only date column, across the chain; E3's blanket decline is replaced | `ae498c2` |
+| 4 | `latest`, `newest`, `most recent`, `oldest`, `earliest` sort by the date column | `a64d28b` |
+| 5 | Parity cases; this record | (docs commit) |
+
+**Departures from the spec, on purpose (from the plan):**
+1. `RulesClock` is a small component wrapping a `java.time.Clock`, not a bare
+   `Clock` bean, so it can't clash with another `Clock` and tests get
+   `RulesClock.fixed(...)`.
+2. `MongoEmitter` merges `$gte`/`$lt` on one field into one condition.
+
+**Rulings made while executing:**
+- The plan merged *any* repeated-field operators in MongoDB. That changed
+  existing output (`MongoEmitterTest.sameFieldTwiceUsesAnd`,
+  `repeatedHavingAliasUsesAnd`, and sub-project 2's `price above 100 and
+  price below 900`). Spec §6 says only dates are affected, so merging is
+  limited to conditions whose values are dates. Everything else keeps
+  `$and`.
+- `orders from last month` now builds. Wherever a test used it as "must
+  decline" (`DeclineBoundaryTest`, `RuleTraceWordingTest`,
+  `QueryIntentParserTest.temporalDeclinesButModalMayDoesNot`), it is
+  replaced by `orders recently`, which still declines with the new
+  time-word reason.
+
+**Questions that moved from decline to build:** every readable date
+expression on a schema with a date column. Examples: `orders from last
+month`, `orders in january`, `employees hired since 2020` and `customers and
+orders in 2025`.
+
+**Tests:** backend 854/854, frontend 103/103, `npm run lint` clean, `npm run
+build` succeeds.
+
+**Not run in the app:** no screen was opened and no question was sent to
+Ollama. Live checklist, with `querysense.rules.today` unset:
+1. `orders from last month` in the Workbench on MySQL and on MongoDB. The
+   trace shows the range from the 1st of last month up to the 1st of this
+   month; the MongoDB query's `ISODate`s sit at local midnight.
+2. `employees hired since 2020`.
+3. `latest 5 orders`.
+4. `orders recently` still goes to the language model, with the new reason.
 
 ### Session of 2026-10-03 — rule engine joins across up to four tables (sub-project 3 of 4)
 
