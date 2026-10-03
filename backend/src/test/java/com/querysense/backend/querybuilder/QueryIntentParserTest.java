@@ -119,9 +119,9 @@ class QueryIntentParserTest {
     }
 
     @Test
-    @DisplayName("a temporal expression declines, but the word 'may' alone does not")
+    @DisplayName("an unreadable time expression declines, but the word 'may' alone does not")
     void temporalDeclinesButModalMayDoesNot() {
-        assertThat(parser.parse("orders from last month", Dialect.MYSQL).built()).isFalse();
+        assertThat(parser.parse("orders recently", Dialect.MYSQL).built()).isFalse();
         assertThat(parser.parse("show all customers", Dialect.MYSQL).built()).isTrue();
     }
 

@@ -29,10 +29,10 @@ public class QueryIntentParser {
 
     static final String JOIN_ORIGIN = "declared foreign key";
 
-    private static final Pattern TEMPORAL = Pattern.compile(
-            "\\b(?:last|this|next|past)\\s+(?:month|week|year|day|quarter|decade)\\b"
-                    + "|\\b(?:today|yesterday|tomorrow|recently)\\b"
-                    + "|\\b(?:in|during|before|after|since|by)\\s+"
+    private static final Pattern TIME_WORDS = Pattern.compile(
+            "\\b(?:last|this|next|past|previous)\\s+(?:month|week|year|day|quarter|decade)\\b"
+                    + "|\\b(?:today|yesterday|tomorrow|recently|lately)\\b"
+                    + "|\\b(?:in|during|before|after|since|by|until|till)\\s+"
                     + "(?:january|february|march|april|may|june|july|august"
                     + "|september|october|november|december)\\b"
                     + "|\\b(?:before|after|since|until)\\s+\\d{4}\\b"
@@ -163,13 +163,15 @@ public class QueryIntentParser {
     private final JoinPathResolver joins;
     private final DialectRegistry<SchemaMetadata> metadataByDialect;
     private final DialectRegistry<QueryEmitter> emitters;
+    private final RulesClock clock;
 
     public QueryIntentParser(SchemaBinder binder, JoinPathResolver joins,
-                             List<SchemaMetadata> metadata, List<QueryEmitter> emitters) {
+                             List<SchemaMetadata> metadata, List<QueryEmitter> emitters, RulesClock clock) {
         this.binder = binder;
         this.joins = joins;
         this.metadataByDialect = new DialectRegistry<>(metadata, "schema metadata");
         this.emitters = new DialectRegistry<>(emitters, "query emitter");
+        this.clock = clock;
     }
 
     static Set<String> instructionWords() {
@@ -195,13 +197,17 @@ public class QueryIntentParser {
 
     private RuleBuildResult parse(String rawInput, Dialect dialect, List<RuleTrace.Binding> bindings,
                                   List<Interpretation> interpretations) {
-        String text = SchemaBinder.normalize(rawInput);
+        String normalized = SchemaBinder.normalize(rawInput);
+        Optional<DateReader.DateRange> date = DateReader.read(normalized, clock.today());
+        String text = date.map(r -> normalized.substring(0, r.start()) + " ".repeat(r.end() - r.start())
+                + normalized.substring(r.end())).orElse(normalized);
         SchemaMetadata metadata = metadataByDialect.get(dialect);
 
-        if (TEMPORAL.matcher(text).find()) {
+        Matcher timeWords = TIME_WORDS.matcher(normalized);
+        if (date.isEmpty() && timeWords.find()) {
             return RuleBuildResult.declined(
-                    "The question asks about a period of time. This engine does not build date "
-                            + "filters, so the question went to the language model instead.",
+                    "The question mentions a time period (\"" + timeWords.group() + "\") this engine can't read as "
+                            + "dates, so it went to the language model instead.",
                     bindings);
         }
 
@@ -335,6 +341,33 @@ public class QueryIntentParser {
         List<QueryIntent.Predicate> where = new ArrayList<>();
         List<int[]> conditionSpans = new ArrayList<>();
         List<QueryIntent.Predicate> having = new ArrayList<>();
+        List<int[]> consumed = new ArrayList<>();
+
+        if (date.isPresent()) {
+            DateReader.DateRange range = date.get();
+            DateChoice choice = dateColumn(normalized, chainTables, joined, range.phrase());
+            QueryIntent.ColumnRef dateRef = choice.ref();
+            if (choice.namingWord() != null) {
+                Matcher naming = Pattern.compile("\\b" + Pattern.quote(choice.namingWord()) + "\\b").matcher(text);
+                if (naming.find()) {
+                    consumed.add(new int[]{naming.start(), naming.end()});
+                }
+            }
+            if (range.from() != null) {
+                where.add(new QueryIntent.Predicate(dateRef, QueryIntent.Op.GTE,
+                        List.of(QueryIntent.Literal.date(range.from(), clock.zone()))));
+            }
+            if (range.until() != null) {
+                where.add(new QueryIntent.Predicate(dateRef, QueryIntent.Op.LT,
+                        List.of(QueryIntent.Literal.date(range.until(), clock.zone()))));
+            }
+            String owner = dateRef.table() == null ? subject.name() : dateRef.table();
+            bindings.add(new RuleTrace.Binding(range.phrase(), "DATE_RANGE", owner + "." + dateRef.column()
+                    + (range.from() == null ? "" : " from " + range.from())
+                    + (range.until() == null ? "" : " up to " + range.until())));
+            consumed.add(new int[]{range.start(), range.end()});
+            conditionSpans.add(new int[]{range.start(), range.end()});
+        }
 
         boolean countRequested = COUNT_WORDS.stream().anyMatch(text::contains);
 
@@ -364,7 +397,8 @@ public class QueryIntentParser {
         }
 
         if (!projectionRequested && !countRequested) {
-            Optional<String> tail = extractTrailingColumnPhrase(text, subject, dialect);
+            Optional<String> tail = extractTrailingColumnPhrase(text, subject, dialect)
+                    .filter(t -> !insideAny(text.lastIndexOf(t), consumed));
             if (tail.isPresent()) {
                 List<String> resolved = resolveChunks(tail.get(), subject, interpretations);
                 if (resolved == null) {
@@ -541,8 +575,6 @@ public class QueryIntentParser {
                     bindings);
         }
 
-        List<int[]> consumed = new ArrayList<>();
-
         Matcher excluding = EXCLUDING.matcher(text);
         if (excluding.find()) {
             Optional<ValueList> list = readValues(text, excluding.end(), chainTables, joined, null, metadata, dialect,
@@ -641,7 +673,7 @@ public class QueryIntentParser {
         }
 
         boolean anyOf = false;
-        if (where.size() >= 2) {
+        if (conditionSpans.size() >= 2) {
             List<int[]> ordered = new ArrayList<>(conditionSpans);
             ordered.sort(Comparator.comparingInt(s -> s[0]));
             boolean or = false;
@@ -807,6 +839,50 @@ public class QueryIntentParser {
             return Optional.of(found.get(0));
         }
         return Optional.empty();
+    }
+
+    private record DateChoice(QueryIntent.ColumnRef ref, String namingWord) {}
+
+    private DateChoice dateColumn(String text, List<KnownSchema.Table> chainTables, boolean joined, String phrase) {
+        List<QueryIntent.ColumnRef> named = new ArrayList<>();
+        List<String> namingWords = new ArrayList<>();
+        List<QueryIntent.ColumnRef> all = new ArrayList<>();
+        Set<String> words = Set.of(text.split("[^a-z0-9_]+"));
+        for (KnownSchema.Table table : chainTables) {
+            for (String column : table.columns()) {
+                if (!SchemaBinder.isDateType(binder.fieldType(table, column))) {
+                    continue;
+                }
+                QueryIntent.ColumnRef ref = new QueryIntent.ColumnRef(joined ? table.name() : null, column);
+                all.add(ref);
+                String stem = SchemaBinder.snakeCase(column).replaceAll("_?(date|at|on)$", "");
+                String spaced = SchemaBinder.normalize(column);
+                String naming = !stem.isEmpty() && words.contains(stem + "ed") ? stem + "ed"
+                        : !stem.isEmpty() && words.contains(stem + "d") ? stem + "d"
+                        : !stem.isEmpty() && words.contains(stem) ? stem
+                        : text.contains(spaced) ? spaced : null;
+                if (naming != null) {
+                    named.add(ref);
+                    namingWords.add(naming);
+                }
+            }
+        }
+        List<QueryIntent.ColumnRef> pick = !named.isEmpty() ? named
+                : all.stream().filter(r -> r.table() == null || r.table().equals(chainTables.get(0).name())).toList();
+        if (pick.isEmpty()) {
+            pick = all;
+        }
+        if (pick.isEmpty()) {
+            throw new DeclineException("No table in the question has a date column, so this engine can't place \""
+                    + phrase + "\".");
+        }
+        if (pick.size() > 1) {
+            String tableName = chainTables.get(0).name();
+            throw new DeclineException("\"" + phrase + "\" could be checked against " + listWith("or", pick.stream()
+                    .map(r -> (r.table() == null ? tableName : r.table()) + "." + r.column()).toList())
+                    + "; name one in the question.");
+        }
+        return new DateChoice(pick.get(0), named.size() == 1 ? namingWords.get(0) : null);
     }
 
     private Optional<String> column(KnownSchema.Table table, String phrase, List<Interpretation> interpretations) {

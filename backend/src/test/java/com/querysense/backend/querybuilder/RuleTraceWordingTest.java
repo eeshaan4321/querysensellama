@@ -47,7 +47,7 @@ class RuleTraceWordingTest {
     @DisplayName("no decline reason leaks database vocabulary or a teammate name")
     void declineReasonsAreJargonFree() {
         List<String> inputs = List.of(
-                "orders from last month",
+                "orders recently",
                 "customers and suppliers",
                 "show me everything interesting",
                 "how many customers are there per flurb",

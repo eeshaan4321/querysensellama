@@ -36,7 +36,7 @@ class DeclineBoundaryTest {
     @ParameterizedTest
     @DisplayName("these must always decline to the language model")
     @ValueSource(strings = {
-            "orders from last month",
+            "orders recently",
             "customers who joined in January",
             "show me everything interesting",
             "list the top 5 punters by total spend",
@@ -56,7 +56,7 @@ class DeclineBoundaryTest {
 
     @ParameterizedTest
     @DisplayName("MongoDB declines the same questions MySQL does")
-    @ValueSource(strings = {"orders from last month", "departments and suppliers", "delete all customers"})
+    @ValueSource(strings = {"orders recently", "departments and suppliers", "delete all customers"})
     void mongoDeclinesWhatMysqlDeclines(String input) {
         assertThat(builder.build(input, "MongoDB").built()).as("input: %s", input).isFalse();
     }
@@ -64,7 +64,7 @@ class DeclineBoundaryTest {
     @ParameterizedTest
     @DisplayName("every decline carries a reason a user could act on")
     @ValueSource(strings = {
-            "orders from last month",
+            "orders recently",
             "customers and suppliers",
             "show me everything interesting",
             "delete all customers",
