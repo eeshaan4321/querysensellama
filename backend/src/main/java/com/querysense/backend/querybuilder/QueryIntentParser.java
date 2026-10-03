@@ -117,6 +117,17 @@ public class QueryIntentParser {
         this.emitters = new DialectRegistry<>(emitters, "query emitter");
     }
 
+    static Set<String> instructionWords() {
+        Set<String> words = new java.util.HashSet<>();
+        COUNT_WORDS.forEach(w -> words.addAll(List.of(w.split(" "))));
+        words.addAll(AGGREGATE_FUNCTIONS.keySet());
+        words.addAll(PROJECTION_FILLER_WORDS);
+        words.addAll(NON_COLUMN_WORDS);
+        words.addAll(VALUE_STOPWORDS);
+        words.addAll(List.of("top", "first", "limit", "only", "just", "number", "total", "delete", "remove"));
+        return Set.copyOf(words);
+    }
+
     public RuleBuildResult parse(String rawInput, Dialect dialect) {
         String text = SchemaBinder.normalize(rawInput);
         List<RuleTrace.Binding> bindings = new ArrayList<>();

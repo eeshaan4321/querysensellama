@@ -1,0 +1,12 @@
+[
+  ["customer", "client", "buyer", "shopper", "patron"],
+  ["price", "cost"],
+  ["city", "town"],
+  ["product", "goods", "merchandise"],
+  ["employee", "staff", "worker"],
+  ["quantity", "qty"],
+  ["phone", "telephone", "mobile"],
+  ["supplier", "vendor"],
+  ["department", "division"],
+  ["email", "mail"]
+]
