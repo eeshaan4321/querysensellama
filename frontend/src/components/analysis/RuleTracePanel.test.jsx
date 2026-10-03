@@ -71,4 +71,23 @@ describe('RuleTracePanel', () => {
     expect(screen.getByText('customers.city')).toBeInTheDocument();
     expect(screen.getByText('FILTER')).toBeInTheDocument();
   });
+
+  it('shows how the engine read words the schema does not use', () => {
+    render(
+      <RuleTracePanel
+        handledBy="RULE_ENGINE"
+        interpretations={[
+          { phrase: 'clients', item: 'customers', kind: 'SYNONYM' },
+          { phrase: 'emial', item: 'customers.email', kind: 'TYPO' },
+          { phrase: 'buyers', item: 'customers', kind: 'SCHEMA_ALIAS' },
+        ]}
+        trace={{ outcome: 'BUILT', shape: 'SELECT', bindings: [], joinEdge: null, checksPassed: [], declineReason: null }}
+      />
+    );
+
+    expect(screen.getByText('Read as')).toBeInTheDocument();
+    expect(screen.getByText('built-in synonym')).toBeInTheDocument();
+    expect(screen.getByText('one letter off')).toBeInTheDocument();
+    expect(screen.getByText('alias declared by the schema')).toBeInTheDocument();
+  });
 });

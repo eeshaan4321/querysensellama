@@ -9,4 +9,12 @@ public record SchemaTableView(
         List<String> columns,
         int rowCount,
         List<String> embeddedArrays,
-        Map<String, String> fieldTypes) {}
+        Map<String, String> fieldTypes,
+        List<String> aliases,
+        Map<String, List<String>> columnAliases) {
+
+    public SchemaTableView(String name, List<String> columns, int rowCount, List<String> embeddedArrays,
+                           Map<String, String> fieldTypes) {
+        this(name, columns, rowCount, embeddedArrays, fieldTypes, List.of(), Map.of());
+    }
+}

@@ -113,3 +113,13 @@
   font-size: var(--text-xs);
   color: var(--ink-muted);
 }
+
+.schema-preview__aliases,
+.schema-preview__alias {
+  font-size: var(--text-xs);
+  color: var(--ink-muted);
+}
+
+.schema-preview__alias {
+  margin-left: var(--space-1);
+}

@@ -149,3 +149,27 @@
     min-width: 0;
   }
 }
+
+.rule-trace__read-as {
+  margin-bottom: var(--space-3);
+  font-size: var(--text-sm);
+}
+
+.rule-trace__read-as-label {
+  display: block;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-secondary);
+  margin-bottom: var(--space-1);
+}
+
+.rule-trace__read-as-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}

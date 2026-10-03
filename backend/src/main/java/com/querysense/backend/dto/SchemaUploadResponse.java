@@ -24,7 +24,8 @@ public record SchemaUploadResponse(
     public static SchemaUploadResponse from(SchemaSnapshot snapshot, List<String> warnings) {
         List<SchemaTableView> tables = snapshot.tables().stream()
                 .map(t -> new SchemaTableView(t.name(), t.columns(), snapshot.rowCountFor(t.name()),
-                        t.embeddedArrays(), snapshot.fieldTypesFor(t.name())))
+                        t.embeddedArrays(), snapshot.fieldTypesFor(t.name()),
+                        snapshot.aliasesFor(t.name()).table(), snapshot.aliasesFor(t.name()).columns()))
                 .toList();
 
         return new SchemaUploadResponse(

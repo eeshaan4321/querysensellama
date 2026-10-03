@@ -6,7 +6,13 @@ const LAYER_NAME = {
   RULE_ENGINE: 'the rule engine',
 };
 
-export function RuleTracePanel({ trace, handledBy }) {
+const KIND_LABEL = {
+  SCHEMA_ALIAS: 'alias declared by the schema',
+  SYNONYM: 'built-in synonym',
+  TYPO: 'one letter off',
+};
+
+export function RuleTracePanel({ trace, handledBy, interpretations = [] }) {
   if (!trace) return null;
 
   const declined = trace.outcome === 'DECLINED';
@@ -34,6 +40,22 @@ export function RuleTracePanel({ trace, handledBy }) {
         </>
       ) : (
         <>
+          {interpretations.length > 0 && (
+            <div className="rule-trace__read-as">
+              <span className="rule-trace__read-as-label">Read as</span>
+              <ul className="rule-trace__read-as-list">
+                {interpretations.map((reading, i) => (
+                  <li key={i}>
+                    &ldquo;{reading.phrase}&rdquo;
+                    <span aria-hidden="true"> → </span>
+                    <code>{reading.item}</code>{' '}
+                    <span className="rule-trace__kind">{KIND_LABEL[reading.kind] || reading.kind}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           {trace.joinEdge && (
             <p className="rule-trace__join">
               <span className="rule-trace__join-edge">

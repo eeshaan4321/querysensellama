@@ -68,7 +68,7 @@ export function AnalysisPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-6)' }}>
           <VerdictBanner verdict={analysis.verdict} />
 
-          <RuleTracePanel trace={build.ruleTrace} handledBy={build.handledBy} />
+          <RuleTracePanel trace={build.ruleTrace} handledBy={build.handledBy} interpretations={build.interpretations} />
 
           {analysis.warnings?.length > 0 && (
             <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>

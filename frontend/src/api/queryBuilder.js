@@ -19,5 +19,6 @@ export async function buildQuery({ naturalLanguageQuery, targetDb, resourceLevel
     confidence: data.confidence,
     ruleTrace: data.ruleTrace ?? null,
     schemaWarning: data.schemaWarning ?? null,
+    interpretations: data.interpretations ?? [],
   };
 }

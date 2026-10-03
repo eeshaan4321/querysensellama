@@ -50,4 +50,14 @@ describe('SchemaTablePreview', () => {
     expect(screen.getByText('500 rows')).toBeInTheDocument();
     expect(screen.queryByText('INT')).toBeNull();
   });
+
+  it('lists declared aliases for a table and its columns', () => {
+    render(<SchemaTablePreview schema={{
+      ...MYSQL,
+      tables: [{ ...MYSQL.tables[0], aliases: ['clients', 'buyers'], columnAliases: { name: ['label'] } }],
+    }} />);
+
+    expect(screen.getByText('also: clients, buyers')).toBeInTheDocument();
+    expect(screen.getByText('also: label')).toBeInTheDocument();
+  });
 });

@@ -216,4 +216,13 @@ class SchemaControllerTest {
 
         assertThat(controller.uploadJson(request).dialect()).isEqualTo(Dialect.MONGODB);
     }
+
+    @Test
+    @DisplayName("the active schema lists each table's declared aliases")
+    void activeSchemaListsAliases() {
+        SchemaUploadResponse response = controller.active(null);
+
+        assertThat(response.tables()).filteredOn(t -> t.name().equals("customers")).singleElement()
+                .satisfies(t -> assertThat(t.aliases()).containsExactly("buyers"));
+    }
 }

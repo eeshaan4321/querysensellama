@@ -46,6 +46,9 @@ export function SchemaTablePreview({ schema }) {
                 <span className="schema-preview__rows">{table.rowCount.toLocaleString()} {rowUnit}</span>
               )}
             </div>
+            {table.aliases?.length > 0 && (
+              <div className="schema-preview__aliases">{`also: ${table.aliases.join(', ')}`}</div>
+            )}
 
             <div className="schema-preview__columns">
               {table.columns.map((column) => (
@@ -59,6 +62,9 @@ export function SchemaTablePreview({ schema }) {
                     </>
                   ) : (
                     column
+                  )}
+                  {table.columnAliases?.[column]?.length > 0 && (
+                    <span className="schema-preview__alias">{`also: ${table.columnAliases[column].join(', ')}`}</span>
                   )}
                 </span>
               ))}

@@ -58,7 +58,7 @@ export function mockBuildQuery({ naturalLanguageQuery, targetDb }) {
           + 'so the question went to the language model instead.',
       };
 
-  return { generatedQuery, targetDb, handledBy, confidence, ruleTrace, schemaWarning: null };
+  return { generatedQuery, targetDb, handledBy, confidence, ruleTrace, schemaWarning: null, interpretations: [] };
 }
 
 const KNOWN_INDEXED_COLUMNS = ['id', 'name', 'city', 'email', 'order_id', 'customer_id'];
