@@ -8,8 +8,10 @@ import org.bson.json.JsonMode;
 import org.bson.json.JsonWriterSettings;
 import org.springframework.stereotype.Component;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -20,8 +22,11 @@ import java.util.stream.Collectors;
 @Component
 public class MongoEmitter implements QueryEmitter {
 
-    private static final JsonWriterSettings JSON =
-            JsonWriterSettings.builder().outputMode(JsonMode.RELAXED).build();
+    private static final JsonWriterSettings JSON = JsonWriterSettings.builder()
+            .outputMode(JsonMode.RELAXED)
+            .dateTimeConverter((value, writer) ->
+                    writer.writeRaw("ISODate(\"" + Instant.ofEpochMilli(value) + "\")"))
+            .build();
 
     private final ActiveSchemaProvider activeSchema;
 
@@ -242,7 +247,17 @@ public class MongoEmitter implements QueryEmitter {
             String key = keyOf.apply(p);
             Object condition = condition(p);
             if (out.containsKey(key)) {
-                repeated.add(new Document(key, condition));
+                Object existing = out.get(key);
+                if (existing instanceof Document a && condition instanceof Document b
+                        && a.keySet().stream().allMatch(k -> k.startsWith("$"))
+                        && b.keySet().stream().allMatch(k -> k.startsWith("$"))
+                        && a.values().stream().allMatch(v -> v instanceof Date)
+                        && b.values().stream().allMatch(v -> v instanceof Date)
+                        && a.keySet().stream().noneMatch(b::containsKey)) {
+                    a.putAll(b);
+                } else {
+                    repeated.add(new Document(key, condition));
+                }
             } else {
                 out.append(key, condition);
             }

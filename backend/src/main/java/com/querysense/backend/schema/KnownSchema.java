@@ -72,6 +72,22 @@ public final class KnownSchema {
         return SchemaLookup.detectTablesMentioned(TABLES, text);
     }
 
+    public static final Map<String, Map<String, String>> FIELD_TYPES = Map.of(
+            "categories", Map.of("id", "INT", "name", "VARCHAR"),
+            "customers", Map.of("id", "INT", "name", "VARCHAR", "email", "VARCHAR", "city", "VARCHAR", "phone", "VARCHAR"),
+            "departments", Map.of("id", "INT", "name", "VARCHAR"),
+            "employees", Map.of("id", "INT", "name", "VARCHAR", "email", "VARCHAR", "department_id", "INT",
+                    "manager_id", "INT", "hire_date", "DATE"),
+            "order_items", Map.of("id", "INT", "order_id", "INT", "product_id", "INT", "quantity", "INT",
+                    "unit_price", "DECIMAL"),
+            "orders", Map.of("id", "INT", "customer_id", "INT", "employee_id", "INT", "order_date", "DATE",
+                    "status", "VARCHAR"),
+            "payments", Map.of("id", "INT", "order_id", "INT", "amount", "DECIMAL", "payment_date", "DATE",
+                    "method", "VARCHAR"),
+            "products", Map.of("id", "INT", "name", "VARCHAR", "price", "DECIMAL", "category_id", "INT",
+                    "supplier_id", "INT"),
+            "suppliers", Map.of("id", "INT", "name", "VARCHAR", "contact_email", "VARCHAR"));
+
     public static final Map<String, SchemaAliases.TableAliases> ALIASES = Map.of(
             "customers", new SchemaAliases.TableAliases(List.of("buyers"), Map.of()));
 
@@ -86,7 +102,7 @@ public final class KnownSchema {
                 Instant.EPOCH,
                 Dialect.MYSQL,
                 List.of(),
-                Map.of(),
+                FIELD_TYPES,
                 Map.of(),
                 ALIASES);
     }

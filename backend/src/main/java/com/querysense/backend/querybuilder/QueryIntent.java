@@ -1,7 +1,10 @@
 package com.querysense.backend.querybuilder;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 
 /** A question resolved against the active schema, in a form any dialect's emitter can write. */
@@ -85,6 +88,10 @@ public record QueryIntent(
                 value = plain.doubleValue();
             }
             return new Literal(plain.toPlainString(), true, value);
+        }
+
+        public static Literal date(LocalDate day, ZoneId zone) {
+            return new Literal(day.toString(), false, Date.from(day.atStartOfDay(zone).toInstant()));
         }
 
         public static Literal text(String typed, String stored) {

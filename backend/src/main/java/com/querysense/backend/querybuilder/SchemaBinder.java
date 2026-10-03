@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.Set;
 
 /** Matches words in a question to tables and columns of the active schema. */
 @Component
@@ -51,6 +52,20 @@ public class SchemaBinder {
             }
         }
         return SchemaAliases.TableAliases.NONE;
+    }
+
+    public String fieldType(KnownSchema.Table table, String column) {
+        for (Dialect dialect : Dialect.values()) {
+            SchemaSnapshot snapshot = activeSchema.active(dialect);
+            if (snapshot.tables().contains(table)) {
+                return snapshot.fieldTypesFor(table.name()).get(column);
+            }
+        }
+        return null;
+    }
+
+    public static boolean isDateType(String type) {
+        return type != null && Set.of("DATE", "DATETIME", "TIMESTAMP").contains(type.toUpperCase(Locale.ROOT));
     }
 
     public static String normalize(String s) {
