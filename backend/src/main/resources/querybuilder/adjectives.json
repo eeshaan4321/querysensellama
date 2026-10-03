@@ -1,0 +1,13 @@
+{
+  "cheapest":   {"words": ["price", "cost"], "direction": "ASC",  "needsMostOrLeast": false, "type": "column"},
+  "priciest":   {"words": ["price", "cost"], "direction": "DESC", "needsMostOrLeast": false, "type": "column"},
+  "expensive":  {"words": ["price", "cost"], "direction": "DESC", "needsMostOrLeast": true,  "type": "column"},
+  "costly":     {"words": ["price", "cost"], "direction": "DESC", "needsMostOrLeast": true,  "type": "column"},
+  "largest":    {"words": ["amount", "size", "quantity", "total"], "direction": "DESC", "needsMostOrLeast": false, "type": "column"},
+  "biggest":    {"words": ["amount", "size", "quantity", "total"], "direction": "DESC", "needsMostOrLeast": false, "type": "column"},
+  "smallest":   {"words": ["amount", "size", "quantity", "total"], "direction": "ASC",  "needsMostOrLeast": false, "type": "column"},
+  "heaviest":   {"words": ["weight"], "direction": "DESC", "needsMostOrLeast": false, "type": "column"},
+  "lightest":   {"words": ["weight"], "direction": "ASC",  "needsMostOrLeast": false, "type": "column"},
+  "longest":    {"words": ["length", "duration"], "direction": "DESC", "needsMostOrLeast": false, "type": "column"},
+  "shortest":   {"words": ["length", "duration"], "direction": "ASC",  "needsMostOrLeast": false, "type": "column"}
+}

@@ -78,6 +78,20 @@ public class QueryIntentParser {
             "\\b((?:" + AGGREGATE_WORDS + ")(?:\\s*(?:,|and)\\s*(?:" + AGGREGATE_WORDS + "))+)\\s+"
                     + "(?:of\\s+)?(?:the\\s+)?([a-z_ ]+?)\\b");
 
+    private static final Adjectives ADJECTIVES = Adjectives.builtIn();
+
+    private static final Pattern TOP_BY = Pattern.compile(
+            "\\b(top|bottom)\\b.*?\\bby\\s+(?:the\\s+)?([a-z_]+(?:\\s+[a-z_]+)?)");
+
+    private static final Pattern RANK_N = Pattern.compile(
+            "\\b(\\S+)\\s+(highest|lowest|greatest)\\s+([a-z_]+(?:\\s+[a-z_]+)?)"
+                    + "|\\b(highest|lowest|greatest)\\s+(\\S+)\\s+([a-z_]+(?:\\s+[a-z_]+)?)");
+
+    private static final Pattern ADJECTIVE = Pattern.compile(
+            "\\b(?:(?!(?:most|least)\\b)(\\S+)\\s+)?(?:(most|least)\\s+)?(" + alternation(ADJECTIVES.entries().keySet()) + ")\\b(?:\\s+(\\S+))?");
+
+    private record Ranking(QueryIntent.ColumnRef column, QueryIntent.Direction direction, Integer limit) {}
+
     private static final Pattern EXCLUDING = Pattern.compile(
             "\\b(?:other than|excluding|except|not in|not from)\\s+(?=[a-z])");
 
@@ -91,7 +105,7 @@ public class QueryIntentParser {
     private static final Pattern STANDALONE_DELETE = Pattern.compile(
             "\\b(?:delete|remove)\\b");
 
-    private static final Pattern LIMIT = Pattern.compile("\\b(?:top|first|limit)\\s+(.+)$");
+    private static final Pattern LIMIT = Pattern.compile("\\b(?:top|first|limit|bottom)\\s+(.+)$");
 
     private static final Pattern ORDER_BY = Pattern.compile(
             "\\b(?:order(?:ed)?\\s+by|sort(?:ed)?\\s+by)\\s+([a-z_]+)"
@@ -244,6 +258,8 @@ public class QueryIntentParser {
         }
 
         KnownSchema.Table subject = tables.get(0);
+        String subjectPhrase = tableMatches.hits().get(0).binding().phrase();
+        boolean singular = !subjectPhrase.endsWith("s");
         KnownSchema.Table related = tables.size() == 2 ? tables.get(1) : null;
 
         QueryIntent.JoinSpec joinSpec = null;
@@ -346,9 +362,12 @@ public class QueryIntentParser {
             }
         }
 
+        Optional<Ranking> ranked = projectionRequested ? Optional.empty()
+                : ranking(text, subject, joined, singular, interpretations);
+
         List<QueryIntent.Aggregate> aggregates = new ArrayList<>();
 
-        if (!projectionRequested) {
+        if (!projectionRequested && ranked.isEmpty()) {
             Matcher many = AGGREGATES.matcher(text);
             Matcher agg = AGGREGATE_PHRASE.matcher(text);
             if (many.find()) {
@@ -688,6 +707,9 @@ public class QueryIntentParser {
                     ? QueryIntent.Direction.DESC : QueryIntent.Direction.ASC;
             orderBy.add(new QueryIntent.OrderItem(qualify(orderColumn.get(), subject, joined), direction));
         }
+        if (orderBy.isEmpty() && ranked.isPresent()) {
+            orderBy.add(new QueryIntent.OrderItem(ranked.get().column(), ranked.get().direction()));
+        }
 
         Integer limit = null;
         Matcher limitMatcher = LIMIT.matcher(text);
@@ -704,6 +726,13 @@ public class QueryIntentParser {
                 }
                 limit = value.intValueExact();
             }
+        }
+        if (limit == null && ranked.isPresent()) {
+            limit = ranked.get().limit();
+        }
+        if (ranked.isPresent()) {
+            bindings.add(new RuleTrace.Binding("ranking", "RANKING",
+                    SqlEmitter.column(ranked.get().column()) + " " + ranked.get().direction()));
         }
 
         QueryIntent intent = new QueryIntent(verb, subject.name(), joinSpec,
@@ -971,6 +1000,78 @@ public class QueryIntentParser {
             bound = column(subject, phrase.substring(0, phrase.indexOf(' ')), interpretations);
         }
         return bound;
+    }
+
+    private Optional<Ranking> ranking(String text, KnownSchema.Table subject, boolean joined, boolean singular,
+                                      List<Interpretation> interpretations) {
+        Matcher top = TOP_BY.matcher(text);
+        if (top.find()) {
+            Optional<String> col = column(subject, top.group(2), interpretations);
+            if (col.isEmpty() && top.group(2).contains(" ")) {
+                col = column(subject, top.group(2).substring(0, top.group(2).indexOf(' ')), interpretations);
+            }
+            if (col.isEmpty()) {
+                throw new DeclineException("The question ranks by \"" + top.group(2) + "\", which is not a column of "
+                        + subject.name() + ".");
+            }
+            QueryIntent.Direction direction = "top".equals(top.group(1)) ? QueryIntent.Direction.DESC : QueryIntent.Direction.ASC;
+            return Optional.of(new Ranking(qualify(col.get(), subject, joined), direction, singular ? 1 : null));
+        }
+
+        Matcher rankN = RANK_N.matcher(text);
+        if (rankN.find()) {
+            String count = rankN.group(1) != null ? rankN.group(1) : rankN.group(5);
+            String word = rankN.group(2) != null ? rankN.group(2) : rankN.group(4);
+            String phrase = rankN.group(3) != null ? rankN.group(3) : rankN.group(6);
+            Optional<NumberReader.Reading> n = NumberReader.leading(count);
+            if (n.isPresent() && n.get().integral() && n.get().phrase().equals(count)) {
+                Optional<String> col = column(subject, phrase, interpretations);
+                if (col.isEmpty() && phrase.contains(" ")) {
+                    col = column(subject, phrase.substring(0, phrase.indexOf(' ')), interpretations);
+                }
+                if (col.isPresent()) {
+                    QueryIntent.Direction direction = "lowest".equals(word) ? QueryIntent.Direction.ASC : QueryIntent.Direction.DESC;
+                    return Optional.of(new Ranking(qualify(col.get(), subject, joined), direction,
+                            n.get().value().intValueExact()));
+                }
+            }
+        }
+
+        Matcher adjective = ADJECTIVE.matcher(text);
+        while (adjective.find()) {
+            Adjectives.Entry entry = ADJECTIVES.entries().get(adjective.group(3));
+            if (!"column".equals(entry.type()) || (entry.needsMostOrLeast() && adjective.group(2) == null)) {
+                continue;
+            }
+            List<String> columns = new ArrayList<>();
+            for (String word : entry.words()) {
+                if (binder.columnMatch(subject, word) instanceof SchemaLexicon.Bound bound
+                        && !columns.contains(bound.binding().item())) {
+                    columns.add(bound.binding().item());
+                }
+            }
+            if (columns.isEmpty()) {
+                throw new DeclineException("\"" + adjective.group(3) + "\" doesn't match a column of " + subject.name() + ".");
+            }
+            if (columns.size() > 1) {
+                throw new DeclineException(ambiguityMessage(adjective.group(3),
+                        columns.stream().map(c -> subject.name() + "." + c).toList()));
+            }
+            note(adjective.group(3), subject.name() + "." + columns.get(0), SchemaLexicon.MatchKind.SYNONYM, interpretations);
+            QueryIntent.Direction direction = "least".equals(adjective.group(2))
+                    ? (entry.direction() == QueryIntent.Direction.ASC ? QueryIntent.Direction.DESC : QueryIntent.Direction.ASC)
+                    : entry.direction();
+            Integer limit = null;
+            for (String candidate : new String[]{adjective.group(1), adjective.group(4)}) {
+                Optional<NumberReader.Reading> n = candidate == null ? Optional.empty() : NumberReader.leading(candidate);
+                if (n.isPresent() && n.get().integral() && n.get().phrase().equals(candidate)) {
+                    limit = n.get().value().intValueExact();
+                }
+            }
+            return Optional.of(new Ranking(qualify(columns.get(0), subject, joined), direction,
+                    limit != null ? limit : (singular ? 1 : null)));
+        }
+        return Optional.empty();
     }
 
     private Optional<String> extractTrailingColumnPhrase(String text, KnownSchema.Table table,

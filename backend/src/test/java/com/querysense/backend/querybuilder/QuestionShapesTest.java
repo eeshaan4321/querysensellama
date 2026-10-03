@@ -224,4 +224,41 @@ class QuestionShapesTest {
         assertThat(sql("count and average amount of payments per method"))
                 .isEqualTo("SELECT method, COUNT(*), AVG(amount) FROM payments GROUP BY method;");
     }
+
+    @Test
+    @DisplayName("top and bottom by a column")
+    void topBottom() {
+        assertThat(sql("top 5 products by price")).isEqualTo("SELECT * FROM products ORDER BY price DESC LIMIT 5;");
+        assertThat(sql("bottom 3 products by price")).isEqualTo("SELECT * FROM products ORDER BY price ASC LIMIT 3;");
+        assertThat(sql("top product by price")).isEqualTo("SELECT * FROM products ORDER BY price DESC LIMIT 1;");
+    }
+
+    @Test
+    @DisplayName("the N highest or lowest")
+    void nHighest() {
+        assertThat(sql("products with the 3 highest prices")).isEqualTo("SELECT * FROM products ORDER BY price DESC LIMIT 3;");
+        assertThat(sql("the 2 lowest prices of products")).isEqualTo("SELECT * FROM products ORDER BY price ASC LIMIT 2;");
+    }
+
+    @Test
+    @DisplayName("superlative adjectives, with most and least")
+    void adjectives() {
+        assertThat(sql("cheapest product")).isEqualTo("SELECT * FROM products ORDER BY price ASC LIMIT 1;");
+        assertThat(sql("3 most expensive products")).isEqualTo("SELECT * FROM products ORDER BY price DESC LIMIT 3;");
+        assertThat(sql("least expensive products")).isEqualTo("SELECT * FROM products ORDER BY price ASC;");
+        assertThat(sql("largest orders")).isEqualTo("SELECT * FROM orders ORDER BY amount DESC;");
+    }
+
+    @Test
+    @DisplayName("an adjective fitting two columns, or none, declines")
+    void adjectiveDeclines() {
+        assertThat(declineReason("cheapest listing")).contains("listings.price").contains("listings.cost");
+        assertThat(declineReason("cheapest customer")).contains("cheapest");
+    }
+
+    @Test
+    @DisplayName("highestWithoutNumberIsStillMax: today's MAX reading is unchanged")
+    void highestWithoutNumberIsStillMax() {
+        assertThat(sql("highest price of products")).isEqualTo("SELECT MAX(price) FROM products;");
+    }
 }

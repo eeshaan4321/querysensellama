@@ -40,6 +40,7 @@ class DeclineBoundaryTest {
             "customers who joined in January",
             "show me everything interesting",
             "list the top 5 punters by total spend",
+            "list the top 5 buyers by total spend",
             "customers and suppliers",
             "orders, customers and products together",
             "delete all customers",
