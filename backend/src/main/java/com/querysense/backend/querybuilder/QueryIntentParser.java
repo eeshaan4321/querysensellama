@@ -32,17 +32,34 @@ public class QueryIntentParser {
                     + "|\\b(?:before|after|since|until)\\s+\\d{4}\\b"
                     + "|\\b(?:date range|last \\d+ days)\\b");
 
+    private static final Map<String, QueryIntent.Op> COMPARISON_OPS = Map.ofEntries(
+            Map.entry("more than", QueryIntent.Op.GT), Map.entry("greater than", QueryIntent.Op.GT),
+            Map.entry("larger than", QueryIntent.Op.GT), Map.entry("higher than", QueryIntent.Op.GT),
+            Map.entry("above", QueryIntent.Op.GT), Map.entry("over", QueryIntent.Op.GT),
+            Map.entry("less than", QueryIntent.Op.LT), Map.entry("fewer than", QueryIntent.Op.LT),
+            Map.entry("lower than", QueryIntent.Op.LT), Map.entry("smaller than", QueryIntent.Op.LT),
+            Map.entry("below", QueryIntent.Op.LT), Map.entry("under", QueryIntent.Op.LT),
+            Map.entry("at least", QueryIntent.Op.GTE), Map.entry("no less than", QueryIntent.Op.GTE),
+            Map.entry("at most", QueryIntent.Op.LTE), Map.entry("no more than", QueryIntent.Op.LTE),
+            Map.entry("up to", QueryIntent.Op.LTE));
+
     private static final Pattern COMPARISON = Pattern.compile(
-            "\\b([a-z_]+)\\s+(?:is\\s+)?"
-                    + "(more than|greater than|larger than|higher than"
-                    + "|less than|fewer than|lower than|smaller than"
-                    + "|above|over|below|under)\\s+(.+)$");
+            "\\b([a-z_]+)\\s+(?:is\\s+)?(" + alternation(COMPARISON_OPS.keySet()) + ")\\s+(.+)$");
+
+    private static final Pattern BETWEEN = Pattern.compile("\\b([a-z_]+)\\s+(?:is\\s+)?between\\s+(.+)$");
+
+    private static String alternation(java.util.Collection<String> words) {
+        return words.stream()
+                .sorted(java.util.Comparator.comparingInt(String::length).reversed())
+                .map(Pattern::quote)
+                .collect(java.util.stream.Collectors.joining("|"));
+    }
 
     private static final Pattern PER_GROUP = Pattern.compile(
             "\\b(?:per|for each|grouped by|group by)\\s+([a-z_ ]+?)\\b");
 
     private static final Pattern PREPOSITION = Pattern.compile(
-            "\\b(?:from|in|at|located in|living in|based in|residing in)\\s+(?=[a-z])");
+            "\\b(?:from|in|at(?!\\s+(?:least|most)\\b)|located in|living in|based in|residing in)\\s+(?=[a-z])");
 
     private static final int LONGEST_VALUE_WORDS = 4;
 
@@ -76,9 +93,6 @@ public class QueryIntentParser {
             "sum", "SUM",
             "maximum", "MAX", "max", "MAX", "highest", "MAX",
             "minimum", "MIN", "min", "MIN", "lowest", "MIN");
-
-    private static final Set<String> COMPARISON_GREATER = Set.of(
-            "more than", "greater than", "larger than", "higher than", "above", "over");
 
     private static final Set<String> VALUE_STOPWORDS = Set.of(
             "the", "a", "an", "all", "any", "each", "every", "this", "that",
@@ -132,7 +146,7 @@ public class QueryIntentParser {
         List<Interpretation> interpretations = new ArrayList<>();
         try {
             return parse(rawInput, dialect, bindings, interpretations);
-        } catch (AmbiguousWordException e) {
+        } catch (DeclineException e) {
             return RuleBuildResult.declined(e.getMessage(), bindings);
         }
     }
@@ -311,12 +325,42 @@ public class QueryIntentParser {
                     subject.name() + "." + groupColumn));
         }
 
+        Matcher between = BETWEEN.matcher(text);
+        if (between.find()) {
+            String rest = between.group(2);
+            Optional<NumberReader.Reading> low = NumberReader.leading(rest);
+            String after = low.map(r -> rest.substring(r.phrase().length()).trim()).orElse("");
+            Optional<NumberReader.Reading> high = after.startsWith("and ")
+                    ? NumberReader.leading(after.substring(4))
+                    : Optional.empty();
+            if (low.isEmpty() || high.isEmpty()) {
+                return RuleBuildResult.declined(
+                        "The question asks for " + between.group(1) + " between \"" + rest
+                                + "\", but this engine can only read a range between two numbers.",
+                        bindings);
+            }
+            Optional<String> rangeColumn = column(subject, between.group(1), interpretations);
+            if (rangeColumn.isEmpty()) {
+                return RuleBuildResult.declined(
+                        "The question asks for a range of \"" + between.group(1) + "\", which is not a column of "
+                                + subject.name() + ".",
+                        bindings);
+            }
+            QueryIntent.Literal from = QueryIntent.Literal.number(low.get().value());
+            QueryIntent.Literal to = QueryIntent.Literal.number(high.get().value());
+            where.add(new QueryIntent.Predicate(qualify(rangeColumn.get(), subject, joined),
+                    QueryIntent.Op.BETWEEN, List.of(from, to)));
+            String lhs = joined ? subject.name() + "." + rangeColumn.get() : rangeColumn.get();
+            bindings.add(new RuleTrace.Binding(
+                    between.group(1) + " between " + low.get().phrase() + " and " + high.get().phrase(),
+                    "COMPARISON", lhs + " BETWEEN " + from.text() + " AND " + to.text()));
+        }
+
         Matcher comparison = COMPARISON.matcher(text);
         String countTargetColumn = null;
         if (comparison.find()) {
-            String operator = COMPARISON_GREATER.contains(comparison.group(2)) ? ">" : "<";
-            QueryIntent.Op op = COMPARISON_GREATER.contains(comparison.group(2))
-                    ? QueryIntent.Op.GT : QueryIntent.Op.LT;
+            QueryIntent.Op op = COMPARISON_OPS.get(comparison.group(2));
+            String operator = op.sql();
             String rest = comparison.group(3);
             Optional<NumberReader.Reading> reading = NumberReader.leading(rest);
             if (reading.isEmpty()) {
