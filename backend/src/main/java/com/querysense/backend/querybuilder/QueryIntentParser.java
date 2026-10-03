@@ -66,6 +66,12 @@ public class QueryIntentParser {
 
     private static final Pattern NEVER = Pattern.compile("\\bnever\\s+([a-z]+?)(?:ed|d)\\b");
 
+    private static final Pattern DISTINCT_PHRASE = Pattern.compile(
+            "\\b(?:distinct|unique|different)\\s+([a-z_]+(?:\\s+[a-z_]+)?)\\s+(?:of|in|from|among|for)\\b");
+
+    private static final Pattern WHICH_PHRASE = Pattern.compile(
+            "^(?:which|what)\\s+([a-z_]+(?:\\s+[a-z_]+)?)\\s+(?:do|does|did|are|have|has)\\b");
+
     private static final Pattern EXCLUDING = Pattern.compile(
             "\\b(?:other than|excluding|except|not in|not from)\\s+(?=[a-z])");
 
@@ -290,7 +296,9 @@ public class QueryIntentParser {
 
         boolean countRequested = COUNT_WORDS.stream().anyMatch(text::contains);
 
-        Optional<String> strongPhrase = extractStrongProjectionPhrase(text);
+        Optional<String> distinctColumn = distinctColumn(text, subject, dialect, interpretations);
+        boolean distinct = distinctColumn.isPresent();
+        Optional<String> strongPhrase = distinct ? Optional.empty() : extractStrongProjectionPhrase(text);
         List<String> projected = List.of();
         boolean projectionRequested = strongPhrase.isPresent();
         if (projectionRequested) {
@@ -304,6 +312,13 @@ public class QueryIntentParser {
             projected = resolved;
             projected.forEach(c -> bindings.add(
                     new RuleTrace.Binding(c, "COLUMN", subject.name() + "." + c)));
+        }
+
+        if (distinct) {
+            projected = List.of(distinctColumn.get());
+            projectionRequested = true;
+            bindings.add(new RuleTrace.Binding(distinctColumn.get(), "DISTINCT",
+                    subject.name() + "." + distinctColumn.get()));
         }
 
         if (!projectionRequested && !countRequested) {
@@ -623,7 +638,7 @@ public class QueryIntentParser {
 
         QueryIntent intent = new QueryIntent(verb, subject.name(), joinSpec,
                 List.copyOf(selectItems), List.copyOf(where), List.copyOf(having),
-                List.copyOf(orderBy), limit);
+                List.copyOf(orderBy), limit, distinct, false);
 
         String sql;
         try {
@@ -864,6 +879,28 @@ public class QueryIntentParser {
         }
         boolean known = table.columns().stream().anyMatch(c -> c.equalsIgnoreCase(ref.column()));
         return known ? Optional.of(ref.column()) : Optional.empty();
+    }
+
+    private Optional<String> distinctColumn(String text, KnownSchema.Table subject, Dialect dialect,
+                                            List<Interpretation> interpretations) {
+        Matcher distinct = DISTINCT_PHRASE.matcher(text);
+        String phrase = null;
+        if (distinct.find()) {
+            phrase = distinct.group(1);
+        } else {
+            Matcher which = WHICH_PHRASE.matcher(text);
+            if (which.find() && binder.tableMatches(which.group(1), dialect).hits().isEmpty()) {
+                phrase = which.group(1);
+            }
+        }
+        if (phrase == null) {
+            return Optional.empty();
+        }
+        Optional<String> bound = column(subject, phrase, interpretations);
+        if (bound.isEmpty() && phrase.contains(" ")) {
+            bound = column(subject, phrase.substring(0, phrase.indexOf(' ')), interpretations);
+        }
+        return bound;
     }
 
     private Optional<String> extractTrailingColumnPhrase(String text, KnownSchema.Table table,

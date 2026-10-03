@@ -168,4 +168,19 @@ class QuestionShapesTest {
     void withoutNoKey() {
         assertThat(declineReason("products without payments")).contains("no relationship");
     }
+
+    @Test
+    @DisplayName("distinct values of a column")
+    void distinct() {
+        assertThat(sql("distinct cities of customers")).isEqualTo("SELECT DISTINCT city FROM customers;");
+        assertThat(sql("unique cities of customers")).isEqualTo("SELECT DISTINCT city FROM customers;");
+        assertThat(sql("which cities do customers live in")).isEqualTo("SELECT DISTINCT city FROM customers;");
+        assertThat(sql("what statuses do orders have")).isEqualTo("SELECT DISTINCT status FROM orders;");
+    }
+
+    @Test
+    @DisplayName("whichTableIsNotDistinct: 'which customers are in mumbai' reads as today")
+    void whichTableIsNotDistinct() {
+        assertThat(sql("which customers are in mumbai")).isEqualTo("SELECT * FROM customers WHERE city = 'mumbai';");
+    }
 }
