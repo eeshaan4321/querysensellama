@@ -167,4 +167,43 @@ class VocabularyTest {
     void punctuationEndsTheValue() {
         assertThat(sql("clients in mumbai?").sql()).isEqualTo("SELECT * FROM customers WHERE city = 'mumbai';");
     }
+
+    @Test
+    @DisplayName("spelled-out and separated numbers in a comparison")
+    void comparisonNumbers() {
+        assertThat(sql("orders with amount above two hundred and fifty").sql())
+                .isEqualTo("SELECT * FROM orders WHERE amount > 250;");
+        assertThat(sql("orders with amount over 1,000").sql())
+                .isEqualTo("SELECT * FROM orders WHERE amount > 1000;");
+        assertThat(sql("orders with amount below 4.5").sql())
+                .isEqualTo("SELECT * FROM orders WHERE amount < 4.5;");
+    }
+
+    @Test
+    @DisplayName("a comparison against words that aren't a number still declines")
+    void unreadableNumber() {
+        RuleBuildResult result = sql("orders with amount above fifty-ish");
+
+        assertThat(result.built()).isFalse();
+        assertThat(result.trace().declineReason()).contains("\"fifty-ish\"").contains("not a number");
+    }
+
+    @Test
+    @DisplayName("a spelled-out limit")
+    void wordLimit() {
+        assertThat(sql("top twenty customers").sql()).isEqualTo("SELECT * FROM customers LIMIT 20;");
+    }
+
+    @Test
+    @DisplayName("limitWordWithoutNumber: 'top' with no number builds with no limit, as today")
+    void limitWordWithoutNumber() {
+        assertThat(sql("top customers in pune").sql()).isEqualTo("SELECT * FROM customers WHERE city = 'pune';");
+    }
+
+    @Test
+    @DisplayName("a with-filter reads a spelled-out number as a number")
+    void withNumber() {
+        assertThat(sql("orders with amount twenty five").sql())
+                .isEqualTo("SELECT * FROM orders WHERE amount = 25;");
+    }
 }

@@ -7,6 +7,7 @@ import com.querysense.backend.dto.RuleTrace;
 import com.querysense.backend.schema.KnownSchema;
 import org.springframework.stereotype.Component;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -35,7 +36,7 @@ public class QueryIntentParser {
             "\\b([a-z_]+)\\s+(?:is\\s+)?"
                     + "(more than|greater than|larger than|higher than"
                     + "|less than|fewer than|lower than|smaller than"
-                    + "|above|over|below|under)\\s+([a-z0-9_]+)\\b");
+                    + "|above|over|below|under)\\s+(.+)$");
 
     private static final Pattern PER_GROUP = Pattern.compile(
             "\\b(?:per|for each|grouped by|group by)\\s+([a-z_ ]+?)\\b");
@@ -51,7 +52,7 @@ public class QueryIntentParser {
     private static final Pattern STANDALONE_DELETE = Pattern.compile(
             "\\b(?:delete|remove)\\b");
 
-    private static final Pattern LIMIT = Pattern.compile("\\b(?:top|first|limit)\\s+(\\d+)\\b");
+    private static final Pattern LIMIT = Pattern.compile("\\b(?:top|first|limit)\\s+(.+)$");
 
     private static final Pattern ORDER_BY = Pattern.compile(
             "\\b(?:order(?:ed)?\\s+by|sort(?:ed)?\\s+by)\\s+([a-z_]+)"
@@ -69,10 +70,6 @@ public class QueryIntentParser {
     private static final Pattern WITH_VALUE = Pattern.compile("\\bwith\\s+([a-z_]+)\\s+([a-z0-9_]+)\\b");
 
     private static final Pattern CONJOINED_NOUN = Pattern.compile("\\b(?:and|plus)\\s+([a-z_]+)\\b");
-
-    private static final Map<String, Integer> NUMBER_WORDS = Map.of(
-            "one", 1, "two", 2, "three", 3, "four", 4, "five", 5,
-            "six", 6, "seven", 7, "eight", 8, "nine", 9, "ten", 10);
 
     private static final Map<String, String> AGGREGATE_FUNCTIONS = Map.of(
             "average", "AVG", "avg", "AVG", "mean", "AVG",
@@ -320,32 +317,34 @@ public class QueryIntentParser {
             String operator = COMPARISON_GREATER.contains(comparison.group(2)) ? ">" : "<";
             QueryIntent.Op op = COMPARISON_GREATER.contains(comparison.group(2))
                     ? QueryIntent.Op.GT : QueryIntent.Op.LT;
-            Optional<Integer> literal = numberFrom(comparison.group(3));
-            if (literal.isEmpty()) {
+            String rest = comparison.group(3);
+            Optional<NumberReader.Reading> reading = NumberReader.leading(rest);
+            if (reading.isEmpty()) {
                 return RuleBuildResult.declined(
-                        "The question compares against \"" + comparison.group(3)
+                        "The question compares against \"" + rest.split("\\s+")[0]
                                 + "\", which is not a number this engine can read.",
                         bindings);
             }
+            QueryIntent.Literal number = QueryIntent.Literal.number(reading.get().value());
 
             Optional<String> lhsColumn = column(subject, comparison.group(1), interpretations);
             if (lhsColumn.isPresent()) {
                 String lhs = joined ? subject.name() + "." + lhsColumn.get() : lhsColumn.get();
                 where.add(new QueryIntent.Predicate(qualify(lhsColumn.get(), subject, joined), op,
-                        List.of(QueryIntent.Literal.number(literal.get()))));
+                        List.of(number)));
                 bindings.add(new RuleTrace.Binding(
-                        comparison.group(1) + " " + comparison.group(2) + " " + comparison.group(3),
-                        "COMPARISON", lhs + " " + operator + " " + literal.get()));
+                        comparison.group(1) + " " + comparison.group(2) + " " + reading.get().phrase(),
+                        "COMPARISON", lhs + " " + operator + " " + number.text()));
             } else if (joined) {
                 countTargetColumn = related.columns().get(0);
                 String rendered = "COUNT(" + related.name() + "." + countTargetColumn + ")";
                 having.add(new QueryIntent.Predicate(
                         new QueryIntent.Aggregate(QueryIntent.Fn.COUNT,
                                 new QueryIntent.ColumnRef(related.name(), countTargetColumn)),
-                        op, List.of(QueryIntent.Literal.number(literal.get()))));
+                        op, List.of(number)));
                 bindings.add(new RuleTrace.Binding(
-                        comparison.group(2) + " " + comparison.group(3) + " " + related.name(),
-                        "COMPARISON", rendered + " " + operator + " " + literal.get()));
+                        comparison.group(2) + " " + reading.get().phrase() + " " + related.name(),
+                        "COMPARISON", rendered + " " + operator + " " + number.text()));
             } else {
                 return RuleBuildResult.declined(
                         "The question compares \"" + comparison.group(1) + "\", which is not a "
@@ -433,10 +432,11 @@ public class QueryIntentParser {
                         bindings);
             }
             String value = with.group(2);
-            Optional<Integer> number = numberFrom(value);
+            Optional<NumberReader.Reading> number = NumberReader.leading(text.substring(with.start(2)));
             QueryIntent.Literal literalValue;
             if (number.isPresent()) {
-                literalValue = new QueryIntent.Literal(value, true, number.get());
+                literalValue = QueryIntent.Literal.number(number.get().value());
+                value = number.get().phrase();
             } else {
                 Optional<String> stored = storedValueOf(subject, withColumn.get(), value, metadata);
                 if (stored.isEmpty() && dialect == Dialect.MONGODB) {
@@ -519,7 +519,18 @@ public class QueryIntentParser {
         Integer limit = null;
         Matcher limitMatcher = LIMIT.matcher(text);
         if (limitMatcher.find()) {
-            limit = Integer.parseInt(limitMatcher.group(1));
+            Optional<NumberReader.Reading> reading = NumberReader.leading(limitMatcher.group(1));
+            if (reading.isPresent()) {
+                BigDecimal value = reading.get().value();
+                if (!reading.get().integral() || value.signum() <= 0
+                        || value.compareTo(BigDecimal.valueOf(Integer.MAX_VALUE)) > 0) {
+                    return RuleBuildResult.declined(
+                            "The question asks for the top \"" + reading.get().phrase() + "\", which is not a "
+                                    + "whole number of rows this engine can limit to.",
+                            bindings);
+                }
+                limit = value.intValueExact();
+            }
         }
 
         QueryIntent intent = new QueryIntent(verb, subject.name(), joinSpec,
@@ -696,21 +707,6 @@ public class QueryIntentParser {
         }
         boolean known = table.columns().stream().anyMatch(c -> c.equalsIgnoreCase(ref.column()));
         return known ? Optional.of(ref.column()) : Optional.empty();
-    }
-
-    private Optional<Integer> numberFrom(String token) {
-        if (token == null) {
-            return Optional.empty();
-        }
-        String lower = token.toLowerCase(Locale.ROOT);
-        if (NUMBER_WORDS.containsKey(lower)) {
-            return Optional.of(NUMBER_WORDS.get(lower));
-        }
-        try {
-            return Optional.of(Integer.parseInt(lower));
-        } catch (NumberFormatException e) {
-            return Optional.empty();
-        }
     }
 
     private Optional<String> extractTrailingColumnPhrase(String text, KnownSchema.Table table,
