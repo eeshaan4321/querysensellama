@@ -129,8 +129,18 @@ public class QueryIntentParser {
     }
 
     public RuleBuildResult parse(String rawInput, Dialect dialect) {
-        String text = SchemaBinder.normalize(rawInput);
         List<RuleTrace.Binding> bindings = new ArrayList<>();
+        List<Interpretation> interpretations = new ArrayList<>();
+        try {
+            return parse(rawInput, dialect, bindings, interpretations);
+        } catch (AmbiguousWordException e) {
+            return RuleBuildResult.declined(e.getMessage(), bindings);
+        }
+    }
+
+    private RuleBuildResult parse(String rawInput, Dialect dialect, List<RuleTrace.Binding> bindings,
+                                  List<Interpretation> interpretations) {
+        String text = SchemaBinder.normalize(rawInput);
         SchemaMetadata metadata = metadataByDialect.get(dialect);
 
         if (TEMPORAL.matcher(text).find()) {
@@ -140,7 +150,13 @@ public class QueryIntentParser {
                     bindings);
         }
 
-        List<KnownSchema.Table> tables = binder.bindTables(text, dialect);
+        SchemaLexicon.TableMatches tableMatches = binder.tableMatches(text, dialect);
+        if (tableMatches.ambiguity().isPresent()) {
+            SchemaLexicon.Ambiguity ambiguity = tableMatches.ambiguity().get();
+            throw new AmbiguousWordException(ambiguityMessage(ambiguity.phrase(), ambiguity.candidates()));
+        }
+        List<KnownSchema.Table> tables = tableMatches.hits().stream().map(SchemaLexicon.TableHit::table).toList();
+        tableMatches.hits().forEach(hit -> note(hit.binding().phrase(), hit.table().name(), hit.binding().kind(), interpretations));
         if (tables.isEmpty()) {
             return RuleBuildResult.declined(
                     "Nothing in the question matches a table in the schema that is currently active.",
@@ -157,6 +173,7 @@ public class QueryIntentParser {
         while (conjoined.find()) {
             String word = conjoined.group(1);
             boolean known = binder.tableNamed(word, dialect).isPresent()
+                    || binder.isTableWord(word, dialect)
                     || NON_COLUMN_WORDS.contains(word)
                     || VALUE_STOPWORDS.contains(word)
                     || tables.stream().anyMatch(t -> binder.bindColumn(t, word).isPresent())
@@ -228,7 +245,7 @@ public class QueryIntentParser {
         List<String> projected = List.of();
         boolean projectionRequested = strongPhrase.isPresent();
         if (projectionRequested) {
-            List<String> resolved = resolveChunks(strongPhrase.get(), subject);
+            List<String> resolved = resolveChunks(strongPhrase.get(), subject, interpretations);
             if (resolved == null) {
                 return RuleBuildResult.declined(
                         "The question asks for specific fields, but at least one of them is not a "
@@ -243,7 +260,7 @@ public class QueryIntentParser {
         if (!projectionRequested && !countRequested) {
             Optional<String> tail = extractTrailingColumnPhrase(text, subject, dialect);
             if (tail.isPresent()) {
-                List<String> resolved = resolveChunks(tail.get(), subject);
+                List<String> resolved = resolveChunks(tail.get(), subject, interpretations);
                 if (resolved == null) {
                     return RuleBuildResult.declined(
                             "The question looks like it asks for \"" + tail.get() + "\" from "
@@ -265,7 +282,7 @@ public class QueryIntentParser {
             Matcher agg = AGGREGATE_PHRASE.matcher(text);
             if (agg.find()) {
                 aggregateFunction = AGGREGATE_FUNCTIONS.get(agg.group(1));
-                Optional<String> col = binder.bindColumn(subject, agg.group(2));
+                Optional<String> col = column(subject, agg.group(2), interpretations);
                 if (col.isEmpty()) {
                     return RuleBuildResult.declined(
                             "The question asks for the " + agg.group(1) + " of \"" + agg.group(2)
@@ -283,7 +300,7 @@ public class QueryIntentParser {
         Matcher per = PER_GROUP.matcher(text);
         if (per.find()) {
             groupPhrase = per.group(1).trim();
-            Optional<String> col = binder.bindColumn(subject, per.group(1));
+            Optional<String> col = column(subject, per.group(1), interpretations);
             if (col.isEmpty()) {
                 return RuleBuildResult.declined(
                         "The question asks for a breakdown by \"" + per.group(1).trim()
@@ -309,7 +326,7 @@ public class QueryIntentParser {
                         bindings);
             }
 
-            Optional<String> lhsColumn = binder.bindColumn(subject, comparison.group(1));
+            Optional<String> lhsColumn = column(subject, comparison.group(1), interpretations);
             if (lhsColumn.isPresent()) {
                 String lhs = joined ? subject.name() + "." + lhsColumn.get() : lhsColumn.get();
                 where.add(new QueryIntent.Predicate(qualify(lhsColumn.get(), subject, joined), op,
@@ -395,8 +412,8 @@ public class QueryIntentParser {
         Matcher with = WITH_VALUE.matcher(text);
         if (where.isEmpty() && with.find() && !VALUE_STOPWORDS.contains(with.group(1))
                 && !NON_COLUMN_WORDS.contains(with.group(1))) {
-            Optional<String> column = binder.bindColumn(subject, with.group(1));
-            if (column.isEmpty()) {
+            Optional<String> withColumn = column(subject, with.group(1), interpretations);
+            if (withColumn.isEmpty()) {
                 return RuleBuildResult.declined(
                         "The question filters on \"" + with.group(1) + "\", which is not a column of "
                                 + subject.name() + ".",
@@ -408,20 +425,20 @@ public class QueryIntentParser {
             if (number.isPresent()) {
                 literalValue = new QueryIntent.Literal(value, true, number.get());
             } else {
-                Optional<String> stored = storedValueOf(subject, column.get(), value, metadata);
+                Optional<String> stored = storedValueOf(subject, withColumn.get(), value, metadata);
                 if (stored.isEmpty() && dialect == Dialect.MONGODB) {
                     return RuleBuildResult.declined(
                             "Couldn't confirm how \"" + value + "\" is stored in " + subject.name() + "."
-                                    + column.get() + ", and MongoDB matches text exactly, so this "
+                                    + withColumn.get() + ", and MongoDB matches text exactly, so this "
                                     + "engine won't guess its capitalisation.",
                             bindings);
                 }
                 literalValue = QueryIntent.Literal.text(value, stored.orElse(value));
             }
-            where.add(new QueryIntent.Predicate(qualify(column.get(), subject, joined),
+            where.add(new QueryIntent.Predicate(qualify(withColumn.get(), subject, joined),
                     QueryIntent.Op.EQ, List.of(literalValue)));
             bindings.add(new RuleTrace.Binding(with.group(1) + " " + value, "FILTER",
-                    subject.name() + "." + column.get()));
+                    subject.name() + "." + withColumn.get()));
         }
 
         if (groupColumn != null) {
@@ -474,8 +491,8 @@ public class QueryIntentParser {
         List<QueryIntent.OrderItem> orderBy = new ArrayList<>();
         Matcher order = ORDER_BY.matcher(text);
         if (order.find()) {
-            Optional<String> column = binder.bindColumn(subject, order.group(1));
-            if (column.isEmpty()) {
+            Optional<String> orderColumn = column(subject, order.group(1), interpretations);
+            if (orderColumn.isEmpty()) {
                 return RuleBuildResult.declined(
                         "The question asks to sort by \"" + order.group(1) + "\", which is not a "
                                 + "column of " + subject.name() + ".",
@@ -483,7 +500,7 @@ public class QueryIntentParser {
             }
             QueryIntent.Direction direction = order.group(2) != null && order.group(2).contains("desc")
                     ? QueryIntent.Direction.DESC : QueryIntent.Direction.ASC;
-            orderBy.add(new QueryIntent.OrderItem(qualify(column.get(), subject, joined), direction));
+            orderBy.add(new QueryIntent.OrderItem(qualify(orderColumn.get(), subject, joined), direction));
         }
 
         Integer limit = null;
@@ -509,7 +526,41 @@ public class QueryIntentParser {
                 joinEdge,
                 checksFor(joined),
                 null);
-        return RuleBuildResult.built(sql, trace);
+        return RuleBuildResult.built(sql, trace, interpretations);
+    }
+
+    private Optional<String> column(KnownSchema.Table table, String phrase, List<Interpretation> interpretations) {
+        SchemaLexicon.ColumnMatch match = binder.columnMatch(table, phrase);
+        if (match instanceof SchemaLexicon.Ambiguous ambiguous) {
+            throw new AmbiguousWordException(ambiguityMessage(ambiguous.ambiguity().phrase(),
+                    ambiguous.ambiguity().candidates().stream().map(c -> table.name() + "." + c).toList()));
+        }
+        if (match instanceof SchemaLexicon.Bound bound) {
+            note(bound.binding().phrase(), table.name() + "." + bound.binding().item(), bound.binding().kind(), interpretations);
+            return Optional.of(bound.binding().item());
+        }
+        return Optional.empty();
+    }
+
+    private static void note(String phrase, String item, SchemaLexicon.MatchKind kind, List<Interpretation> interpretations) {
+        if (kind == SchemaLexicon.MatchKind.SCHEMA_ALIAS || kind == SchemaLexicon.MatchKind.SYNONYM
+                || kind == SchemaLexicon.MatchKind.TYPO) {
+            Interpretation interpretation = new Interpretation(phrase, item, kind);
+            if (!interpretations.contains(interpretation)) {
+                interpretations.add(interpretation);
+            }
+        }
+    }
+
+    static String ambiguityMessage(String phrase, List<String> candidates) {
+        return "\"" + phrase + "\" could mean " + listWith("or", candidates) + ", so this engine won't pick one.";
+    }
+
+    static String listWith(String conjunction, List<String> items) {
+        if (items.size() == 1) {
+            return items.get(0);
+        }
+        return String.join(", ", items.subList(0, items.size() - 1)) + " " + conjunction + " " + items.get(items.size() - 1);
     }
 
     private QueryIntent.JoinSpec joinSpecFor(KnownSchema.ForeignKey edge,
@@ -658,7 +709,7 @@ public class QueryIntentParser {
         return Optional.empty();
     }
 
-    private List<String> resolveChunks(String rawPhrase, KnownSchema.Table table) {
+    private List<String> resolveChunks(String rawPhrase, KnownSchema.Table table, List<Interpretation> interpretations) {
         List<String> resolved = new ArrayList<>();
         for (String chunk : rawPhrase.split("\\s*(?:,|\\band\\b)\\s*")) {
             List<String> words = new ArrayList<>();
@@ -670,9 +721,9 @@ public class QueryIntentParser {
             if (words.isEmpty()) {
                 continue;
             }
-            Optional<String> match = binder.bindColumn(table, String.join(" ", words));
+            Optional<String> match = column(table, String.join(" ", words), interpretations);
             if (match.isEmpty() && words.size() > 1) {
-                match = binder.bindColumn(table, words.get(words.size() - 1));
+                match = column(table, words.get(words.size() - 1), interpretations);
             }
             if (match.isEmpty()) {
                 return null;
