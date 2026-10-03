@@ -315,4 +315,22 @@ class JsonSchemaUploadParserTest {
                 .isInstanceOf(SchemaUploadException.class)
                 .hasMessageContaining("JSON.stringify(db.getCollectionInfos())");
     }
+
+    @Test
+    @DisplayName("aka: in collection and field descriptions, and the aliases block, merge into one declaration")
+    void descriptionAndBlockAliases() {
+        ParsedSchema schema = parser.parse("""
+                {"collections": [{"name": "customers", "validator": {"$jsonSchema": {
+                    "description": "People who buy. aka: clients",
+                    "properties": {
+                      "city": {"bsonType": "string", "description": "aka: town"},
+                      "address": {"bsonType": "object", "properties": {
+                        "zip": {"bsonType": "string", "description": "aka: postcode"}}}}}}}],
+                 "aliases": {"customers": {"table": ["patrons"], "columns": {"city": ["locality"]}}}}
+                """);
+
+        assertThat(schema.aliases().get("customers").table()).containsExactly("clients", "patrons");
+        assertThat(schema.aliases().get("customers").column("city")).containsExactly("town", "locality");
+        assertThat(schema.aliases().get("customers").column("address.zip")).containsExactly("postcode");
+    }
 }

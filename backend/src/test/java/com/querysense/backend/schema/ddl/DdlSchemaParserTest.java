@@ -1,5 +1,6 @@
 package com.querysense.backend.schema.ddl;
 
+import com.querysense.backend.schema.SchemaAliases;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -151,5 +152,26 @@ class DdlSchemaParserTest {
         assertThat(schema.tables().get(0).columnNames()).containsExactly("id", "name", "price");
         assertThat(schema.tables().get(0).column("id").orElseThrow().primaryKey()).isTrue();
         assertThat(schema.warnings()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("aka: in table and column COMMENTs declares aliases; ordinary comments don't")
+    void commentAliases() {
+        ParsedSchema schema = parser.parse("""
+                CREATE TABLE customers (
+                  id INT PRIMARY KEY,
+                  city VARCHAR(60) NOT NULL COMMENT 'Where they live. aka: town, locality',
+                  email VARCHAR(80) COMMENT "aka: mail",
+                  phone VARCHAR(20) COMMENT 'Mobile number'
+                ) ENGINE=InnoDB COMMENT='Registered buyers. aka: clients, patrons';
+                CREATE TABLE notes (id INT PRIMARY KEY) COMMENT 'internal';
+                """);
+
+        SchemaAliases.TableAliases customers = schema.aliases().get("customers");
+        assertThat(customers.table()).containsExactly("clients", "patrons");
+        assertThat(customers.column("city")).containsExactly("town", "locality");
+        assertThat(customers.column("email")).containsExactly("mail");
+        assertThat(customers.column("phone")).isEmpty();
+        assertThat(schema.aliases()).doesNotContainKey("notes");
     }
 }

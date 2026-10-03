@@ -10,6 +10,7 @@ import com.querysense.backend.dialect.Dialect;
 import com.querysense.backend.exception.SchemaUploadException;
 import com.querysense.backend.schema.IndexSpec;
 import com.querysense.backend.schema.KnownSchema;
+import com.querysense.backend.schema.SchemaAliases;
 import com.querysense.backend.schema.ddl.ParsedColumn;
 import com.querysense.backend.schema.ddl.ParsedSchema;
 import com.querysense.backend.schema.ddl.ParsedTable;
@@ -19,6 +20,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -49,7 +51,7 @@ public class JsonSchemaUploadParser implements SchemaUploadParser {
             "ObjectId", "ISODate", "Date", "UUID", "NumberLong", "Long", "NumberInt", "Int32", "Double",
             "NumberDecimal", "Decimal128", "Timestamp", "BinData", "MinKey", "MaxKey");
 
-    private record Collection(ParsedTable table, List<IndexSpec> indexes) {
+    private record Collection(ParsedTable table, List<IndexSpec> indexes, SchemaAliases.TableAliases aliases) {
     }
 
     @Override
@@ -63,14 +65,58 @@ public class JsonSchemaUploadParser implements SchemaUploadParser {
         List<String> warnings = new ArrayList<>();
         List<ParsedTable> tables = new ArrayList<>();
         List<IndexSpec> indexes = new ArrayList<>();
+        Map<String, SchemaAliases.TableAliases> aliases = new LinkedHashMap<>();
         for (JsonNode entry : collectionEntries(root)) {
             Collection parsed = parseCollection(entry, warnings);
             if (parsed != null) {
                 tables.add(parsed.table());
                 indexes.addAll(parsed.indexes());
+                if (!parsed.aliases().isEmpty()) {
+                    aliases.put(parsed.table().name(), parsed.aliases());
+                }
             }
         }
-        return new ParsedSchema(List.copyOf(tables), List.copyOf(warnings), List.copyOf(indexes));
+        if (root.isObject()) {
+            for (Map.Entry<String, JsonNode> declared : root.path("aliases").properties()) {
+                SchemaAliases.TableAliases block = aliasBlock(declared.getValue());
+                aliases.merge(declared.getKey(), block, SchemaAliases::merge);
+            }
+        }
+        return new ParsedSchema(List.copyOf(tables), List.copyOf(warnings), List.copyOf(indexes), Map.copyOf(aliases));
+    }
+
+    private static SchemaAliases.TableAliases aliasesOf(JsonNode jsonSchema) {
+        List<String> table = SchemaAliases.fromComment(jsonSchema.path("description").asText(null));
+        Map<String, List<String>> columns = new LinkedHashMap<>();
+        collectFieldAliases(jsonSchema, "", columns);
+        return new SchemaAliases.TableAliases(table, Map.copyOf(columns));
+    }
+
+    private static void collectFieldAliases(JsonNode schema, String prefix, Map<String, List<String>> out) {
+        for (Map.Entry<String, JsonNode> field : schema.path("properties").properties()) {
+            String path = prefix.isEmpty() ? field.getKey() : prefix + "." + field.getKey();
+            JsonNode node = field.getValue();
+            List<String> found = SchemaAliases.fromComment(node.path("description").asText(null));
+            if (!found.isEmpty()) {
+                out.put(path, found);
+            }
+            collectFieldAliases(node, path, out);
+            if (node.path("items").isObject()) {
+                collectFieldAliases(node.get("items"), path, out);
+            }
+        }
+    }
+
+    private static SchemaAliases.TableAliases aliasBlock(JsonNode block) {
+        List<String> table = new ArrayList<>();
+        block.path("table").forEach(n -> table.add(SchemaAliases.normalize(n.asText())));
+        Map<String, List<String>> columns = new LinkedHashMap<>();
+        for (Map.Entry<String, JsonNode> column : block.path("columns").properties()) {
+            List<String> names = new ArrayList<>();
+            column.getValue().forEach(n -> names.add(SchemaAliases.normalize(n.asText())));
+            columns.put(column.getKey(), List.copyOf(names));
+        }
+        return new SchemaAliases.TableAliases(List.copyOf(table), Map.copyOf(columns));
     }
 
     public static String normalise(String type) {
@@ -322,7 +368,7 @@ public class JsonSchemaUploadParser implements SchemaUploadParser {
         Document validatorDocument = validator.isObject() ? Document.parse(validator.toString()) : null;
         ParsedTable table = new ParsedTable(name, List.copyOf(columns), parseReferences(name, entry.path("references")),
                 List.copyOf(embeddedArrays), validatorDocument);
-        return new Collection(table, indexes);
+        return new Collection(table, indexes, aliasesOf(jsonSchema));
     }
 
     private void walk(String collection, String prefix, JsonNode schema, List<ParsedColumn> columns,

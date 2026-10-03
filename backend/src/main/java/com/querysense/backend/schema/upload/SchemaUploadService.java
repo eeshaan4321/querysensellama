@@ -4,6 +4,7 @@ import com.querysense.backend.dialect.Dialect;
 import com.querysense.backend.dialect.DialectRegistry;
 import com.querysense.backend.exception.SchemaUploadException;
 import com.querysense.backend.schema.ActiveSchemaProvider;
+import com.querysense.backend.schema.SchemaAliases;
 import com.querysense.backend.schema.SchemaSnapshot;
 import com.querysense.backend.schema.ddl.ParsedSchema;
 import org.slf4j.Logger;
@@ -67,7 +68,10 @@ public class SchemaUploadService {
 
         ParsedSchema parsed = parsers.get(dialect).parse(text);
         validator.validate(parsed, dialect);
-        lastWarnings.put(dialect, parsed.warnings());
+        SchemaAliases.Cleaned aliases = SchemaAliases.clean(parsed.toKnownTables(), parsed.aliases());
+        List<String> uploadWarnings = new ArrayList<>(parsed.warnings());
+        uploadWarnings.addAll(aliases.warnings());
+        lastWarnings.put(dialect, List.copyOf(uploadWarnings));
 
         SchemaProvisioning provisioner = provisioners.get(dialect);
         provisioner.provision(parsed);
@@ -75,7 +79,7 @@ public class SchemaUploadService {
         SeedReport seeded = seeders.get(dialect).seed(parsed);
         Map<String, Integer> rowCounts = seeded.rowCounts();
         if (!seeded.warnings().isEmpty()) {
-            List<String> combined = new ArrayList<>(parsed.warnings());
+            List<String> combined = new ArrayList<>(uploadWarnings);
             combined.addAll(seeded.warnings());
             lastWarnings.put(dialect, List.copyOf(combined));
         }
@@ -91,7 +95,8 @@ public class SchemaUploadService {
                 dialect,
                 parsed.indexes(),
                 parsed.fieldTypes(),
-                parsed.enums());
+                parsed.enums(),
+                aliases.aliases());
 
         log.info("Uploaded {} schema '{}': {} tables, {} rows total",
                 dialect.label(), snapshot.label(), snapshot.tables().size(),

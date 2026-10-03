@@ -2,6 +2,7 @@ package com.querysense.backend.schema.ddl;
 
 import com.querysense.backend.dialect.Dialect;
 import com.querysense.backend.schema.KnownSchema;
+import com.querysense.backend.schema.SchemaAliases;
 import com.querysense.backend.schema.upload.SchemaUploadParser;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
 import net.sf.jsqlparser.statement.Statement;
@@ -14,8 +15,10 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -36,6 +39,7 @@ public class DdlSchemaParser implements SchemaUploadParser {
     public ParsedSchema parse(String ddl) {
         List<ParsedTable> tables = new ArrayList<>();
         List<String> warnings = new ArrayList<>();
+        Map<String, SchemaAliases.TableAliases> aliases = new LinkedHashMap<>();
 
         for (String statement : SqlStatementSplitter.split(ddl)) {
             if (!startsCreateTable(statement)) {
@@ -44,7 +48,9 @@ public class DdlSchemaParser implements SchemaUploadParser {
             try {
                 Statement parsed = CCJSqlParserUtil.parse(statement);
                 if (parsed instanceof CreateTable createTable) {
-                    tables.add(toParsedTable(createTable));
+                    ParsedTable table = toParsedTable(createTable);
+                    tables.add(table);
+                    aliasesOf(createTable).ifPresent(a -> aliases.put(table.name(), a));
                 }
             } catch (Exception e) {
                 warnings.add("Skipped a statement that could not be parsed: " + snippet(statement));
@@ -52,7 +58,36 @@ public class DdlSchemaParser implements SchemaUploadParser {
             }
         }
 
-        return new ParsedSchema(List.copyOf(tables), List.copyOf(warnings));
+        return new ParsedSchema(List.copyOf(tables), List.copyOf(warnings), List.of(), Map.copyOf(aliases));
+    }
+
+    private Optional<SchemaAliases.TableAliases> aliasesOf(CreateTable createTable) {
+        List<String> table = SchemaAliases.fromComment(commentIn(createTable.getTableOptionsStrings()));
+        Map<String, List<String>> columns = new LinkedHashMap<>();
+        if (createTable.getColumnDefinitions() != null) {
+            for (ColumnDefinition definition : createTable.getColumnDefinitions()) {
+                List<String> found = SchemaAliases.fromComment(commentIn(definition.getColumnSpecs()));
+                if (!found.isEmpty()) {
+                    columns.put(unquote(definition.getColumnName()), found);
+                }
+            }
+        }
+        return table.isEmpty() && columns.isEmpty()
+                ? Optional.empty()
+                : Optional.of(new SchemaAliases.TableAliases(table, Map.copyOf(columns)));
+    }
+
+    private static String commentIn(List<String> tokens) {
+        if (tokens == null) {
+            return null;
+        }
+        for (int i = 0; i < tokens.size() - 1; i++) {
+            if ("COMMENT".equalsIgnoreCase(tokens.get(i))) {
+                String next = tokens.get(i + 1);
+                return "=".equals(next) && i + 2 < tokens.size() ? tokens.get(i + 2) : next;
+            }
+        }
+        return null;
     }
 
     private boolean startsCreateTable(String statement) {

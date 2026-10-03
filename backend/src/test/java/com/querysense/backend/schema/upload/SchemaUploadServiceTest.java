@@ -244,4 +244,20 @@ class SchemaUploadServiceTest {
         assertThat(activeSchema.isBuiltIn(Dialect.MYSQL)).isFalse();
         assertThat(service.lastWarnings(Dialect.MONGODB)).isEmpty();
     }
+
+    @Test
+    @DisplayName("declared aliases are published, and a colliding one is dropped with a warning")
+    void aliasesArePublished() {
+        SchemaUploadService uploader = service();
+        SchemaSnapshot snapshot = uploader.upload("""
+                CREATE TABLE customers (id INT PRIMARY KEY, name VARCHAR(80) COMMENT 'aka: label')
+                  COMMENT 'aka: clients, orders';
+                CREATE TABLE orders (id INT PRIMARY KEY);
+                """, "shop.sql");
+
+        assertThat(snapshot.aliasesFor("customers").table()).containsExactly("clients");
+        assertThat(snapshot.aliasesFor("customers").column("name")).containsExactly("label");
+        assertThat(uploader.lastWarnings(Dialect.MYSQL))
+                .anySatisfy(w -> assertThat(w).contains("\"orders\"").contains("already the name of a table"));
+    }
 }
