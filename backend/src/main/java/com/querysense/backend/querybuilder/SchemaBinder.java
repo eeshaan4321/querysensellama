@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /** Matches words in a question to tables and columns of the active schema. */
 @Component
@@ -44,24 +45,39 @@ public class SchemaBinder {
         return lexicon.column(table, phrase, aliasesFor(table));
     }
 
-    private SchemaAliases.TableAliases aliasesFor(KnownSchema.Table table) {
+    private Optional<SchemaSnapshot> snapshotOf(KnownSchema.Table table) {
         for (Dialect dialect : Dialect.values()) {
             SchemaSnapshot snapshot = activeSchema.active(dialect);
             if (snapshot.tables().contains(table)) {
-                return snapshot.aliasesFor(table.name());
+                return Optional.of(snapshot);
             }
         }
-        return SchemaAliases.TableAliases.NONE;
+        return Optional.empty();
+    }
+
+    private SchemaAliases.TableAliases aliasesFor(KnownSchema.Table table) {
+        return snapshotOf(table).map(s -> s.aliasesFor(table.name())).orElse(SchemaAliases.TableAliases.NONE);
     }
 
     public String fieldType(KnownSchema.Table table, String column) {
-        for (Dialect dialect : Dialect.values()) {
-            SchemaSnapshot snapshot = activeSchema.active(dialect);
-            if (snapshot.tables().contains(table)) {
-                return snapshot.fieldTypesFor(table.name()).get(column);
-            }
-        }
-        return null;
+        return snapshotOf(table).map(s -> s.fieldTypesFor(table.name()).get(column)).orElse(null);
+    }
+
+    public String primaryKey(KnownSchema.Table table) {
+        return snapshotOf(table).map(s -> s.primaryKeyFor(table)).orElse(table.columns().get(0));
+    }
+
+    public Set<String> foreignKeyColumns(KnownSchema.Table table) {
+        return snapshotOf(table).map(s -> s.foreignKeys().stream()
+                        .filter(fk -> fk.fromTable().equalsIgnoreCase(table.name()))
+                        .map(KnownSchema.ForeignKey::fromColumn)
+                        .collect(Collectors.toSet()))
+                .orElse(Set.of());
+    }
+
+    public static boolean isTextType(String type) {
+        return type != null && Set.of("VARCHAR", "CHAR", "TEXT", "TINYTEXT", "MEDIUMTEXT", "LONGTEXT",
+                "NVARCHAR", "NCHAR", "STRING").contains(type.toUpperCase(Locale.ROOT));
     }
 
     public static boolean isDateType(String type) {

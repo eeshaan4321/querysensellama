@@ -576,7 +576,7 @@ public class QueryIntentParser {
                     return RuleBuildResult.declined(
                             "The question compares two counts, which this engine won't combine.", bindings);
                 }
-                countTargetColumn = related.columns().get(0);
+                countTargetColumn = binder.primaryKey(related);
                 String rendered = "COUNT(" + related.name() + "." + countTargetColumn + ")";
                 having.add(new QueryIntent.Predicate(
                         new QueryIntent.Aggregate(QueryIntent.Fn.COUNT,
@@ -785,7 +785,7 @@ public class QueryIntentParser {
         if (!aggregates.isEmpty()) {
             aggregates.forEach(a -> selectItems.add(new QueryIntent.SelectItem(a)));
         } else if (countTargetColumn != null) {
-            for (String col : identifyingColumns(subject)) {
+            for (String col : IdentifyingColumns.of(subject, binder, metadata)) {
                 selectItems.add(0, new QueryIntent.SelectItem(
                         new QueryIntent.ColumnRef(subject.name(), col)));
             }
@@ -794,7 +794,7 @@ public class QueryIntentParser {
         } else if (countRequested) {
             selectItems.add(new QueryIntent.SelectItem(joinedFilter
                     ? new QueryIntent.Aggregate(QueryIntent.Fn.COUNT,
-                            new QueryIntent.ColumnRef(subject.name(), subject.columns().get(0)))
+                            new QueryIntent.ColumnRef(subject.name(), binder.primaryKey(subject)))
                     : new QueryIntent.Aggregate(QueryIntent.Fn.COUNT, null)));
         } else if (!projected.isEmpty()) {
             projected.forEach(c -> selectItems.add(
@@ -1077,19 +1077,6 @@ public class QueryIntentParser {
 
     private QueryIntent.ColumnRef qualify(String column, KnownSchema.Table table, boolean joined) {
         return new QueryIntent.ColumnRef(joined ? table.name() : null, column);
-    }
-
-    private List<String> identifyingColumns(KnownSchema.Table table) {
-        List<String> chosen = new ArrayList<>();
-        if (!table.columns().isEmpty()) {
-            chosen.add(table.columns().get(0));
-        }
-        table.columns().stream()
-                .filter(c -> c.equalsIgnoreCase("name") || c.equalsIgnoreCase("title")
-                        || c.equalsIgnoreCase("label"))
-                .findFirst()
-                .ifPresent(chosen::add);
-        return chosen;
     }
 
     private record ValueMatch(String column, String stored) {}
