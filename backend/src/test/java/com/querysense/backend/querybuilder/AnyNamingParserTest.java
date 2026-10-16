@@ -214,4 +214,12 @@ class AnyNamingParserTest {
         assertThat(result.built()).as(String.valueOf(result.trace().declineReason())).isTrue();
         assertThat(result.trace().bindings()).anySatisfy(b -> assertThat(b.phrase()).contains("unit price"));
     }
+
+    @Test
+    @DisplayName("a column the query doesn't use is an unread word")
+    void unusedColumnWordDeclines() {
+        RuleBuildResult result = parser.parse("email students with admission year 2022", Dialect.MYSQL);
+        assertThat(result.built()).isFalse();
+        assertThat(result.trace().declineReason()).contains("\"email\"");
+    }
 }

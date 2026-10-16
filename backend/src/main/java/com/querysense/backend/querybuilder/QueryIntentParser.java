@@ -966,6 +966,13 @@ public class QueryIntentParser {
 
         List<int[]> read = new ArrayList<>(consumed);
         read.addAll(conditionSpans);
+        Matcher bareBy = BARE_BY.matcher(text);
+        boolean bareByDeclines = orderBy.isEmpty() && groupColumn == null && bareBy.find()
+                && !TOP_BY.matcher(text).find() && binder.tableMatches(bareBy.group(1), dialect).hits().isEmpty();
+        if (bareByDeclines && chainTables.stream()
+                .anyMatch(t -> binder.columnMatch(t, bareBy.group(1)) instanceof SchemaLexicon.Bound)) {
+            read.add(new int[]{bareBy.start(1), bareBy.end(1)});
+        }
         Optional<String> unread = unreadWord(text, read, chainTables, bindings, interpretations, metadata, dialect);
         if (unread.isPresent()) {
             return RuleBuildResult.declined(
@@ -974,9 +981,7 @@ public class QueryIntentParser {
                     bindings);
         }
 
-        Matcher bareBy = BARE_BY.matcher(text);
-        if (orderBy.isEmpty() && groupColumn == null && bareBy.find() && !TOP_BY.matcher(text).find()
-                && binder.tableMatches(bareBy.group(1), dialect).hits().isEmpty()) {
+        if (bareByDeclines) {
             return RuleBuildResult.declined(
                     "The question says \"" + bareBy.group().trim() + "\", which could mean sort or group, so this "
                             + "engine won't guess.",
@@ -1288,6 +1293,17 @@ public class QueryIntentParser {
         Set<String> bound = new HashSet<>();
         bindings.forEach(b -> bound.addAll(Arrays.asList((b.phrase() + " " + b.resolvedTo()).split("[^a-z0-9]+"))));
         interpretations.forEach(i -> bound.addAll(Arrays.asList(i.phrase().split("[^a-z0-9]+"))));
+        Set<String> usedColumns = new HashSet<>();
+        for (RuleTrace.Binding b : bindings) {
+            for (String token : b.resolvedTo().toLowerCase(Locale.ROOT).split("[^a-z0-9_.]+")) {
+                for (int dot = -1; ; dot = token.indexOf('.', dot + 1)) {
+                    usedColumns.add(token.substring(dot + 1));
+                    if (token.indexOf('.', dot + 1) < 0) {
+                        break;
+                    }
+                }
+            }
+        }
         Matcher word = Pattern.compile("[a-z0-9_]+").matcher(text);
         while (word.find()) {
             String w = word.group();
@@ -1295,7 +1311,8 @@ public class QueryIntentParser {
                     || COMPARISON_OPS.keySet().stream().anyMatch(op -> op.matches("(?:.* )?" + Pattern.quote(w) + "(?: .*)?"))
                     || ADJECTIVES.entries().containsKey(w) || w.matches("\\d+") || NumberReader.leading(w).isPresent()
                     || !binder.tableMatches(w, dialect).hits().isEmpty()
-                    || chainTables.stream().anyMatch(t -> binder.columnMatch(t, w) instanceof SchemaLexicon.Bound)) {
+                    || chainTables.stream().anyMatch(t -> binder.columnMatch(t, w) instanceof SchemaLexicon.Bound b
+                            && usedColumns.contains(b.binding().item().toLowerCase(Locale.ROOT)))) {
                 continue;
             }
             return Optional.of(w);
