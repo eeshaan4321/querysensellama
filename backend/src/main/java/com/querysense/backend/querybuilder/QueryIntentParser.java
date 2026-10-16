@@ -118,7 +118,7 @@ public class QueryIntentParser {
                     + "(\\s+desc(?:ending)?|\\s+asc(?:ending)?)?");
 
     private static final Pattern ONLY_JUST = Pattern.compile(
-            "(?:only|just)\\s+(?:the\\s+)?([a-z][a-z ,]*?)(?:\\s+of\\s+|\\s+from\\s+|\\s+for\\s+|$)");
+            "(?:only|just)\\s+(?:the\\s+)?([a-z][a-z0-9 ,]*?)(?:\\s+of\\s+|\\s+from\\s+|\\s+for\\s+|$)");
 
     private static final Pattern OF_PHRASE = Pattern.compile("^(.*?)\\s+of\\s+");
 
@@ -409,6 +409,7 @@ public class QueryIntentParser {
         List<String> projected = List.of();
         boolean projectionRequested = false;
         if (strongPhrase.isPresent()) {
+            int recorded = interpretations.size();
             List<String> resolved;
             try {
                 resolved = resolveChunks(strongPhrase.get(), subject, interpretations);
@@ -418,6 +419,9 @@ public class QueryIntentParser {
                 } else {
                     throw e;
                 }
+            }
+            if (resolved == null && namesTable(strongPhrase.get(), dialect)) {
+                interpretations.subList(recorded, interpretations.size()).clear();
             }
             if (resolved != null) {
                 projected = resolved;

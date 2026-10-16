@@ -72,4 +72,51 @@ class AnyNamingParserTest {
         assertThat(sql("show only the name and email of students"))
                 .isEqualTo("SELECT student_name, email FROM students;");
     }
+
+    @Test
+    @DisplayName("a phrase that names a table and no column falls through to no projection")
+    void tableNamingPhraseIsNotAProjection() {
+        RuleBuildResult result = parser.parse("show students of departments", Dialect.MYSQL);
+        assertThat(result.built()).as(String.valueOf(result.trace().declineReason())).isTrue();
+        assertThat(result.sql()).doesNotContain("student_name");
+    }
+
+    private QueryIntentParser parserOver(List<KnownSchema.ForeignKey> keys, KnownSchema.Table... tables) {
+        ActiveSchemaProvider schemas = new ActiveSchemaProvider();
+        Map<String, Map<String, String>> types = new java.util.HashMap<>();
+        for (KnownSchema.Table t : tables) {
+            Map<String, String> cols = new java.util.HashMap<>();
+            t.columns().forEach(c -> cols.put(c, "VARCHAR"));
+            types.put(t.name(), cols);
+        }
+        schemas.publish(new SchemaSnapshot("upload-s", "small.sql", "querysense_uploads",
+                List.of(tables), keys, Map.of(), Instant.now(), Dialect.MYSQL, List.of(),
+                types, Map.of(), Map.of(), Map.of()));
+        SchemaMetadata mysql = mock(SchemaMetadata.class);
+        when(mysql.dialect()).thenReturn(Dialect.MYSQL);
+        when(mysql.getColumnNames(anyString())).thenReturn(List.of());
+        when(mysql.getDistinctValues(anyString(), anyString())).thenReturn(List.of());
+        SchemaMetadata mongo = mock(SchemaMetadata.class);
+        when(mongo.dialect()).thenReturn(Dialect.MONGODB);
+        return TestParsers.parser(schemas, mysql, mongo);
+    }
+
+    @Test
+    @DisplayName("a column name with a digit is read in a column list")
+    void digitsInColumnList() {
+        QueryIntentParser small = parserOver(List.of(), new KnownSchema.Table("people", List.of("person_id", "address2", "city")));
+        RuleBuildResult result = small.parse("show only the address2 and city of people", Dialect.MYSQL);
+        assertThat(result.built()).as(String.valueOf(result.trace().declineReason())).isTrue();
+        assertThat(result.sql()).isEqualTo("SELECT address2, city FROM people;");
+    }
+
+    @Test
+    @DisplayName("a table word that is also a column of the subject reads as the column")
+    void tableWordThatIsAColumn() {
+        QueryIntentParser small = parserOver(List.of(),
+                new KnownSchema.Table("departments", List.of("department_id", "department_name", "students")));
+        RuleBuildResult result = small.parse("show only the students of departments", Dialect.MYSQL);
+        assertThat(result.built()).as(String.valueOf(result.trace().declineReason())).isTrue();
+        assertThat(result.sql()).isEqualTo("SELECT students FROM departments;");
+    }
 }
