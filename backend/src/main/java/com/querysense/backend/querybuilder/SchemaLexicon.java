@@ -141,9 +141,8 @@ public class SchemaLexicon {
         if (token.isEmpty()) {
             return Optional.empty();
         }
-        Optional<Binding> exact = exactColumn(table, token);
-        if (exact.isPresent()) {
-            return exact;
+        if (exactColumn(table, token) instanceof Bound bound) {
+            return Optional.of(bound.binding());
         }
         List<String> aliased = aliasedColumns(table, token, aliases);
         return aliased.size() == 1
@@ -156,9 +155,9 @@ public class SchemaLexicon {
         if (token.isEmpty()) {
             return new Unbound();
         }
-        Optional<Binding> exact = exactColumn(table, token);
-        if (exact.isPresent()) {
-            return new Bound(exact.get());
+        ColumnMatch exact = exactColumn(table, token);
+        if (exact instanceof Bound) {
+            return exact;
         }
         ColumnMatch aliased = pick(table, token, aliasedColumns(table, token, aliases), MatchKind.SCHEMA_ALIAS);
         if (!(aliased instanceof Unbound)) {
@@ -170,6 +169,9 @@ public class SchemaLexicon {
         ColumnMatch synonym = pick(table, token, synonymous, MatchKind.SYNONYM);
         if (!(synonym instanceof Unbound)) {
             return synonym;
+        }
+        if (exact instanceof Ambiguous) {
+            return exact;
         }
         if (token.contains(" ") || token.length() < Edits.MIN_TYPO_LENGTH || isKnownWord(table, token, aliases)) {
             return new Unbound();
@@ -191,37 +193,55 @@ public class SchemaLexicon {
         return new Unbound();
     }
 
-    private static Optional<Binding> exactColumn(KnownSchema.Table table, String token) {
-        String underscored = token.replace(' ', '_');
-        String singular = underscored.endsWith("s") && underscored.length() > 1
-                ? underscored.substring(0, underscored.length() - 1)
-                : underscored;
-        List<String> candidates = new ArrayList<>(List.of(underscored, singular));
-        for (String form : forms(underscored)) {
-            if (!candidates.contains(form)) {
-                candidates.add(form);
-            }
-        }
+    private static ColumnMatch exactColumn(KnownSchema.Table table, String token) {
+        String typed = NameWords.phrase(token);
+        Set<String> candidates = phraseForms(typed);
         for (String candidate : candidates) {
             for (String col : table.columns()) {
-                String snake = SchemaBinder.snakeCase(col);
-                if (col.equalsIgnoreCase(candidate) || snake.equals(candidate) || snake.equals("_" + candidate)) {
-                    return Optional.of(new Binding(col, token,
-                            candidate.equals(underscored) ? MatchKind.EXACT : MatchKind.INFLECTION));
+                String words = NameWords.phrase(col);
+                if (words.equals(candidate) || NameWords.compact(words).equals(NameWords.compact(candidate))) {
+                    return new Bound(new Binding(col, token,
+                            candidate.equals(typed) ? MatchKind.EXACT : MatchKind.INFLECTION));
                 }
             }
         }
-        List<String> suffixMatches = table.columns().stream()
-                .filter(col -> {
-                    String snake = SchemaBinder.snakeCase(col);
-                    return snake.endsWith("_" + singular) || snake.endsWith("_" + underscored)
-                            || snake.endsWith("." + singular) || snake.endsWith("." + underscored);
-                })
+        List<String> owned = table.columns().stream()
+                .filter(col -> withoutOwner(table, col).filter(candidates::contains).isPresent())
                 .distinct()
                 .toList();
-        return suffixMatches.size() == 1
-                ? Optional.of(new Binding(suffixMatches.get(0), token, MatchKind.INFLECTION))
-                : Optional.empty();
+        if (!owned.isEmpty()) {
+            return pick(table, token, owned, MatchKind.INFLECTION);
+        }
+        List<String> suffixed = table.columns().stream()
+                .filter(col -> candidates.stream().anyMatch(f -> (" " + NameWords.phrase(col)).endsWith(" " + f)))
+                .distinct()
+                .toList();
+        return pick(table, token, suffixed, MatchKind.INFLECTION);
+    }
+
+    static List<List<String>> ownerWords(KnownSchema.Table table) {
+        List<String> words = NameWords.words(table.name());
+        if (words.isEmpty()) {
+            return List.of();
+        }
+        List<String> singular = new ArrayList<>(words);
+        singular.set(singular.size() - 1, singular(words.get(words.size() - 1)));
+        return singular.equals(words) ? List.of(words) : List.of(words, singular);
+    }
+
+    private static Optional<String> withoutOwner(KnownSchema.Table table, String column) {
+        List<String> words = NameWords.words(column);
+        List<List<String>> owners = new ArrayList<>(ownerWords(table));
+        int dot = column.lastIndexOf('.');
+        if (dot > 0) {
+            owners.add(NameWords.words(column.substring(0, dot)));
+        }
+        for (List<String> owner : owners) {
+            if (!owner.isEmpty() && words.size() > owner.size() && words.subList(0, owner.size()).equals(owner)) {
+                return Optional.of(String.join(" ", words.subList(owner.size(), words.size())));
+            }
+        }
+        return Optional.empty();
     }
 
     private static List<String> aliasedColumns(KnownSchema.Table table, String token, SchemaAliases.TableAliases aliases) {
@@ -254,8 +274,7 @@ public class SchemaLexicon {
     }
 
     private static String base(String column) {
-        String last = column.substring(column.lastIndexOf('.') + 1);
-        return SchemaBinder.normalize(SchemaBinder.snakeCase(last));
+        return NameWords.phrase(column.substring(column.lastIndexOf('.') + 1));
     }
 
     private Index index(Dialect dialect) {
@@ -271,8 +290,9 @@ public class SchemaLexicon {
     private Index build(SchemaSnapshot snapshot) {
         Map<String, List<Entry>> all = new LinkedHashMap<>();
         for (KnownSchema.Table table : snapshot.tables()) {
-            String name = SchemaBinder.normalize(table.name());
-            String singular = SchemaBinder.normalize(table.singularName());
+            String name = NameWords.phrase(table.name());
+            List<List<String>> owners = ownerWords(table);
+            String singular = String.join(" ", owners.get(owners.size() - 1));
             put(all, name, table, MatchKind.EXACT);
             put(all, singular, table, MatchKind.INFLECTION);
             phraseForms(name).forEach(f -> put(all, f, table, MatchKind.INFLECTION));

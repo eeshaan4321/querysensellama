@@ -969,8 +969,8 @@ public class QueryIntentParser {
                 }
                 QueryIntent.ColumnRef ref = new QueryIntent.ColumnRef(joined ? table.name() : null, column);
                 all.add(ref);
-                String stem = SchemaBinder.snakeCase(column).replaceAll("_?(date|at|on)$", "");
-                String spaced = SchemaBinder.normalize(column);
+                String spaced = NameWords.phrase(column);
+                String stem = spaced.replaceAll(" ?\\b(?:date|at|on)$", "");
                 String naming = !stem.isEmpty() && words.contains(stem + "ed") ? stem + "ed"
                         : !stem.isEmpty() && words.contains(stem + "d") ? stem + "d"
                         : !stem.isEmpty() && words.contains(stem) ? stem
@@ -1449,10 +1449,9 @@ public class QueryIntentParser {
 
     private Optional<String> extractTrailingColumnPhrase(String text, KnownSchema.Table table,
                                                          Dialect dialect) {
-        Pattern pattern = Pattern.compile(
-                "\\b(?:" + Pattern.quote(SchemaBinder.normalize(table.name()))
-                        + "|" + Pattern.quote(SchemaBinder.normalize(table.singularName()))
-                        + ")\\s+([a-z ]+)$");
+        List<List<String>> owners = SchemaLexicon.ownerWords(table);
+        String names = owners.stream().map(w -> Pattern.quote(String.join(" ", w))).collect(Collectors.joining("|"));
+        Pattern pattern = Pattern.compile("\\b(?:" + names + ")\\s+([a-z0-9 ]+)$");
         Matcher matcher = pattern.matcher(text);
         if (!matcher.find()) {
             return Optional.empty();

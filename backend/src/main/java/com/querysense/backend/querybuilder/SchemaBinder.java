@@ -75,10 +75,6 @@ public class SchemaBinder {
         return s.toLowerCase(Locale.ROOT).replaceAll("[_\\s]+", " ").trim();
     }
 
-    static String snakeCase(String column) {
-        return column.replaceAll("([a-z0-9])([A-Z])", "$1_$2").toLowerCase(Locale.ROOT);
-    }
-
     public List<KnownSchema.Table> tables(Dialect dialect) {
         return activeSchema.tables(dialect);
     }
