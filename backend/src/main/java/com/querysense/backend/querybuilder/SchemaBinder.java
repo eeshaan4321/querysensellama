@@ -52,7 +52,7 @@ public class SchemaBinder {
             for (String column : table.columns()) {
                 longest = Math.max(longest, NameWords.words(column).size());
                 for (String alias : aliases.column(column)) {
-                    longest = Math.max(longest, alias.trim().split("\s+").length);
+                    longest = Math.max(longest, alias.trim().split("\\s+").length);
                 }
             }
         }

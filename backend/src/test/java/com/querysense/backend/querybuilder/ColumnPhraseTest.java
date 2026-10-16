@@ -58,6 +58,16 @@ class ColumnPhraseTest {
         String text = "students with admission year above 2020";
         ColumnPhrase.Reading reading = phrases.before(text, text.indexOf("above"), List.of(STUDENTS)).orElseThrow();
         assertThat(reading.column()).isEqualTo("admission_year");
+        assertThat(text.substring(reading.start(), reading.end())).isEqualTo("admission year");
+    }
+
+    @Test
+    @DisplayName("a run stops at punctuation")
+    void stopsAtPunctuation() {
+        String text = "students sorted by grade, admission year";
+        ColumnPhrase.Reading reading = phrases.after(text, text.indexOf("grade"), List.of(STUDENTS)).orElseThrow();
+        assertThat(reading.column()).isEqualTo("grade");
+        assertThat(reading.end()).isEqualTo(text.indexOf(","));
     }
 
     @Test

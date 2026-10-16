@@ -26,7 +26,7 @@ final class ColumnPhrase {
     }
 
     Optional<Reading> after(String text, int from, List<KnownSchema.Table> tables) {
-        List<Word> words = words(text).stream().filter(w -> w.start() >= from).toList();
+        List<Word> words = leading(text, words(text).stream().filter(w -> w.start() >= from).toList());
         for (int n = Math.min(words.size(), binder.longestColumnPhrase(tables)); n >= 1; n--) {
             Optional<Reading> found = read(words.subList(0, n), tables);
             if (found.isPresent()) {
@@ -37,7 +37,7 @@ final class ColumnPhrase {
     }
 
     Optional<Reading> before(String text, int to, List<KnownSchema.Table> tables) {
-        List<Word> words = words(text).stream().filter(w -> w.end() <= to).toList();
+        List<Word> words = trailing(text, words(text).stream().filter(w -> w.end() <= to).toList());
         for (int n = Math.min(words.size(), binder.longestColumnPhrase(tables)); n >= 1; n--) {
             Optional<Reading> found = read(words.subList(words.size() - n, words.size()), tables);
             if (found.isPresent()) {
@@ -48,7 +48,7 @@ final class ColumnPhrase {
     }
 
     Optional<Reading> beforeExact(String text, int to, KnownSchema.Table table) {
-        List<Word> words = words(text).stream().filter(w -> w.end() <= to).toList();
+        List<Word> words = trailing(text, words(text).stream().filter(w -> w.end() <= to).toList());
         for (int n = Math.min(words.size(), binder.longestColumnPhrase(List.of(table))); n >= 1; n--) {
             List<Word> run = words.subList(words.size() - n, words.size());
             String phrase = join(run);
@@ -85,6 +85,24 @@ final class ColumnPhrase {
                     found.stream().map(r -> r.table().name() + "." + r.column()).toList()));
         }
         return found.stream().findFirst();
+    }
+
+    private static List<Word> leading(String text, List<Word> words) {
+        for (int i = 1; i < words.size(); i++) {
+            if (!text.substring(words.get(i - 1).end(), words.get(i).start()).isBlank()) {
+                return words.subList(0, i);
+            }
+        }
+        return words;
+    }
+
+    private static List<Word> trailing(String text, List<Word> words) {
+        for (int i = words.size() - 1; i > 0; i--) {
+            if (!text.substring(words.get(i - 1).end(), words.get(i).start()).isBlank()) {
+                return words.subList(i, words.size());
+            }
+        }
+        return words;
     }
 
     private static List<Word> words(String text) {
