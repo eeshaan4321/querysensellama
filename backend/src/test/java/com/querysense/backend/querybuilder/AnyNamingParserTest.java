@@ -138,4 +138,35 @@ class AnyNamingParserTest {
     void valueAfterColumn() {
         assertThat(sql("enrollments with grade a")).isEqualTo("SELECT * FROM enrollments WHERE grade = 'a';");
     }
+
+    private QueryIntentParser builtInParser() {
+        SchemaMetadata mysql = mock(SchemaMetadata.class);
+        when(mysql.dialect()).thenReturn(Dialect.MYSQL);
+        when(mysql.getColumnNames(anyString())).thenReturn(List.of());
+        when(mysql.getDistinctValues(anyString(), anyString())).thenReturn(List.of());
+        SchemaMetadata mongo = mock(SchemaMetadata.class);
+        when(mongo.dialect()).thenReturn(Dialect.MONGODB);
+        return TestParsers.parser(new ActiveSchemaProvider(), mysql, mongo);
+    }
+
+    @Test
+    @DisplayName("a number right after with is not read as a column")
+    void numberAfterWith() {
+        RuleBuildResult result = builtInParser().parse("customers with 3 orders", Dialect.MYSQL);
+        assertThat(result.built()).as(String.valueOf(result.trace().declineReason())).isTrue();
+        assertThat(result.sql()).isEqualTo("SELECT * FROM customers JOIN orders ON customers.id = orders.customer_id;");
+    }
+
+    @Test
+    @DisplayName("a number right before an operator is not read as the compared column")
+    void numberBeforeOperator() {
+        QueryIntentParser builtIn = builtInParser();
+        RuleBuildResult plain = builtIn.parse("orders 5 more than 3", Dialect.MYSQL);
+        assertThat(plain.built()).as(String.valueOf(plain.trace().declineReason())).isTrue();
+        assertThat(plain.sql()).isEqualTo("SELECT * FROM orders;");
+        RuleBuildResult withIs = builtIn.parse("orders 5 is more than 3", Dialect.MYSQL);
+        assertThat(withIs.built()).isFalse();
+        assertThat(withIs.trace().declineReason())
+                .isEqualTo("The question compares \"is\", which is not a column of orders.");
+    }
 }

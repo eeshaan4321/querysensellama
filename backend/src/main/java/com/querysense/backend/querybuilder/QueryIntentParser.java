@@ -126,7 +126,7 @@ public class QueryIntentParser {
             "\\b(average|avg|mean|sum|total(?!\\s+number)|maximum|max|highest|minimum|min|lowest)\\s+"
                     + "(?:of\\s+)?(?:the\\s+)?([a-z_ ]+?)\\b");
 
-    private static final Pattern WITH_VALUE = Pattern.compile("\\b(?:with|whose|where)\\s+(?=[a-z0-9])");
+    private static final Pattern WITH_VALUE = Pattern.compile("\\b(?:with|whose|where)\\s+(?=[a-z])");
 
     private static final Pattern VALUE_START = Pattern.compile("\\G\\s+(?:(?:is|equals|=)\\s+)?(?=[a-z0-9_])");
 
@@ -530,11 +530,12 @@ public class QueryIntentParser {
         }
 
         Matcher between = BETWEEN.matcher(text);
-        if (between.find() && adjacentWordBefore(text, between.start()).isPresent()) {
+        Optional<int[]> rangeWord = between.find() ? columnWord(text, between.start()) : Optional.empty();
+        if (rangeWord.isPresent()) {
             String rest = between.group(1);
-            Optional<ColumnPhrase.Reading> rangeRead = phrases.before(text, between.start(), List.of(subject));
+            Optional<ColumnPhrase.Reading> rangeRead = phrases.before(text, rangeWord.get()[1], List.of(subject));
             String rangePhrase = rangeRead.map(ColumnPhrase.Reading::phrase)
-                    .orElse(wordBefore(text, between.start()).map(w -> text.substring(w[0], w[1])).orElse(""));
+                    .orElse(text.substring(rangeWord.get()[0], rangeWord.get()[1]));
             Optional<NumberReader.Reading> low = NumberReader.leading(rest);
             String after = low.map(r -> rest.substring(r.phrase().length()).trim()).orElse("");
             Optional<NumberReader.Reading> high = after.startsWith("and ")
@@ -572,7 +573,7 @@ public class QueryIntentParser {
                 searchFrom = comparison.end(1);
                 continue;
             }
-            Optional<int[]> previous = adjacentWordBefore(text, comparison.start());
+            Optional<int[]> previous = columnWord(text, comparison.start());
             if (previous.isEmpty()) {
                 searchFrom = comparison.end(1);
                 continue;
@@ -588,7 +589,7 @@ public class QueryIntentParser {
                         bindings);
             }
             QueryIntent.Literal number = QueryIntent.Literal.number(reading.get().value());
-            Optional<ColumnPhrase.Reading> lhsRead = phrases.before(text, comparison.start(), chainTables);
+            Optional<ColumnPhrase.Reading> lhsRead = phrases.before(text, previous.get()[1], chainTables);
             String lhsPhrase = lhsRead.map(ColumnPhrase.Reading::phrase)
                     .orElse(text.substring(previous.get()[0], previous.get()[1]));
             int start = lhsRead.map(ColumnPhrase.Reading::start).orElse(previous.get()[0]);
@@ -684,8 +685,9 @@ public class QueryIntentParser {
             conditionSpans.add(new int[]{excluding.start(), list.get().end()});
         } else {
             Matcher notValue = NOT_VALUE.matcher(text);
-            if (notValue.find() && adjacentWordBefore(text, notValue.start()).isPresent()) {
-                Optional<ColumnPhrase.Reading> notRead = phrases.beforeExact(text, notValue.start(), subject);
+            Optional<int[]> notWord = notValue.find() ? columnWord(text, notValue.start()) : Optional.empty();
+            if (notWord.isPresent()) {
+                Optional<ColumnPhrase.Reading> notRead = phrases.beforeExact(text, notWord.get()[1], subject);
                 if (notRead.isPresent()) {
                     String notColumn = notRead.get().column();
                     Optional<ValueList> list = readValues(text, notValue.end(), chainTables, joined, notColumn,
@@ -739,7 +741,8 @@ public class QueryIntentParser {
         int withSecondEnd = -1;
         while (with.find()) {
             List<int[]> following = wordsFrom(text, with.end(), 2);
-            if (following.size() == 2 && following.get(0)[0] == with.end()) {
+            if (following.size() == 2 && following.get(0)[0] == with.end()
+                    && text.substring(following.get(0)[0], following.get(0)[1]).matches("[a-z][a-z0-9]*")) {
                 withFirst = following.get(0);
                 withSecondEnd = following.get(1)[1];
                 break;
@@ -1319,7 +1322,17 @@ public class QueryIntentParser {
     }
 
     private static Optional<int[]> adjacentWordBefore(String text, int to) {
-        return wordBefore(text, to).filter(w -> w[1] < to && text.substring(w[1], to).isBlank());
+        return wordBefore(text, to).filter(w -> w[1] < to && text.substring(w[1], to).isBlank()
+                && text.substring(w[0], w[1]).matches("[a-z]+"));
+    }
+
+    private static Optional<int[]> columnWord(String text, int at) {
+        Optional<int[]> before = adjacentWordBefore(text, at);
+        if (before.isEmpty() && text.startsWith("is", at) && at + 2 < text.length()
+                && Character.isWhitespace(text.charAt(at + 2))) {
+            return Optional.of(new int[]{at, at + 2});
+        }
+        return before;
     }
 
     private static List<int[]> wordsFrom(String text, int from, int max) {
