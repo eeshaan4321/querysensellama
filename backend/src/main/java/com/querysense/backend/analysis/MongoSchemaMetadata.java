@@ -7,6 +7,7 @@ import com.mongodb.client.MongoCursor;
 import com.querysense.backend.dialect.Dialect;
 import com.querysense.backend.schema.ActiveSchemaProvider;
 import org.bson.BsonValue;
+import org.bson.Document;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,6 +17,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.OptionalDouble;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.LongSupplier;
 
@@ -31,6 +33,7 @@ public class MongoSchemaMetadata implements SchemaMetadata {
     private final ActiveSchemaProvider activeSchema;
     private final LongSupplier nowMillis;
     private final Map<String, List<String>> distinctValueCache = new ConcurrentHashMap<>();
+    private final Map<String, OptionalDouble> shareCache = new ConcurrentHashMap<>();
     private volatile long unavailableUntil = 0L;
 
     @Autowired
@@ -45,6 +48,7 @@ public class MongoSchemaMetadata implements SchemaMetadata {
         activeSchema.onSchemaChanged(dialect -> {
             if (dialect == Dialect.MONGODB) {
                 distinctValueCache.clear();
+                shareCache.clear();
             }
         });
     }
@@ -95,6 +99,49 @@ public class MongoSchemaMetadata implements SchemaMetadata {
                     tableName, columnName, e.getMessage());
             return List.of();
         }
+    }
+
+    @Override
+    public OptionalDouble distinctShare(String tableName, String columnName) {
+        if (tableName == null || columnName == null) {
+            return OptionalDouble.empty();
+        }
+        String key = tableName + "." + columnName;
+        OptionalDouble cached = shareCache.get(key);
+        if (cached != null) {
+            return cached;
+        }
+        boolean declared = activeSchema.findTable(Dialect.MONGODB, tableName)
+                .map(t -> t.columns().contains(columnName))
+                .orElse(false);
+        if (!declared || nowMillis.getAsLong() < unavailableUntil) {
+            return OptionalDouble.empty();
+        }
+        try {
+            long all = countAll(tableName);
+            OptionalDouble share = all == 0 ? OptionalDouble.empty()
+                    : OptionalDouble.of((double) countDistinct(tableName, columnName) / all);
+            shareCache.put(key, share);
+            return share;
+        } catch (MongoTimeoutException | MongoSocketException e) {
+            unavailableUntil = nowMillis.getAsLong() + UNAVAILABLE_MS;
+            return OptionalDouble.empty();
+        } catch (Exception e) {
+            log.warn("Could not count distinct values for {}.{} in MongoDB: {}", tableName, columnName, e.getMessage());
+            return OptionalDouble.empty();
+        }
+    }
+
+    long countAll(String tableName) {
+        return client.getDatabase(activeSchema.catalog(Dialect.MONGODB)).getCollection(tableName).countDocuments();
+    }
+
+    long countDistinct(String tableName, String field) {
+        Document first = client.getDatabase(activeSchema.catalog(Dialect.MONGODB)).getCollection(tableName)
+                .aggregate(List.of(new Document("$group", new Document("_id", "$" + field)),
+                        new Document("$count", "n")))
+                .first();
+        return first == null ? 0 : ((Number) first.get("n")).longValue();
     }
 
     List<String> readDistinct(String tableName, String columnName) {

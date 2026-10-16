@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.List;
 import java.util.Map;
+import java.util.OptionalDouble;
 import java.util.concurrent.ConcurrentHashMap;
 
 /** Reads live column names and distinct column values from the database. */
@@ -21,6 +22,7 @@ public class SchemaMetadataService implements SchemaMetadata {
     private final ActiveSchemaProvider activeSchema;
     private final Map<String, List<String>> columnCache = new ConcurrentHashMap<>();
     private final Map<String, List<String>> distinctValueCache = new ConcurrentHashMap<>();
+    private final Map<String, OptionalDouble> shareCache = new ConcurrentHashMap<>();
 
     public SchemaMetadataService(ExplainExecutor explainExecutor, ActiveSchemaProvider activeSchema) {
         this.explainExecutor = explainExecutor;
@@ -40,6 +42,7 @@ public class SchemaMetadataService implements SchemaMetadata {
     public void clearCaches() {
         columnCache.clear();
         distinctValueCache.clear();
+        shareCache.clear();
     }
 
     @Override
@@ -72,10 +75,7 @@ public class SchemaMetadataService implements SchemaMetadata {
     }
 
     private List<String> loadDistinctValues(String tableName, String columnName) {
-        boolean recognized = activeSchema.findTable(Dialect.MYSQL, tableName)
-                .map(table -> table.columns().stream().anyMatch(col -> col.equalsIgnoreCase(columnName)))
-                .orElse(false);
-        if (!recognized) {
+        if (!recognized(tableName, columnName)) {
             log.warn("Refused to load distinct values for unrecognized table/column: {}.{}", tableName, columnName);
             return List.of();
         }
@@ -86,6 +86,37 @@ public class SchemaMetadataService implements SchemaMetadata {
         } catch (Exception e) {
             log.warn("Could not load distinct values for {}.{}: {}", tableName, columnName, e.getMessage(), e);
             return List.of();
+        }
+    }
+
+    private boolean recognized(String tableName, String columnName) {
+        return activeSchema.findTable(Dialect.MYSQL, tableName)
+                .map(table -> table.columns().stream().anyMatch(col -> col.equalsIgnoreCase(columnName)))
+                .orElse(false);
+    }
+
+    @Override
+    public OptionalDouble distinctShare(String tableName, String columnName) {
+        if (tableName == null || columnName == null) {
+            return OptionalDouble.empty();
+        }
+        String key = tableName.toLowerCase() + "." + columnName.toLowerCase();
+        return shareCache.computeIfAbsent(key, k -> loadShare(tableName, columnName));
+    }
+
+    private OptionalDouble loadShare(String tableName, String columnName) {
+        if (!recognized(tableName, columnName)) {
+            return OptionalDouble.empty();
+        }
+        try {
+            String sql = "SELECT COUNT(DISTINCT " + columnName + "), COUNT(*) FROM " + tableName;
+            long[] counts = explainExecutor.withActiveCatalog(jdbc -> jdbc.queryForObject(sql,
+                    (rs, row) -> new long[]{rs.getLong(1), rs.getLong(2)}));
+            return counts == null || counts[1] == 0 ? OptionalDouble.empty()
+                    : OptionalDouble.of((double) counts[0] / counts[1]);
+        } catch (Exception e) {
+            log.warn("Could not count distinct values for {}.{}: {}", tableName, columnName, e.getMessage());
+            return OptionalDouble.empty();
         }
     }
 }
