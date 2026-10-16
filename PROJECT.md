@@ -21,6 +21,9 @@ translation needed.
 **Final test results (2026-10-08): 994/994 passed** — backend 891, frontend
 103, lint clean, build succeeds. See §10.
 
+**Backend since 2026-10-17: 942/942** (rule engine for any naming, §5/§7). The
+frontend figure above was not re-run.
+
 ### History, and two things that will confuse you otherwise
 
 The halves began as separate repositories, `AnantKekre01/querysense-backend`
@@ -1040,6 +1043,12 @@ no pattern claims.
 - MongoDB counts null or missing values as a group when working out the distinct
   share; MySQL does not.
 - A table with no columns would throw in the primary-key fallback.
+- A transient database error while reading a column's distinct share leaves that
+  share unknown until the schema changes, because the result is cached. The label
+  column then falls back to the first text column.
+- On a schema where a table's name is also a column of another table and both are
+  named in the question, the join reading wins over the column reading. That case
+  is not pinned by a test.
 
 ### Missing endpoints
 
@@ -4042,6 +4051,8 @@ exactly this reason; nothing about the object graph reveals the problem.
 ---
 
 ## 10. Final test results — 2026-10-08
+
+Superseded for the backend by §7, 2026-10-17 (942 tests).
 
 **This is the final record of the test suites.** Every automated check in
 the repository was run on 2026-10-08 against the working tree on branch
