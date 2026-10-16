@@ -188,6 +188,7 @@ public class QueryIntentParser {
     private final DialectRegistry<SchemaMetadata> metadataByDialect;
     private final DialectRegistry<QueryEmitter> emitters;
     private final RulesClock clock;
+    private final ColumnPhrase phrases;
 
     public QueryIntentParser(SchemaBinder binder, JoinPathResolver joins,
                              List<SchemaMetadata> metadata, List<QueryEmitter> emitters, RulesClock clock) {
@@ -196,6 +197,7 @@ public class QueryIntentParser {
         this.metadataByDialect = new DialectRegistry<>(metadata, "schema metadata");
         this.emitters = new DialectRegistry<>(emitters, "query emitter");
         this.clock = clock;
+        this.phrases = new ColumnPhrase(binder);
     }
 
     static Set<String> instructionWords() {
@@ -403,20 +405,31 @@ public class QueryIntentParser {
 
         Optional<String> distinctColumn = distinctColumn(text, subject, dialect, interpretations);
         boolean distinct = distinctColumn.isPresent();
-        Optional<String> strongPhrase = distinct || countRequested ? Optional.empty() : extractStrongProjectionPhrase(text, dialect);
+        Optional<String> strongPhrase = distinct || countRequested ? Optional.empty() : extractStrongProjectionPhrase(text);
         List<String> projected = List.of();
-        boolean projectionRequested = strongPhrase.isPresent();
-        if (projectionRequested) {
-            List<String> resolved = resolveChunks(strongPhrase.get(), subject, interpretations);
-            if (resolved == null) {
+        boolean projectionRequested = false;
+        if (strongPhrase.isPresent()) {
+            List<String> resolved;
+            try {
+                resolved = resolveChunks(strongPhrase.get(), subject, interpretations);
+            } catch (AmbiguousWordException e) {
+                if (namesTable(strongPhrase.get(), dialect)) {
+                    resolved = null;
+                } else {
+                    throw e;
+                }
+            }
+            if (resolved != null) {
+                projected = resolved;
+                projectionRequested = true;
+                projected.forEach(c -> bindings.add(
+                        new RuleTrace.Binding(c, "COLUMN", subject.name() + "." + c)));
+            } else if (!namesTable(strongPhrase.get(), dialect)) {
                 return RuleBuildResult.declined(
                         "The question asks for specific fields, but at least one of them is not a "
                                 + "column of " + subject.name() + ".",
                         bindings);
             }
-            projected = resolved;
-            projected.forEach(c -> bindings.add(
-                    new RuleTrace.Binding(c, "COLUMN", subject.name() + "." + c)));
         }
 
         if (distinct) {
@@ -926,6 +939,11 @@ public class QueryIntentParser {
                 null,
                 List.copyOf(joinEdges));
         return RuleBuildResult.built(sql, trace, interpretations);
+    }
+
+    private QueryIntent.ColumnRef use(ColumnPhrase.Reading reading, boolean joined, List<Interpretation> interpretations) {
+        note(reading.phrase(), reading.table().name() + "." + reading.column(), reading.kind(), interpretations);
+        return qualify(reading.column(), reading.table(), joined);
     }
 
     private Optional<QueryIntent.ColumnRef> chainColumn(String phrase, List<KnownSchema.Table> chainTables,
@@ -1464,14 +1482,14 @@ public class QueryIntentParser {
         return Optional.of(phrase);
     }
 
-    private Optional<String> extractStrongProjectionPhrase(String text, Dialect dialect) {
+    private Optional<String> extractStrongProjectionPhrase(String text) {
         Matcher onlyJust = ONLY_JUST.matcher(text);
         if (onlyJust.find()) {
-            return namesTable(onlyJust.group(1), dialect) ? Optional.empty() : Optional.of(onlyJust.group(1));
+            return Optional.of(onlyJust.group(1));
         }
         Matcher of = OF_PHRASE.matcher(text);
         if (of.find() && !AGGREGATE_PHRASE.matcher(text).find()) {
-            return namesTable(of.group(1), dialect) ? Optional.empty() : Optional.of(of.group(1));
+            return Optional.of(of.group(1));
         }
         return Optional.empty();
     }
