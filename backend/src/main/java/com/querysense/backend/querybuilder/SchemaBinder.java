@@ -45,6 +45,20 @@ public class SchemaBinder {
         return lexicon.column(table, phrase, aliasesFor(table));
     }
 
+    public int longestColumnPhrase(List<KnownSchema.Table> tables) {
+        int longest = 1;
+        for (KnownSchema.Table table : tables) {
+            SchemaAliases.TableAliases aliases = aliasesFor(table);
+            for (String column : table.columns()) {
+                longest = Math.max(longest, NameWords.words(column).size());
+                for (String alias : aliases.column(column)) {
+                    longest = Math.max(longest, alias.trim().split("\s+").length);
+                }
+            }
+        }
+        return longest;
+    }
+
     private Optional<SchemaSnapshot> snapshotOf(KnownSchema.Table table) {
         for (Dialect dialect : Dialect.values()) {
             SchemaSnapshot snapshot = activeSchema.active(dialect);
