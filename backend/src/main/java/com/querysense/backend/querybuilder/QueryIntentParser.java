@@ -62,7 +62,7 @@ public class QueryIntentParser {
     }
 
     private static final Pattern PER_GROUP = Pattern.compile(
-            "\\b(?:per|for each|in each|by each|for every|in every|grouped by|group by)\\s+([a-z_ ]+?)\\b");
+            "\\b(?:per|for each|in each|by each|for every|in every|grouped by|group by)\\s+(?=[a-z])");
 
     private static final Pattern PREPOSITION = Pattern.compile(
             "\\b(?:from|in|at(?!\\s+(?:least|most)\\b)|located in|living in|based in|residing in)\\s+(?=[a-z])");
@@ -78,6 +78,14 @@ public class QueryIntentParser {
     private static final Pattern WHICH_PHRASE = Pattern.compile(
             "^(?:which|what)\\s+([a-z_]+(?:\\s+[a-z_]+)?)\\s+(?:do|does|did|are|have|has)\\b");
 
+    private static final Pattern DISTINCT_WORD = Pattern.compile("\\b(?:distinct|unique|different)\\s+(?=[a-z])");
+
+    private static final Pattern DISTINCT_END = Pattern.compile("\\G(?:\\s+(?:of|in|from|among|for)\\b|$)");
+
+    private static final Pattern WHICH_START = Pattern.compile("^(?:which|what)\\s+(?=[a-z])");
+
+    private static final Pattern WHICH_VERB = Pattern.compile("\\G\\s+(?:do|does|did|are|have|has)\\b");
+
     private static final String AGGREGATE_WORDS = "average|avg|mean|sum|maximum|max|highest|minimum|min|lowest|count";
 
     private static final Pattern AGGREGATES = Pattern.compile(
@@ -86,12 +94,11 @@ public class QueryIntentParser {
 
     private static final Adjectives ADJECTIVES = Adjectives.builtIn();
 
-    private static final Pattern TOP_BY = Pattern.compile(
-            "\\b(top|bottom)\\b.*?\\bby\\s+(?:the\\s+)?([a-z_]+(?:\\s+[a-z_]+)?)");
+    private static final Pattern TOP_BY = Pattern.compile("\\b(top|bottom)\\b.*?\\bby\\s+(?:the\\s+)?(?=[a-z])");
 
     private static final Pattern RANK_N = Pattern.compile(
-            "\\b(\\S+)\\s+(highest|lowest|greatest)\\s+([a-z_]+(?:\\s+[a-z_]+)?)"
-                    + "|\\b(highest|lowest|greatest)\\s+(\\S+)\\s+([a-z_]+(?:\\s+[a-z_]+)?)");
+            "\\b(\\S+)\\s+(highest|lowest|greatest)\\s+(?=[a-z])"
+                    + "|\\b(highest|lowest|greatest)\\s+(\\S+)\\s+(?=[a-z])");
 
     private static final Pattern ADJECTIVE = Pattern.compile(
             "\\b(?:(?!(?:most|least)\\b)(\\S+)\\s+)?(?:(most|least)\\s+)?(" + alternation(ADJECTIVES.entries().keySet()) + ")\\b(?:\\s+(\\S+))?");
@@ -114,8 +121,11 @@ public class QueryIntentParser {
     private static final Pattern LIMIT = Pattern.compile("\\b(?:top|first|limit|bottom)\\s+(.+)$");
 
     private static final Pattern ORDER_BY = Pattern.compile(
-            "\\b(?:order(?:ed)?\\s+by|sort(?:ed)?\\s+by)\\s+([a-z_]+(?:\\s+(?!desc|asc)[a-z_]+)?)"
-                    + "(\\s+desc(?:ending)?|\\s+asc(?:ending)?)?");
+            "\\b(?:order(?:ed)?\\s+by|sort(?:ed)?\\s+by)\\s+(?=[a-z])");
+
+    private static final Pattern DIRECTION = Pattern.compile("\\G\\s+(desc(?:ending)?|asc(?:ending)?)\\b");
+
+    private static final Pattern SKIPPED_SORT_WORD = Pattern.compile("\\G\\s+(?!desc|asc)[a-z]+\\b");
 
     private static final Pattern ONLY_JUST = Pattern.compile(
             "(?:only|just)\\s+(?:the\\s+)?([a-z][a-z0-9 ,]*?)(?:\\s+of\\s+|\\s+from\\s+|\\s+for\\s+|$)");
@@ -475,7 +485,10 @@ public class QueryIntentParser {
             Matcher many = AGGREGATES.matcher(text);
             Matcher agg = AGGREGATE_PHRASE.matcher(text);
             if (many.find()) {
-                Optional<String> col = column(subject, many.group(2), interpretations);
+                Optional<ColumnPhrase.Reading> manyRead = phrases.after(text, many.start(2), List.of(subject));
+                manyRead.ifPresent(r -> use(r, false, interpretations));
+                Optional<String> col = manyRead.map(ColumnPhrase.Reading::column)
+                        .or(() -> column(subject, many.group(2), interpretations));
                 if (col.isEmpty()) {
                     return RuleBuildResult.declined(
                             "The question asks for " + many.group(1) + " of \"" + many.group(2)
@@ -496,7 +509,10 @@ public class QueryIntentParser {
                         String.join(", ", rendered)));
             } else if (agg.find() && !("total".equals(agg.group(1)) && countRequested)) {
                 String fn = AGGREGATE_FUNCTIONS.get(agg.group(1));
-                Optional<String> col = column(subject, agg.group(2), interpretations);
+                Optional<ColumnPhrase.Reading> aggRead = phrases.after(text, agg.start(2), List.of(subject));
+                aggRead.ifPresent(r -> use(r, false, interpretations));
+                Optional<String> col = aggRead.map(ColumnPhrase.Reading::column)
+                        .or(() -> column(subject, agg.group(2), interpretations));
                 if (col.isEmpty()) {
                     col = followingColumn(text, agg.start(2), subject, interpretations);
                 }
@@ -516,17 +532,17 @@ public class QueryIntentParser {
         String groupPhrase = null;
         Matcher per = PER_GROUP.matcher(text);
         if (per.find()) {
-            groupPhrase = per.group(1).trim();
-            Optional<String> col = column(subject, per.group(1), interpretations);
-            if (col.isEmpty()) {
+            Optional<ColumnPhrase.Reading> groupRead = phrases.after(text, per.end(), List.of(subject));
+            groupPhrase = groupRead.map(ColumnPhrase.Reading::phrase).orElse(firstWordAt(text, per.end()));
+            if (groupRead.isEmpty()) {
                 return RuleBuildResult.declined(
-                        "The question asks for a breakdown by \"" + per.group(1).trim()
+                        "The question asks for a breakdown by \"" + groupPhrase
                                 + "\", which is not a column of " + subject.name() + ".",
                         bindings);
             }
-            groupColumn = col.get();
-            bindings.add(new RuleTrace.Binding(per.group(1).trim(), "GROUPING",
-                    subject.name() + "." + groupColumn));
+            use(groupRead.get(), false, interpretations);
+            groupColumn = groupRead.get().column();
+            bindings.add(new RuleTrace.Binding(groupPhrase, "GROUPING", subject.name() + "." + groupColumn));
         }
 
         Matcher between = BETWEEN.matcher(text);
@@ -885,24 +901,29 @@ public class QueryIntentParser {
 
         List<QueryIntent.OrderItem> orderBy = new ArrayList<>();
         Matcher order = ORDER_BY.matcher(text);
-        String orderPhrase = order.find() ? order.group(1) : null;
-        Optional<QueryIntent.ColumnRef> orderRef = orderPhrase == null ? Optional.empty()
-                : chainColumn(orderPhrase, chainTables, joined, interpretations);
-        if (orderRef.isEmpty() && orderPhrase != null && orderPhrase.contains(" ")) {
-            orderPhrase = orderPhrase.substring(0, orderPhrase.indexOf(' '));
-            orderRef = chainColumn(orderPhrase, chainTables, joined, interpretations);
+        Optional<ColumnPhrase.Reading> orderRead = Optional.empty();
+        String orderPhrase = null;
+        if (order.find()) {
+            orderRead = phrases.after(text, order.end(), chainTables);
+            orderPhrase = orderRead.map(ColumnPhrase.Reading::phrase).orElse(firstWordAt(text, order.end()));
         }
-        if (orderPhrase != null && (orderRef.isPresent() || binder.tableMatches(orderPhrase, dialect).hits().isEmpty())) {
-            if (orderRef.isEmpty()) {
+        if (orderPhrase != null && (orderRead.isPresent() || binder.tableMatches(orderPhrase, dialect).hits().isEmpty())) {
+            if (orderRead.isEmpty()) {
                 return RuleBuildResult.declined(
                         "The question asks to sort by \"" + orderPhrase + "\", which is not a "
                                 + "column of " + subject.name() + ".",
                         bindings);
             }
-            QueryIntent.Direction direction = order.group(2) != null && order.group(2).contains("desc")
-                    ? QueryIntent.Direction.DESC : QueryIntent.Direction.ASC;
-            orderBy.add(new QueryIntent.OrderItem(orderRef.get(), direction));
-            consumed.add(new int[]{order.start(), order.start(1) + orderPhrase.length()});
+            Matcher direction = DIRECTION.matcher(text);
+            boolean directed = direction.find(orderRead.get().end());
+            Matcher skipped = SKIPPED_SORT_WORD.matcher(text);
+            if (!directed && !orderRead.get().phrase().contains(" ") && skipped.find(orderRead.get().end())) {
+                directed = direction.find(skipped.end());
+            }
+            boolean descending = directed && direction.group(1).startsWith("desc");
+            orderBy.add(new QueryIntent.OrderItem(use(orderRead.get(), joined, interpretations),
+                    descending ? QueryIntent.Direction.DESC : QueryIntent.Direction.ASC));
+            consumed.add(new int[]{order.start(), orderRead.get().end()});
         }
         if (orderBy.isEmpty() && ranked.isPresent()) {
             orderBy.add(new QueryIntent.OrderItem(ranked.get().column(), ranked.get().direction()));
@@ -985,33 +1006,6 @@ public class QueryIntentParser {
     private QueryIntent.ColumnRef use(ColumnPhrase.Reading reading, boolean joined, List<Interpretation> interpretations) {
         note(reading.phrase(), reading.table().name() + "." + reading.column(), reading.kind(), interpretations);
         return qualify(reading.column(), reading.table(), joined);
-    }
-
-    private Optional<QueryIntent.ColumnRef> chainColumn(String phrase, List<KnownSchema.Table> chainTables,
-                                                        boolean joined, List<Interpretation> interpretations) {
-        KnownSchema.Table subject = chainTables.get(0);
-        Optional<String> own = column(subject, phrase, interpretations);
-        if (own.isPresent() || !joined) {
-            return own.map(c -> qualify(c, subject, joined));
-        }
-        List<QueryIntent.ColumnRef> found = new ArrayList<>();
-        List<SchemaLexicon.Binding> bindingsFound = new ArrayList<>();
-        for (KnownSchema.Table table : chainTables.subList(1, chainTables.size())) {
-            if (binder.columnMatch(table, phrase) instanceof SchemaLexicon.Bound bound) {
-                found.add(new QueryIntent.ColumnRef(table.name(), bound.binding().item()));
-                bindingsFound.add(bound.binding());
-            }
-        }
-        if (found.size() > 1) {
-            throw new AmbiguousWordException(ambiguityMessage(phrase,
-                    found.stream().map(r -> r.table() + "." + r.column()).toList()));
-        }
-        if (found.size() == 1) {
-            note(bindingsFound.get(0).phrase(), found.get(0).table() + "." + found.get(0).column(),
-                    bindingsFound.get(0).kind(), interpretations);
-            return Optional.of(found.get(0));
-        }
-        return Optional.empty();
     }
 
     private record DateChoice(QueryIntent.ColumnRef ref, String namingWord) {}
@@ -1335,6 +1329,10 @@ public class QueryIntentParser {
         return before;
     }
 
+    private static String firstWordAt(String text, int from) {
+        return wordsFrom(text, from, 1).stream().findFirst().map(w -> text.substring(w[0], w[1])).orElse("");
+    }
+
     private static List<int[]> wordsFrom(String text, int from, int max) {
         List<int[]> found = new ArrayList<>();
         Matcher m = WORD.matcher(text);
@@ -1412,6 +1410,23 @@ public class QueryIntentParser {
 
     private Optional<String> distinctColumn(String text, KnownSchema.Table subject, Dialect dialect,
                                             List<Interpretation> interpretations) {
+        Matcher distinctWord = DISTINCT_WORD.matcher(text);
+        if (distinctWord.find()) {
+            Optional<ColumnPhrase.Reading> read = phrases.after(text, distinctWord.end(), List.of(subject));
+            if (read.isPresent() && DISTINCT_END.matcher(text).find(read.get().end())) {
+                use(read.get(), false, interpretations);
+                return Optional.of(read.get().column());
+            }
+        }
+        Matcher whichStart = WHICH_START.matcher(text);
+        if (!DISTINCT_PHRASE.matcher(text).find() && whichStart.find()) {
+            Optional<ColumnPhrase.Reading> read = phrases.after(text, whichStart.end(), List.of(subject));
+            if (read.isPresent() && WHICH_VERB.matcher(text).find(read.get().end())
+                    && binder.tableMatches(read.get().phrase(), dialect).hits().isEmpty()) {
+                use(read.get(), false, interpretations);
+                return Optional.of(read.get().column());
+            }
+        }
         Matcher distinct = DISTINCT_PHRASE.matcher(text);
         String phrase = null;
         if (distinct.find()) {
@@ -1440,32 +1455,27 @@ public class QueryIntentParser {
                                       List<Interpretation> interpretations) {
         Matcher top = TOP_BY.matcher(text);
         if (top.find()) {
-            Optional<String> col = column(subject, top.group(2), interpretations);
-            if (col.isEmpty() && top.group(2).contains(" ")) {
-                col = column(subject, top.group(2).substring(0, top.group(2).indexOf(' ')), interpretations);
+            Optional<ColumnPhrase.Reading> topRead = phrases.after(text, top.end(), List.of(subject));
+            if (topRead.isEmpty()) {
+                throw new DeclineException("The question ranks by \"" + firstWordAt(text, top.end())
+                        + "\", which is not a column of " + subject.name() + ".");
             }
-            if (col.isEmpty()) {
-                throw new DeclineException("The question ranks by \"" + top.group(2) + "\", which is not a column of "
-                        + subject.name() + ".");
-            }
+            use(topRead.get(), false, interpretations);
             QueryIntent.Direction direction = "top".equals(top.group(1)) ? QueryIntent.Direction.DESC : QueryIntent.Direction.ASC;
-            return Optional.of(new Ranking(qualify(col.get(), subject, joined), direction, singular ? 1 : null));
+            return Optional.of(new Ranking(qualify(topRead.get().column(), subject, joined), direction, singular ? 1 : null));
         }
 
         Matcher rankN = RANK_N.matcher(text);
         if (rankN.find()) {
-            String count = rankN.group(1) != null ? rankN.group(1) : rankN.group(5);
-            String word = rankN.group(2) != null ? rankN.group(2) : rankN.group(4);
-            String phrase = rankN.group(3) != null ? rankN.group(3) : rankN.group(6);
+            String count = rankN.group(1) != null ? rankN.group(1) : rankN.group(4);
+            String word = rankN.group(2) != null ? rankN.group(2) : rankN.group(3);
             Optional<NumberReader.Reading> n = NumberReader.leading(count);
             if (n.isPresent() && n.get().integral() && n.get().phrase().equals(count)) {
-                Optional<String> col = column(subject, phrase, interpretations);
-                if (col.isEmpty() && phrase.contains(" ")) {
-                    col = column(subject, phrase.substring(0, phrase.indexOf(' ')), interpretations);
-                }
-                if (col.isPresent()) {
+                Optional<ColumnPhrase.Reading> rankRead = phrases.after(text, rankN.end(), List.of(subject));
+                if (rankRead.isPresent()) {
+                    use(rankRead.get(), false, interpretations);
                     QueryIntent.Direction direction = "lowest".equals(word) ? QueryIntent.Direction.ASC : QueryIntent.Direction.DESC;
-                    return Optional.of(new Ranking(qualify(col.get(), subject, joined), direction,
+                    return Optional.of(new Ranking(qualify(rankRead.get().column(), subject, joined), direction,
                             n.get().value().intValueExact()));
                 }
             }

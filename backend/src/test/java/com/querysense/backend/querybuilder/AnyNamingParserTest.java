@@ -169,4 +169,25 @@ class AnyNamingParserTest {
         assertThat(withIs.trace().declineReason())
                 .isEqualTo("The question compares \"is\", which is not a column of orders.");
     }
+
+    @Test
+    @DisplayName("sorting, ranking, grouping, distinct and totals read multi-word columns")
+    void shapes() {
+        assertThat(sql("students sorted by admission year descending"))
+                .isEqualTo("SELECT * FROM students ORDER BY admission_year DESC;");
+        assertThat(sql("top 3 students by admission year"))
+                .isEqualTo("SELECT * FROM students ORDER BY admission_year DESC LIMIT 3;");
+        assertThat(sql("count students per admission year")).contains("GROUP BY admission_year");
+        assertThat(sql("distinct admission years of students"))
+                .isEqualTo("SELECT DISTINCT admission_year FROM students;");
+        assertThat(sql("average and highest admission year of students"))
+                .contains("AVG(admission_year)").contains("MAX(admission_year)");
+    }
+
+    @Test
+    @DisplayName("a grouped count shows the department's key and its name")
+    void groupedCount() {
+        assertThat(sql("which departments have more than three professors"))
+                .startsWith("SELECT departments.department_name, departments.department_id, COUNT(professors.professor_id)");
+    }
 }
