@@ -195,10 +195,16 @@ public class SchemaLexicon {
 
     private static ColumnMatch exactColumn(KnownSchema.Table table, String token) {
         String typed = NameWords.phrase(token);
+        if (typed.isEmpty()) {
+            return new Unbound();
+        }
         Set<String> candidates = phraseForms(typed);
         for (String candidate : candidates) {
             for (String col : table.columns()) {
                 String words = NameWords.phrase(col);
+                if (words.isEmpty()) {
+                    continue;
+                }
                 if (words.equals(candidate) || NameWords.compact(words).equals(NameWords.compact(candidate))) {
                     return new Bound(new Binding(col, token,
                             candidate.equals(typed) ? MatchKind.EXACT : MatchKind.INFLECTION));
@@ -213,6 +219,7 @@ public class SchemaLexicon {
             return pick(table, token, owned, MatchKind.INFLECTION);
         }
         List<String> suffixed = table.columns().stream()
+                .filter(col -> !NameWords.phrase(col).isEmpty())
                 .filter(col -> candidates.stream().anyMatch(f -> (" " + NameWords.phrase(col)).endsWith(" " + f)))
                 .distinct()
                 .toList();
@@ -290,15 +297,18 @@ public class SchemaLexicon {
     private Index build(SchemaSnapshot snapshot) {
         Map<String, List<Entry>> all = new LinkedHashMap<>();
         for (KnownSchema.Table table : snapshot.tables()) {
-            String name = NameWords.phrase(table.name());
+            for (String alias : snapshot.aliasesFor(table.name()).table()) {
+                phraseForms(alias).forEach(f -> put(all, f, table, MatchKind.SCHEMA_ALIAS));
+            }
             List<List<String>> owners = ownerWords(table);
+            if (owners.isEmpty()) {
+                continue;
+            }
+            String name = NameWords.phrase(table.name());
             String singular = String.join(" ", owners.get(owners.size() - 1));
             put(all, name, table, MatchKind.EXACT);
             put(all, singular, table, MatchKind.INFLECTION);
             phraseForms(name).forEach(f -> put(all, f, table, MatchKind.INFLECTION));
-            for (String alias : snapshot.aliasesFor(table.name()).table()) {
-                phraseForms(alias).forEach(f -> put(all, f, table, MatchKind.SCHEMA_ALIAS));
-            }
             if (!name.contains(" ")) {
                 Set<String> related = new LinkedHashSet<>(synonyms.of(name));
                 related.addAll(synonyms.of(singular));

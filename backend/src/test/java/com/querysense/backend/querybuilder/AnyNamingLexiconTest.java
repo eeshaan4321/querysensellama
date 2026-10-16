@@ -110,4 +110,17 @@ class AnyNamingLexiconTest {
         publish(Dialect.MONGODB, orders);
         assertThat(bound(orders, "product id")).isEqualTo("items.productId");
     }
+
+    @Test
+    @DisplayName("a table or column with no ASCII words neither breaks the lexicon nor binds falsely")
+    void unreadableNames() {
+        KnownSchema.Table odd = new KnownSchema.Table("日本語", List.of("id"));
+        KnownSchema.Table students = new KnownSchema.Table("students", List.of("student_id", "日本"));
+        publish(Dialect.MYSQL, odd, students);
+        SchemaLexicon.TableMatches matches = lexicon.tables("show students", Dialect.MYSQL);
+        assertThat(matches.hits()).hasSize(1);
+        assertThat(matches.hits().get(0).table().name()).isEqualTo("students");
+        assertThat(lexicon.column(students, "日本", SchemaAliases.TableAliases.NONE))
+                .isInstanceOf(SchemaLexicon.Unbound.class);
+    }
 }
