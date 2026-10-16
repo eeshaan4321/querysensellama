@@ -94,6 +94,21 @@ public class SqlStructureParser {
         if (where instanceof ComparisonOperator comparison) {
             return comparison.getLeftExpression().toString();
         }
+        if (where instanceof net.sf.jsqlparser.expression.operators.relational.ParenthesedExpressionList<?> list
+                && list.size() == 1) {
+            return extractFirstWhereColumn(list.get(0));
+        }
+        if (where instanceof net.sf.jsqlparser.expression.operators.relational.InExpression in) {
+            return in.getLeftExpression().toString();
+        }
+        if (where instanceof net.sf.jsqlparser.expression.operators.relational.Between between) {
+            return between.getLeftExpression().toString();
+        }
+        if (where instanceof net.sf.jsqlparser.expression.operators.conditional.OrExpression or) {
+            String left = extractFirstWhereColumn(or.getLeftExpression());
+            String right = extractFirstWhereColumn(or.getRightExpression());
+            return left != null && left.equalsIgnoreCase(right) ? left : null;
+        }
         return null;
     }
 

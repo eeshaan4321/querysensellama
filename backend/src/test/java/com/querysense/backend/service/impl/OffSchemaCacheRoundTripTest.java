@@ -110,7 +110,7 @@ class OffSchemaCacheRoundTripTest {
     }
 
     @Test
-    @DisplayName("a grounded answer still caches, and still returns 1.0 on the second ask")
+    @DisplayName("a grounded answer still caches, and keeps its LLM confidence on the second ask")
     void groundedAnswerStillCaches() {
         String question = "list customers with their orders";
         when(llm.generateQuery(anyString(), anyString())).thenReturn(GROUNDED);
@@ -124,7 +124,7 @@ class OffSchemaCacheRoundTripTest {
         assertThat(second.getHandledBy())
                 .as("the guard must not break caching for good answers")
                 .isEqualTo("CACHE");
-        assertThat(second.getConfidence()).isEqualTo(1.0);
+        assertThat(second.getConfidence()).isEqualTo(0.65);
 
         assertThat(stored)
                 .as("history is a per-run log, so both runs are recorded")

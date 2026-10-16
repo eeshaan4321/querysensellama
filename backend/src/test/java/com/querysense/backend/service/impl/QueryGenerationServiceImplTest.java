@@ -90,6 +90,8 @@ class QueryGenerationServiceImplTest {
     void cacheHitCarriesDeclineReason() {
         QueryHistory cached = new QueryHistory();
         cached.setGeneratedQuery("SELECT * FROM orders;");
+        cached.setSource("OLLAMA");
+        cached.setConfidence(0.4);
 
         when(rules.build(anyString(), anyString()))
                 .thenReturn(RuleBuildResult.declined("The question names three tables.", List.of()));
@@ -100,8 +102,28 @@ class QueryGenerationServiceImplTest {
         QueryResponse response = service.generateQuery("something complex", "MySQL");
 
         assertThat(response.getHandledBy()).isEqualTo("CACHE");
-        assertThat(response.getConfidence()).isEqualTo(1.0);
+        assertThat(response.getConfidence()).as("a cache hit keeps the confidence it was generated with").isEqualTo(0.4);
         assertThat(response.getRuleTrace().declineReason()).contains("three tables");
+    }
+
+    @Test
+    @DisplayName("onlyLlmRowsServeFromCache: a row the rule engine wrote is never served once the rules decline")
+    void onlyLlmRowsServeFromCache() {
+        QueryHistory oldRule = new QueryHistory();
+        oldRule.setGeneratedQuery("SELECT * FROM customers;");
+        oldRule.setSource("RULE_ENGINE");
+        oldRule.setConfidence(0.95);
+
+        when(rules.build(anyString(), anyString()))
+                .thenReturn(RuleBuildResult.declined("The question uses \"spent\".", List.of()));
+        when(history.findFirstByUserInputIgnoreCaseAndDatabaseTypeIgnoreCaseAndSchemaLabel(
+                anyString(), anyString(), anyString()))
+                .thenReturn(Optional.of(oldRule));
+        when(llm.generateQuery(anyString(), anyString())).thenReturn("SELECT name FROM customers;");
+
+        QueryResponse response = service.generateQuery("which customers spent the most money", "MySQL");
+
+        assertThat(response.getHandledBy()).isEqualTo("OLLAMA");
     }
 
     @Test

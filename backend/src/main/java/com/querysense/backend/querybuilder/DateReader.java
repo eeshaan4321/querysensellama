@@ -84,7 +84,7 @@ public final class DateReader {
                 Optional<Period> x = period(w, i + 1, today, true);
                 if (x.isPresent() && is(w, x.get().next(), "and")) {
                     return period(w, x.get().next() + 1, today, true)
-                            .map(y -> range(text, w, i, y.next(), x.get().start(), y.end()));
+                            .map(y -> range(text, w, i, y.next(), shareYear(w, i + 1, x.get(), y).start(), y.end()));
                 }
                 return Optional.empty();
             }
@@ -97,7 +97,8 @@ public final class DateReader {
                 if (is(w, next, "to") || is(w, next, "until") || is(w, next, "till")) {
                     Optional<Period> y = period(w, next + 1, today, true);
                     if (y.isPresent()) {
-                        return Optional.of(range(text, w, i, y.get().next(), x.get().start(), y.get().end()));
+                        return Optional.of(range(text, w, i, y.get().next(),
+                                shareYear(w, i + 1, x.get(), y.get()).start(), y.get().end()));
                     }
                 }
                 if (is(w, next, "onwards") || is(w, next, "onward")) {
@@ -119,6 +120,14 @@ public final class DateReader {
         int start = w.get(first).start();
         int end = w.get(next - 1).end();
         return new DateRange(from, until, start, end, text.substring(start, end));
+    }
+
+    private static Period shareYear(List<Word> w, int at, Period x, Period y) {
+        if (!MONTHS.containsKey(at(w, at)) || x.next() != at + 1 || !YEAR.matcher(at(w, y.next() - 1)).matches()) {
+            return x;
+        }
+        LocalDate first = LocalDate.of(y.start().getYear(), MONTHS.get(at(w, at)), 1);
+        return new Period(first, first.plusMonths(1), x.next());
     }
 
     private static boolean is(List<Word> w, int i, String text) {

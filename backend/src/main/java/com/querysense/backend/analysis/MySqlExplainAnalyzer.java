@@ -143,6 +143,7 @@ public class MySqlExplainAnalyzer {
     private PlanRead readPlanWith(JdbcTemplate jdbc, String query) {
         if (explainFormat == ExplainFormat.JSON) {
             try {
+                pinJsonFormatVersion(jdbc);
                 String json = jdbc.queryForObject("EXPLAIN FORMAT=JSON " + query, String.class);
                 List<TableAnalysis> tables = jsonExplainParser.parse(json);
                 if (!tables.isEmpty()) {
@@ -169,6 +170,7 @@ public class MySqlExplainAnalyzer {
      */
     private JsonProbe readJsonProbe(JdbcTemplate jdbc, String query) {
         try {
+            pinJsonFormatVersion(jdbc);
             String json = jdbc.queryForObject("EXPLAIN FORMAT=JSON " + query, String.class);
             return new JsonProbe(jsonExplainParser.parseQueryCost(json),
                     jsonExplainParser.parsePlanTree(json));
@@ -176,6 +178,15 @@ public class MySqlExplainAnalyzer {
             log.debug("JSON probe returned nothing usable ({}) — omitting the cost and the plan tree.",
                     e.toString());
             return new JsonProbe(null, null);
+        }
+    }
+
+    private static void pinJsonFormatVersion(JdbcTemplate jdbc) {
+        try {
+            jdbc.execute("SET SESSION explain_json_format_version = 1");
+        } catch (RuntimeException e) {
+            log.debug("explain_json_format_version is not settable here ({}); the server's JSON is version 1.",
+                    e.toString());
         }
     }
 

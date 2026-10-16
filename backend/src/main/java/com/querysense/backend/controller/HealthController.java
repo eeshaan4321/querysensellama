@@ -1,6 +1,8 @@
 package com.querysense.backend.controller;
 
 import com.mongodb.client.MongoClient;
+import com.mongodb.connection.ClusterDescription;
+import com.mongodb.connection.ServerDescription;
 import com.querysense.backend.dialect.Dialect;
 import com.querysense.backend.dto.HealthResponse;
 import com.querysense.backend.schema.ActiveSchemaProvider;
@@ -34,6 +36,12 @@ public class HealthController {
         String uri = environment.getProperty("spring.data.mongodb.uri");
         if (uri == null || uri.isBlank()) {
             return "NOT_CONFIGURED";
+        }
+        ClusterDescription cluster = mongoClient.getClusterDescription();
+        if (cluster != null && !cluster.getServerDescriptions().isEmpty()
+                && cluster.getServerDescriptions().stream().noneMatch(ServerDescription::isOk)
+                && cluster.getServerDescriptions().stream().allMatch(s -> s.getException() != null)) {
+            return "DOWN";
         }
         try {
             mongoClient.getDatabase("admin").runCommand(new Document("ping", 1));

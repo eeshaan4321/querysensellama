@@ -26,10 +26,12 @@ public class MySqlIndexAdvisor implements IndexAdvisor {
     }
 
     private void addMySqlRecommendations(QueryAnalysisResult result, List<SchemaRecommendation> recommendations) {
-        if (result.isHasFullTableScan() && !result.isUsesIndex()) {
-            String column = result.getFilteredColumn();
+        Target filter = target(result.getTableName(), result.getFilteredColumn());
+        if (scansWithoutIndex(result, filter.table())
+                && (filter.column() != null || discardsRows(result, filter.table()))) {
+            String column = filter.column();
             String columnClause = column != null ? column : "<the column used in the WHERE clause>";
-            String table = tableLabel(result.getTableName());
+            String table = tableLabel(filter.table());
 
             String summary = "To answer this, the database is reading " + rowsPhrase(result)
                     + " of " + table + " and checking each one"
@@ -39,20 +41,22 @@ public class MySqlIndexAdvisor implements IndexAdvisor {
 
             recommendations.add(new SchemaRecommendation(
                     "INDEX",
-                    result.getTableName(),
+                    filter.table(),
                     column,
                     summary,
                     "Full table scan detected (accessType=ALL) with no index in use"
                             + (column != null ? " on '" + column + "'" : "")
                             + " — the same signal reported by EXPLAIN.",
-                    "CREATE INDEX idx_" + safeName(result.getTableName(), column)
-                            + " ON " + result.getTableName() + "(" + columnClause + ");"
+                    "CREATE INDEX idx_" + safeName(filter.table(), column)
+                            + " ON " + filter.table() + "(" + columnClause + ");"
             ));
         }
 
         if (result.isUsesFilesort()) {
-            String column = result.getOrderByColumn();
-            String filterColumn = result.getFilteredColumn();
+            Target sort = target(result.getTableName(), result.getOrderByColumn());
+            String column = sort.column();
+            String filterColumn = target(sort.table(), result.getFilteredColumn()).table().equalsIgnoreCase(sort.table())
+                    ? target(sort.table(), result.getFilteredColumn()).column() : null;
             String columnClause = column != null ? column : "<the ORDER BY column>";
 
             String caveat = (filterColumn != null && !filterColumn.equalsIgnoreCase(column))
@@ -79,15 +83,15 @@ public class MySqlIndexAdvisor implements IndexAdvisor {
 
             recommendations.add(new SchemaRecommendation(
                     "INDEX",
-                    result.getTableName(),
+                    sort.table(),
                     column,
                     summary,
                     "Query requires an extra sorting pass (Extra: 'Using filesort')"
                             + (column != null ? " for ORDER BY '" + column + "'" : "")
                             + " — an index matching the sort column can often (not always) avoid this."
                             + caveat,
-                    "CREATE INDEX idx_" + safeName(result.getTableName(), column)
-                            + " ON " + result.getTableName() + "(" + columnClause + ");"
+                    "CREATE INDEX idx_" + safeName(sort.table(), column)
+                            + " ON " + sort.table() + "(" + columnClause + ");"
             ));
         }
 
@@ -110,6 +114,33 @@ public class MySqlIndexAdvisor implements IndexAdvisor {
         }
 
         reconcileIndexes(recommendations);
+    }
+
+    private record Target(String table, String column) {}
+
+    private static Target target(String table, String column) {
+        if (column == null || column.lastIndexOf('.') < 0) {
+            return new Target(table, column);
+        }
+        int dot = column.lastIndexOf('.');
+        return new Target(column.substring(0, dot), column.substring(dot + 1));
+    }
+
+    private static boolean scansWithoutIndex(QueryAnalysisResult result, String table) {
+        if (result.getTables() == null || result.getTables().size() < 2 || table == null) {
+            return result.isHasFullTableScan() && !result.isUsesIndex();
+        }
+        return result.getTables().stream().anyMatch(t -> table.equalsIgnoreCase(t.getTableName())
+                && t.isFullTableScan() && !t.isUsesIndex());
+    }
+
+    private static boolean discardsRows(QueryAnalysisResult result, String table) {
+        Double filtered = result.getFiltered();
+        if (result.getTables() != null && table != null) {
+            filtered = result.getTables().stream().filter(t -> table.equalsIgnoreCase(t.getTableName()))
+                    .map(t -> t.getFiltered()).findFirst().orElse(filtered);
+        }
+        return filtered == null || filtered < 100.0;
     }
 
     private void reconcileIndexes(List<SchemaRecommendation> recommendations) {

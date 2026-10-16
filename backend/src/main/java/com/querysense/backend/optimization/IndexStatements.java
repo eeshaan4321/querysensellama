@@ -27,7 +27,18 @@ public final class IndexStatements {
                     .map(k -> "\"" + k.column() + "\": " + k.direction())
                     .collect(Collectors.joining(", ")) + " });";
         }
-        List<String> columns = keys.stream().map(IndexSpec.KeyPart::column).toList();
+        List<String> columns = new java.util.ArrayList<>();
+        for (IndexSpec.KeyPart key : keys) {
+            String column = key.column();
+            int dot = column.lastIndexOf('.');
+            if (dot >= 0) {
+                if (!column.substring(0, dot).equalsIgnoreCase(table)) {
+                    return null;
+                }
+                column = column.substring(dot + 1);
+            }
+            columns.add(column);
+        }
         return "CREATE INDEX idx_" + table + "_" + String.join("_", columns)
                 + " ON " + table + "(" + String.join(", ", columns) + ");";
     }

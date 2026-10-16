@@ -50,6 +50,18 @@ class MongoOptimizationRulesTest {
     }
 
     @Test
+    @DisplayName("failedAnalysisHasNoSuggestions: a refused or unplannable query has no access type and no advice")
+    void failedAnalysisHasNoSuggestions() {
+        QueryAnalysisResult failed = new QueryAnalysisResult();
+        failed.setDatabaseType("MongoDB");
+        failed.setTableName("orders");
+        failed.setExplainFailed(true);
+
+        assertThat(rules.evaluate(failed)).isEmpty();
+        assertThat(resources.evaluate(ResourceLevel.MEDIUM, failed)).isEmpty();
+    }
+
+    @Test
     @DisplayName("TX1 on a small collection is a WARNING")
     void tx1Small() {
         assertThat(rules.evaluate(collscan(50)).get(0).getSeverity()).isEqualTo(SuggestionSeverity.WARNING);

@@ -95,7 +95,7 @@ class QueryHistoryRunContextTest {
         service.generateQuery("something complex", "MySQL");
 
         assertThat(stored).extracting(QueryHistory::getConfidence)
-                .containsExactly(0.65, 1.0);
+                .containsExactly(0.65, 0.65);
     }
 
     @Test

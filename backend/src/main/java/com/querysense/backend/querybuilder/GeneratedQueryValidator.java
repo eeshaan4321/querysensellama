@@ -2,6 +2,8 @@ package com.querysense.backend.querybuilder;
 
 import com.querysense.backend.analysis.MongoPreflightValidator;
 import com.querysense.backend.analysis.MongoQueryFields;
+import com.querysense.backend.analysis.MongoSchemaMetadata;
+import com.querysense.backend.analysis.SchemaMetadata;
 import com.querysense.backend.dialect.Dialect;
 import com.querysense.backend.mongo.MongoQuery;
 import com.querysense.backend.mongo.MongoShellParseException;
@@ -25,6 +27,7 @@ import net.sf.jsqlparser.statement.select.OrderByElement;
 import net.sf.jsqlparser.statement.select.PlainSelect;
 import net.sf.jsqlparser.statement.select.Select;
 import net.sf.jsqlparser.statement.select.SelectItem;
+import org.bson.Document;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -44,18 +47,30 @@ public class GeneratedQueryValidator {
     private final ActiveSchemaProvider activeSchema;
     private final MongoShellParser mongoParser;
     private final MongoPreflightValidator mongoPreflight;
+    private final SchemaMetadata mongoValues;
 
     @Autowired
     public GeneratedQueryValidator(ActiveSchemaProvider activeSchema,
                                    MongoShellParser mongoParser,
-                                   MongoPreflightValidator mongoPreflight) {
+                                   MongoPreflightValidator mongoPreflight,
+                                   MongoSchemaMetadata mongoValues) {
+        this(activeSchema, mongoParser, mongoPreflight, (SchemaMetadata) mongoValues);
+    }
+
+    private GeneratedQueryValidator(ActiveSchemaProvider activeSchema, MongoShellParser mongoParser,
+                                    MongoPreflightValidator mongoPreflight, SchemaMetadata mongoValues) {
         this.activeSchema = activeSchema;
         this.mongoParser = mongoParser;
         this.mongoPreflight = mongoPreflight;
+        this.mongoValues = mongoValues;
     }
 
     public GeneratedQueryValidator(ActiveSchemaProvider activeSchema) {
-        this(activeSchema, new MongoShellParser(), new MongoPreflightValidator(activeSchema));
+        this(activeSchema, (SchemaMetadata) null);
+    }
+
+    public GeneratedQueryValidator(ActiveSchemaProvider activeSchema, SchemaMetadata mongoValues) {
+        this(activeSchema, new MongoShellParser(), new MongoPreflightValidator(activeSchema), mongoValues);
     }
 
     private static final Pattern MULTI_CONDITION_LANGUAGE = Pattern.compile(
@@ -169,7 +184,52 @@ public class GeneratedQueryValidator {
         } catch (MongoShellParseException e) {
             return Optional.of("This is not a MongoDB query QuerySense can read: " + e.getMessage());
         }
-        return mongoPreflight.validate(query);
+        Optional<String> issue = mongoPreflight.validate(query);
+        return issue.isPresent() || mongoValues == null ? issue : miscasedValue(query);
+    }
+
+    private Optional<String> miscasedValue(MongoQuery query) {
+        Document filter = query.filter();
+        if (query.operation() == MongoQuery.Operation.AGGREGATE && query.pipeline() != null && !query.pipeline().isEmpty()
+                && query.pipeline().get(0).get("$match") instanceof Document match) {
+            filter = match;
+        }
+        if (filter == null) {
+            return Optional.empty();
+        }
+        for (Map.Entry<String, Object> entry : filter.entrySet()) {
+            for (Object value : textValues(entry.getValue())) {
+                String typed = (String) value;
+                List<String> stored = mongoValues.getDistinctValues(query.collection(), entry.getKey());
+                if (stored.contains(typed)) {
+                    continue;
+                }
+                Optional<String> other = stored.stream().filter(typed::equalsIgnoreCase).findFirst();
+                if (other.isPresent()) {
+                    return Optional.of("\"" + typed + "\" is stored as \"" + other.get() + "\" in " + query.collection()
+                            + "." + entry.getKey() + ", and MongoDB matches text exactly, so this query would match "
+                            + "nothing.");
+                }
+            }
+        }
+        return Optional.empty();
+    }
+
+    private static List<Object> textValues(Object value) {
+        if (value instanceof String) {
+            return List.of(value);
+        }
+        if (value instanceof Document operators) {
+            List<Object> out = new ArrayList<>();
+            if (operators.get("$eq") instanceof String eq) {
+                out.add(eq);
+            }
+            if (operators.get("$in") instanceof List<?> in) {
+                in.stream().filter(String.class::isInstance).forEach(out::add);
+            }
+            return out;
+        }
+        return List.of();
     }
 
     private boolean mongoLooksIncomplete(String userInput, String generatedQuery) {

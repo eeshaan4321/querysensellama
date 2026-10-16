@@ -7,12 +7,14 @@ import net.sf.jsqlparser.expression.operators.conditional.AndExpression;
 import net.sf.jsqlparser.expression.operators.relational.ComparisonOperator;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
 import net.sf.jsqlparser.schema.Column;
+import net.sf.jsqlparser.schema.Table;
 import net.sf.jsqlparser.statement.Statement;
 import net.sf.jsqlparser.statement.select.PlainSelect;
 import net.sf.jsqlparser.statement.select.Select;
 import net.sf.jsqlparser.statement.select.SelectItem;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
@@ -81,14 +83,27 @@ public class SqlPreflightValidator {
             realColumnsLower.add(col.toLowerCase());
         }
 
-        Set<String> referenced = new HashSet<>();
+        Set<String> base = new HashSet<>(Set.of(tableName.toLowerCase()));
+        if (plainSelect.getFromItem() instanceof Table from && from.getAlias() != null) {
+            base.add(from.getAlias().getName().toLowerCase());
+        }
+        boolean joined = plainSelect.getJoins() != null && !plainSelect.getJoins().isEmpty();
+
+        List<Column> columns = new ArrayList<>();
         for (SelectItem<?> item : plainSelect.getSelectItems()) {
             if (item.getExpression() instanceof Column column) {
-                referenced.add(column.getColumnName());
+                columns.add(column);
             }
         }
         if (plainSelect.getWhere() != null) {
-            collectColumns(plainSelect.getWhere(), referenced);
+            collectColumns(plainSelect.getWhere(), columns);
+        }
+        Set<String> referenced = new HashSet<>();
+        for (Column column : columns) {
+            String owner = column.getTable() == null ? null : column.getTable().getName();
+            if (owner == null ? !joined : base.contains(owner.toLowerCase())) {
+                referenced.add(column.getColumnName());
+            }
         }
 
         for (String col : referenced) {
@@ -100,13 +115,13 @@ public class SqlPreflightValidator {
         return Optional.empty();
     }
 
-    private void collectColumns(Expression expr, Set<String> out) {
+    private void collectColumns(Expression expr, List<Column> out) {
         if (expr instanceof AndExpression and) {
             collectColumns(and.getLeftExpression(), out);
             collectColumns(and.getRightExpression(), out);
         } else if (expr instanceof ComparisonOperator comparison
                 && comparison.getLeftExpression() instanceof Column col) {
-            out.add(col.getColumnName());
+            out.add(col);
         }
     }
 

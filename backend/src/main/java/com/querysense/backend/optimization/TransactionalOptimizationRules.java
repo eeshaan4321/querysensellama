@@ -126,7 +126,8 @@ public class TransactionalOptimizationRules implements DomainOptimizationRules {
                     SuggestionSeverity.WARNING));
         }
 
-        if (SINGLE_DOCUMENT_LOOKUPS.contains(result.getAccessType()) && result.getKeyUsed() != null) {
+        if (result.getAccessType() != null && SINGLE_DOCUMENT_LOOKUPS.contains(result.getAccessType())
+                && result.getKeyUsed() != null) {
             suggestions.add(OptimizationSuggestion.domain(
                     "Query resolves via index '" + result.getKeyUsed() + "' as a single-document lookup ("
                             + result.getAccessType() + ") — this is the ideal shape for a transactional lookup.",

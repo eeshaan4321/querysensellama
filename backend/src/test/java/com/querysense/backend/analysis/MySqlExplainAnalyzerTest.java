@@ -371,6 +371,35 @@ class MySqlExplainAnalyzerTest {
     }
 
     @Test
+    @DisplayName("jsonProbePinsFormatVersion: version 2 JSON (MySQL 9 can default to it) has no query_block, so the probe asks for version 1 first")
+    void jsonProbePinsFormatVersion() {
+        givenExplainRows(row("table", "customers", "type", "ALL", "possible_keys", null, "key", null,
+                "key_len", null, "ref", null, "rows", 303L, "Extra", null));
+
+        analyzer.analyze("SELECT * FROM customers WHERE city = 'mumbai';", "customers");
+
+        org.mockito.InOrder order = org.mockito.Mockito.inOrder(jdbcTemplate);
+        order.verify(jdbcTemplate).execute("SET SESSION explain_json_format_version = 1");
+        order.verify(jdbcTemplate).queryForObject(org.mockito.ArgumentMatchers.startsWith("EXPLAIN FORMAT=JSON "),
+                ArgumentMatchers.eq(String.class));
+    }
+
+    @Test
+    @DisplayName("a server without the version variable still runs the probe")
+    void jsonProbeSurvivesOlderServers() {
+        givenExplainRows(row("table", "customers", "type", "ALL", "possible_keys", null, "key", null,
+                "key_len", null, "ref", null, "rows", 303L, "Extra", null));
+        org.mockito.Mockito.doThrow(new org.springframework.jdbc.BadSqlGrammarException("set", "SET", new java.sql.SQLException()))
+                .when(jdbcTemplate).execute(org.mockito.ArgumentMatchers.startsWith("SET SESSION"));
+        when(jdbcTemplate.queryForObject(anyString(), ArgumentMatchers.eq(String.class)))
+                .thenReturn("{\"query_block\": {\"cost_info\": {\"query_cost\": \"12.5\"}}}");
+
+        QueryAnalysisResult result = analyzer.analyze("SELECT * FROM customers", "customers");
+
+        assertThat(result.getQueryCost()).isEqualTo(12.5);
+    }
+
+    @Test
     @DisplayName("JSON mode reads the plan from EXPLAIN FORMAT=JSON and skips the tabular call")
     void jsonModeUsesJsonExplain() {
         when(jdbcTemplate.queryForObject(anyString(), ArgumentMatchers.eq(String.class)))

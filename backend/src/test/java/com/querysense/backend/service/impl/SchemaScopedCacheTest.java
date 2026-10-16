@@ -114,7 +114,7 @@ class SchemaScopedCacheTest {
     }
 
     @Test
-    @DisplayName("the same question under the same schema still comes back from cache at 1.0")
+    @DisplayName("the same question under the same schema still comes back from cache, at the confidence it was generated with")
     void cacheStillServesWithinOneSchema() {
         String question = "show me everything we have";
         when(llm.generateQuery(anyString(), anyString())).thenReturn(DEMO_SQL);
@@ -123,7 +123,7 @@ class SchemaScopedCacheTest {
         QueryResponse second = service.generateQuery(question, "MySQL");
 
         assertThat(second.getHandledBy()).isEqualTo("CACHE");
-        assertThat(second.getConfidence()).isEqualTo(1.0);
+        assertThat(second.getConfidence()).isEqualTo(0.65);
         assertThat(second.getGeneratedQuery()).isEqualTo(DEMO_SQL);
     }
 

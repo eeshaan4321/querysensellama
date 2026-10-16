@@ -18,6 +18,9 @@ FULL CAPSTONE/                  → github.com/eeshaan4321/querysensellama (priv
 throughout this file are relative to the root above and are literal — no
 translation needed.
 
+**Final test results (2026-10-08): 994/994 passed** — backend 891, frontend
+103, lint clean, build succeeds. See §10.
+
 ### History, and two things that will confuse you otherwise
 
 The halves began as separate repositories, `AnantKekre01/querysense-backend`
@@ -123,9 +126,17 @@ claim and it is auditable rather than asserted.
 | Layer | Source label | Confidence | When it runs |
 |---|---|---|---|
 | 1. Rule engine | `RULE_ENGINE` | 0.95 | A template matches the phrasing |
-| 2. History cache | `CACHE` | 1.00 | Layer 1 declined, but this exact input was answered before **under the schema now active** — and that answer still fits it |
+| 1b. Rule engine, interpreted | `RULE_ENGINE` | 0.85 | As above, but a synonym or a one-letter typo was read (`clients` → `customers`) |
+| 2. History cache | `CACHE` | the confidence the answer was generated with (0.65 or 0.40) | Layer 1 declined, but **the LLM** answered this exact input before **under the schema now active** — and that answer still fits it |
 | 3. Local LLM | `OLLAMA` | 0.65 | Both missed |
 | 3b. Local LLM, flagged | `OLLAMA` | 0.40 | As above, but the validator found the question implied more than the SQL expresses |
+| 3c. Local LLM, off-schema | `OLLAMA` | 0.20 | The answer names a table, column or field the schema lacks, or (MongoDB) a text value whose capitalisation the data doesn't store. Never cached |
+
+**Changed 2026-10-04: a cache hit is no longer 1.00.** It carries the
+confidence its answer was generated with, and only rows the LLM wrote are
+served. Before, a 0.65 guess came back as 1.00 on the second ask, and a row
+the rule engine wrote could be served after the rule engine had learnt to
+decline that question. See §7, session of 2026-10-04.
 
 **Confidence is a fixed tier, not a computed score.** Routing is decided by
 whether a rule template matched — the number is a label attached afterwards, one
@@ -230,8 +241,19 @@ binder failures as SQL (no table, ambiguous join, unbound column, unbound
 value, a temporal expression), plus a few Mongo-specific ones the emitter
 declines rather than approximate — a `WHERE` on the joined collection, and a
 `WHERE` on an embedded-array field while aggregating (§7). An unrecognised
-`databaseType` is now a 400, not a decline. **Not yet verified against a
-live `mongod`** — every Mongo behaviour above is unit-tested only.
+`databaseType` is now a 400, not a decline. **Verified against a live
+`mongod` on 2026-10-04** (§7).
+
+**Updated 2026-10-04 — a word the engine didn't use declines the question.**
+The engine reads phrases with patterns, and before this date a word no pattern
+claimed was simply dropped: `customers whose city is mumbai` built `SELECT *
+FROM customers;` at 0.95. After building, every word outside the spans a
+filter, date, sort or comparison used must now be a table, a column (or its
+alias, synonym or typo), a number, a known instruction or filler word, or a
+recorded binding. A stored value counts only if a filter used it. Anything
+else declines, naming the word, and the question goes to the LLM. `by
+<column>` on its own (sort or group?) and a date range that ends before it
+starts also decline.
 
 Its live-data safety net was rebuilt at the same time. It used to emit a
 literal `city = …` and then check that against `customers.city` — a table and
@@ -813,11 +835,11 @@ It was built in eight steps, each recorded as a session in §7, from
 - operations beyond `find`, `aggregate`, `countDocuments` and `deleteMany`;
 - a QuerySense-computed cost model for either database.
 
-**Not yet verified end to end:**
-- Each backend step ran its integration tests against the real `mongod`
-  (8.3.11 Community).
-- No screen has been opened in a browser with MongoDB targeted.
-- The MongoDB prompt has not been run against Ollama.
+**Verified end to end on 2026-10-04** (§7): every screen was opened in a
+browser with MongoDB targeted, the MongoDB prompt was run against Ollama, and
+the step 4–8 checklists below were run live. The `mongod`-stopped checks were
+run with the backend pointed at a closed port, because stopping the Windows
+service needs administrator rights.
 
 The live checklists in the step 4–8 sessions in §7 are the outstanding
 checks.
@@ -1206,7 +1228,11 @@ Maximum confidence on SQL that references a table which does not exist. This is
 the same failure shape the comment at `QueryGenerationServiceImpl:139-141`
 describes for the old "Gemini unavailable" placeholder. That one instance was
 fixed by throwing instead of returning a string; the general case — bad LLM
-output being cached and later relabelled 1.0 — is still open.
+output being cached and later relabelled 1.0 — ~~is still open~~ **FIXED
+2026-10-04.** A cache hit now carries the confidence its answer was generated
+with, and only LLM-written rows are served (§2). `QueryGenerationServiceImplTest
+.onlyLlmRowsServeFromCache` and the updated `OffSchemaCacheRoundTripTest` pin
+it.
 
 #### MongoDB is affected worse
 
@@ -1552,8 +1578,23 @@ schema-conformance check before a result is returned or cached) and #3
   is the schema-grounding gap, not a model quirk: if the question does not
   literally contain `customer(s)`/`order(s)`, the LLM prompt carries no schema
   at all. Rephrase using the table names to confirm. See §5, "Correctness
-  defect: the LLM invents tables and columns" — and note the bad query is
-  cached, so the repeat comes back at confidence 1.0.
+  defect: the LLM invents tables and columns". Since 2026-10-04 an off-schema
+  answer is flagged at 0.20 and never cached.
+- **No query cost and "No plan tree" on every MySQL analysis** means the
+  server writes version 2 JSON EXPLAIN (`explain_json_format_version = 2`,
+  which this machine's MySQL 9.7 has), where the plan sits under
+  `query_plan` instead of `query_block`. The analyzer pins the session to
+  version 1 before its JSON probe since 2026-10-04; a server too old to have
+  the variable ignores the attempt. Same family of trap as MySQL 9's `TREE`
+  default (§17 of `backend/CLAUDE.md`).
+- **JSQLParser 5.3 parses `( … )` in a `WHERE` as
+  `ParenthesedExpressionList`, not `Parenthesis`.** Code that walks a `WHERE`
+  tree and checks for `Parenthesis` silently finds nothing — this is why the
+  filter column of `(price < 100 OR price > 900)` came back null until
+  2026-10-04. Same class as the `IN`-list note in §9.11.
+- **Don't run `./mvnw test` while `spring-boot:run` is up.** Both write
+  `target/classes`, and devtools restarts the app from a half-written
+  classpath. Stop the backend, test, then `./mvnw clean spring-boot:run`.
 
 ---
 
@@ -2561,7 +2602,8 @@ sent to Ollama.
 ### Not verified
 
 - No `/analyze` call was made after the restart; the user is testing it.
-- `./mvnw test` and `npm test` were not run for this change.
+- ~~`./mvnw test` and `npm test` were not run for this change.~~ **Run
+  2026-10-08: all passed** — see §10.
 
 ### Session of 2026-09-21 — five defects from §5, §9.10 and `RULES.md`
 
@@ -3608,7 +3650,7 @@ Only the first row is the rule engine in the strict sense: layer 1 of query
 generation (§2). The rest are the other rule-based modules. They are
 listed too, because none of them uses a model either.
 
-### 9.1 The rule engine — 23 rules
+### 9.1 The rule engine — 25 rules
 
 The entry point is `RuleBasedQueryBuilder`. The parsing is done by `QueryIntentParser`, tables
 and columns are matched by `SchemaBinder` and `JoinPathResolver`, and SQL is
@@ -3627,7 +3669,7 @@ English word list except the date check (rule 3).
 |---|---|---|---|
 | 1 | Empty question | — | the question is blank |
 | 2 | Dialect | Resolves `databaseType` to `MYSQL` or `MONGODB` and passes it to every rule after it — rules 4 onward bind against that dialect's schema, and at rule 21 the result is written out by a dialect-specific emitter. **Updated 2026-09-26**, replacing the old MongoDB catch-all | nothing, once the dialect resolves. An unrecognised `databaseType` is a **400** from `GlobalExceptionHandler`, not a decline that falls to the LLM |
-| 3 | No date arithmetic | Looks for a date *expression*: `last/this/next/past` + a unit, `today/yesterday/tomorrow/recently`, a preposition + a month name, `before/after/since/until` + a year, `date range`, `last N days` | any of those appears. It declines on the expression, not on a single word, so the word `may` no longer counts as a month |
+| 3 | No date arithmetic — **superseded 2026-10-03** by `DateReader` (§7, rule engine dates); a time word it can't read, such as `recently`, still declines | Looks for a date *expression*: `last/this/next/past` + a unit, `today/yesterday/tomorrow/recently`, a preposition + a month name, `before/after/since/until` + a year, `date range`, `last N days` | any of those appears. It declines on the expression, not on a single word, so the word `may` no longer counts as a month |
 
 #### Binding the question to the schema
 
@@ -3646,11 +3688,11 @@ English word list except the date check (rule 3).
 | 8 | Count | `count`, `how many`, `total number`, `number of` produce `COUNT(*)` | — |
 | 9 | Explicit projection | `only X` / `just X` / `X of <table>`. The last one isn't used if the question also asks for an average, sum, max or min. The phrase is split on commas and `and`, filler words are dropped (`show`, `the`, `all` …), and each piece is bound; a multi-word piece that fails whole is tried again on its last word | any requested field is not a column of the subject table. It never falls back to `SELECT *` and quietly drops what was asked for |
 | 10 | Implicit projection | `customer city`, `customer first name`: a column phrase directly after the table noun. It only runs when rules 8 and 9 didn't, and only if the phrase runs to the end of the sentence, is at most three words, and contains no preposition, verb or table name. Those limits keep `customers in pune` a filter rather than a failed projection | the phrase looks like a column but matches none, or matches two equally well |
-| 11 | Aggregate | `average/avg/mean`, `sum`, `maximum/max/highest`, `minimum/min/lowest` + a column produce `AVG` / `SUM` / `MAX` / `MIN`. Skipped when rule 9 or 10 already chose columns. `total` is deliberately not read as `SUM`, because it's a common column name | the column isn't one of the subject table's |
-| 12 | Grouping | `per`, `for each`, `grouped by`, `group by` + a column. The column goes into the projection, so `GROUP BY` covers it | the column isn't one of the subject table's |
-| 13 | Comparison | `<column> more / greater / larger / higher than, above, over N` → `>`; the less-than forms, `below` and `under` → `<`. `N` can be a digit or a word from one to ten. If the column binds, this becomes a `WHERE` condition. If it doesn't bind but a join exists, it becomes `HAVING COUNT(<related table's first column>)`: "customers who placed more than three orders" | `N` isn't a number, or there's no join and the column doesn't bind |
+| 11 | Aggregate | `average/avg/mean`, `sum`, `maximum/max/highest`, `minimum/min/lowest` + a column produce `AVG` / `SUM` / `MAX` / `MIN`. Skipped when rule 9 or 10 already chose columns. **Since 2026-10-04 `total` reads as `SUM`** (`total amount of payments`) unless it's `total number` or `total <table>`, which count. If the word after the function isn't a column, the next words are tried (`sum of payment amounts` → `amount`). An aggregate is never also read as a column projection | the column isn't one of the subject table's |
+| 12 | Grouping | `per`, `for each`, `in each`, `by each`, `for every`, `in every`, `grouped by`, `group by` + a column. The column goes into the projection, so `GROUP BY` covers it | the column isn't one of the subject table's |
+| 13 | Comparison | `<column> more / greater / larger / higher than, above, over N` → `>`; the less-than forms, `below` and `under` → `<`. `N` can be a digit or a word from one to ten. If the column binds, this becomes a `WHERE` condition. If it doesn't bind but a join exists, it becomes `HAVING COUNT(<related table's first column>)`: "customers who placed more than three orders". **Since 2026-10-04** comparatives of a reviewed adjective compare its column: `more/less expensive than N`, `cheaper/pricier/costlier than N` → `price > N` / `price < N` | `N` isn't a number, or there's no join and the column doesn't bind |
 | 14 | Filter from the data itself | One or more words after `from`, `in`, `at`, `located in`, `living in`, `based in`, `residing in`, joined by `and`. Stopwords, table names and column names are skipped. The engine looks for the subject-table column whose **actual distinct values** contain each word (ignoring case), writing `<column> = '<word>'` for one value and `<column> IN ('a', 'b')` for several. A word after `and` that is not a value ends the list | the first value matches no column of the subject table, or two values match **different** columns |
-| 15 | `with <column> <value>` | An explicit column/value pair. It only runs when rules 13 and 14 produced no `WHERE`, and comparison phrasing (`with more than …`) is excluded first. Numbers are left unquoted | the named column is not a column of the subject table |
+| 15 | `with <column> <value>` | An explicit column/value pair. **Since 2026-10-04** also `whose <column> is <value>` and `where <column> is <value>`, and the value may be up to four words, the longest run that is a stored value winning (`with name aarav sharma`). Before, only the first word was read, so `name = 'aarav'` matched nothing at 0.95. It only runs when rules 13 and 14 produced no `WHERE`, and comparison phrasing (`with more than …`) is excluded first. Numbers are left unquoted | the named column is not a column of the subject table |
 | 16 | Building the column list | Picked in this order: the grouping column first; then the aggregate; else the key + `name`/`title`/`label` column + `COUNT` for rule 13's `HAVING`; else `COUNT(*)`; else the chosen columns; else `*`. With a join, every column is prefixed with its table name | — |
 
 #### Safety checks
@@ -3664,10 +3706,12 @@ English word list except the date check (rule 3).
 
 | # | Rule | What it does | Declines when |
 |---|---|---|---|
-| 19 | Order by | `order by / ordered by / sort by / sorted by <column>`, plus optionally `asc`/`ascending`/`desc`/`descending`; the default is `ASC` | the sort column isn't one of the subject table's |
-| 20 | Limit | `top N`, `first N`, `limit N` (digits only) | — |
+| 19 | Order by | `order by / ordered by / sort by / sorted by <column>`, plus optionally `asc`/`ascending`/`desc`/`descending`; the default is `ASC`. **Since 2026-10-04** a two-word column is read (`sorted by order date` → `order_date`); before, `order` was taken as a table and the sort was silently dropped | the sort column isn't one of the subject table's |
+| 20 | Limit | `top N`, `first N`, `limit N` (digits only). **Since 2026-10-04** also a number right before the table noun (`show 3 employees`, `list five products`) | — |
 | 21 | Writing the SQL | Fixed clause order: `SELECT` / `DELETE` → `FROM` → `JOIN … ON` → `WHERE` (conditions joined by `AND`) → `GROUP BY` → `HAVING` → `ORDER BY` → `LIMIT` → `;`. **`GROUP BY` isn't matched from the question; it's derived** as every column in the SELECT list that isn't aggregated. That always satisfies MySQL's `ONLY_FULL_GROUP_BY`. So a bare `COUNT(*)` gets no `GROUP BY` at all | — |
 | 22 | Rule trace | Every result, built or declined, carries what each phrase matched, the query shape (`SELECT + JOIN + GROUP BY + HAVING`), the foreign key used, the checks it passed, or the decline reason | — |
+| 24 | Every word is read — **added 2026-10-04**, runs just before rule 21 | Each word outside the spans that filters, dates, sorts and comparisons used must be a table, a column (or alias, synonym, typo), a number, a known instruction or filler word, or part of a recorded binding. A stored value counts only if a filter used it. `please` is removed before parsing | any word is left over. The reason names it: `which customers spent the most money` declines on "spent" instead of building `SELECT * FROM customers;` |
+| 25 | `by <column>` alone — **added 2026-10-04** | `by` not preceded by `sort/order/group(ed)` and not part of `top … by` | always: it could mean sort or group |
 
 **The 19 ways to decline,** grouped: 3 gates (rules 1–3), 4 about tables and
 joins (none, too many, no key, two keys), 1 second noun binding to nothing
@@ -3675,14 +3719,20 @@ joins (none, too many, no key, two keys), 1 second noun binding to nothing
 column (explicit projection, implicit projection, aggregate, grouping,
 comparison, filter value, sort), 1 comparison against something that isn't a
 number, and 2 safety checks (unconditional delete, a column missing from the
-database).
+database). **2026-10-04 adds three:** an unread word (rule 24), a bare `by`
+(rule 25), and a date range that ends before it starts.
+
+**This table predates the four rule-engine sub-projects of 2026-10-03** and
+records only the rules this file has been updated for. Rule 4's "more than two
+tables", for example, became four with sub-project 3. `RULES.md` and the
+sub-project specs under `docs/superpowers/specs/` are the full account.
 
 ### 9.2 Routing between the three layers — 3 rules
 
 | # | Rule | What it does |
 |---|---|---|
-| 1 | Layer order | Rule engine → cache → local LLM, tried in that order. Confidence is a fixed label per layer: **0.95 / 1.00 / 0.65**, or **0.40** when rule 3 fires |
-| 2 | Cache match | Matches on the question **and** the target database, ignoring case, so the same sentence asked for MySQL and for MongoDB can't pick up each other's cached answer |
+| 1 | Layer order | Rule engine → cache → local LLM, tried in that order. Confidence is a fixed label per layer: **0.95** (0.85 when a synonym or typo was read) / **the cached answer's own confidence** / **0.65**, or **0.40** when rule 3 fires and **0.20** when the answer is off-schema |
+| 2 | Cache match | Matches on the question **and** the target database, ignoring case, so the same sentence asked for MySQL and for MongoDB can't pick up each other's cached answer. Since 2026-10-04 only rows the LLM wrote are served, and only if they still pass the schema check |
 | 3 | LLM incompleteness check (MySQL only) | Two signals. (a) The question names more than one table and the SQL doesn't reference them all. (b) The question has a second-condition word (`with`, `who have/placed/has`, `and`) **and** a number or comparison, but the SQL has no `JOIN`, `HAVING`, `GROUP BY` or `AND`. Either one lowers the confidence to 0.40. The query is still returned |
 
 ### 9.3 Pre-EXPLAIN checks — 2 rules (`SqlPreflightValidator`)
@@ -3693,7 +3743,7 @@ with a specific message.
 | # | Rule | Blocks when |
 |---|---|---|
 | 1 | Strict GROUP BY | a query with `GROUP BY` selects a column that is neither grouped nor inside a function (what MySQL would reject as error 1055) |
-| 2 | Column exists | a `SELECT` or simple `WHERE` column isn't on the table (error 1054). Skipped when the column list can't be fetched |
+| 2 | Column exists | a `SELECT` or simple `WHERE` column isn't on the table (error 1054). Skipped when the column list can't be fetched. **Since 2026-10-04 only the queried table's own columns are checked**: unqualified columns in a single-table query, or columns qualified with that table's name or alias. Before, `WHERE customers.city = …` in a join was checked against `orders` and blocked, so no rule-engine query filtering a joined table could be analysed |
 
 ### 9.4 EXPLAIN warnings — 4 rules (`MySqlExplainAnalyzer`)
 
@@ -3793,10 +3843,18 @@ The resource setting defaults to **medium** when none is given. The threshold is
 A recommendation only appears when the specific problem it fixes is present.
 The advisor never executes its own DDL (§5).
 
+**Changed 2026-10-04 for joins.** Rule 1 used to read the whole query's
+`usesIndex`: in `orders JOIN customers WHERE customers.city = …`, the index
+lookup on `orders` hid the full scan on `customers`, so nothing was
+recommended. It now reads the filtered table's own plan row. `IndexStatements`
+strips a qualifier naming the index's own table and returns nothing for
+another table's column, so `CREATE INDEX idx_customers_customers.city ON
+customers(customers.city);` can no longer be emitted.
+
 | # | Fires when | Recommends |
 |---|---|---|
-| 1 | full table scan **and** no index used | `INDEX`: `CREATE INDEX idx_<table>_<column>` on the filtered column |
-| 2 | filesort | `INDEX` on the ORDER BY column. If the query also filters on another column, it says that a composite `(filter, sort)` index may be needed, and to check again with EXPLAIN |
+| 1 | full table scan **and** no index used **on the table that owns the filtered column**, and the query actually filters that table | `INDEX`: `CREATE INDEX idx_<table>_<column>` on the filtered column. A qualified column (`customers.city`) targets its own table. A filter whose column couldn't be read still gets the `<…>` placeholder for review; a scan that keeps every row (`filtered` = 100, no filter column) gets nothing, since no index can skip rows the query wants. The filter column is read through `IN`, `BETWEEN` and an `OR` on one column |
+| 2 | filesort | `INDEX` on the ORDER BY column, on that column's own table. If the query also filters on another column of the same table, it says that a composite `(filter, sort)` index may be needed, and to check again with EXPLAIN |
 | 3 | temporary table | `STRUCTURAL`: review the GROUP BY / DISTINCT. There's deliberately no ready-made statement, because no single index reliably fixes this |
 | 4 | Mongo: unindexed filter | `INDEX`: `db.<collection>.createIndex({ <field>: 1 })` |
 | 5 | Mongo: unanchored regex | `STRUCTURAL`: anchor with `^`, or use a text index |
@@ -3882,3 +3940,247 @@ JSQLParser 5.3's plain `ExpressionList` renders without parentheses, so the
 emitted SQL was `WHERE city IN 'mumbai', 'pune'` — not merely ugly but
 **invalid**. Two of the 14 `QueryRewriterTest` cases assert the parentheses for
 exactly this reason; nothing about the object graph reveals the problem.
+
+---
+
+## 10. Final test results — 2026-10-08
+
+**This is the final record of the test suites.** Every automated check in
+the repository was run on 2026-10-08 against the working tree on branch
+`feature/schema-adaptive-rule-engine` (last commit `da6ed69`, plus the
+uncommitted 2026-10-04 changes). Nothing failed and nothing was skipped.
+
+### Final results
+
+| Check | Command | Result |
+|---|---|---|
+| Backend tests | `./mvnw test` (in `backend/`) | **891/891 passed** — 0 failed, 0 skipped, 96 test classes |
+| Frontend tests | `npx vitest run` (in `frontend/`) | **103/103 passed** — 0 failed, 22 test files |
+| Frontend lint | `npm run lint` (oxlint) | **Clean** |
+| Frontend build | `npm run build` (Vite) | **Succeeds** — 569 modules, JS 485.41 kB (156.16 kB gzip), CSS 32.78 kB |
+| **Total** | | **994 tests, 994 passed, 0 failed** |
+
+**Environment.** The backend tests connected to the real MySQL on
+`localhost:3306` (MySQL Connector/J; the H2 profile was not used) and the
+real `mongod` on `localhost:27017`, so the MySQL upload and MongoDB
+integration tests ran against live servers. Java 25.0.3 (Temurin), Vitest
+3.2.7. The backend was not running during the run (§6). Ollama was not
+called — `OllamaServiceTest` mocks its `RestTemplate`.
+
+**Compared with the last recorded run** (§7, rule engine vocabulary,
+2026-10-03): backend 763 → 891, frontend 102 → 103. This run also closes
+the open "`./mvnw test` and `npm test` were not run" note at the end of
+the 2026-10-03 sessions in §7.
+
+**What this does not cover:** no screen was opened in a browser and no
+question was sent to Ollama in this run. The live checks recorded for
+2026-10-04 are the most recent of those.
+
+### Backend — every test class
+
+**`(root)`**
+
+| Class | Tests | Failed | Skipped |
+|---|---|---|---|
+| `BackendApplicationTests` | 1 | 0 | 0 |
+| *1 classes* | *1* | | |
+
+**`advisor`**
+
+| Class | Tests | Failed | Skipped |
+|---|---|---|---|
+| `MongoIndexAdvisorTest` | 7 | 0 | 0 |
+| *1 classes* | *7* | | |
+
+**`analysis`**
+
+| Class | Tests | Failed | Skipped |
+|---|---|---|---|
+| `ExplainExecutorTest` | 4 | 0 | 0 |
+| `MongoAnalysisIntegrationTest` | 6 | 0 | 0 |
+| `MongoExplainAnalyzerTest` | 14 | 0 | 0 |
+| `MongoExplainCommandsTest` | 6 | 0 | 0 |
+| `MongoExplainExecutorTest` | 7 | 0 | 0 |
+| `MongoExplainParserTest` | 18 | 0 | 0 |
+| `MongoPreflightValidatorTest` | 8 | 0 | 0 |
+| `MongoQueryFieldsTest` | 9 | 0 | 0 |
+| `MongoSchemaMetadataTest` | 12 | 0 | 0 |
+| `MySqlExplainAnalyzerTest` | 24 | 0 | 0 |
+| `MySqlJsonExplainParserTest` | 5 | 0 | 0 |
+| `MySqlPlanAnalyzerTest` | 4 | 0 | 0 |
+| `MySqlPlanTreeTest` | 9 | 0 | 0 |
+| `PlanTreeWiringTest` | 3 | 0 | 0 |
+| `SchemaMetadataCacheTest` | 2 | 0 | 0 |
+| `SqlPreflightValidatorTest` | 2 | 0 | 0 |
+| `SqlStructureParserTest` | 3 | 0 | 0 |
+| `VerdictServiceTest` | 23 | 0 | 0 |
+| *18 classes* | *159* | | |
+
+**`controller`**
+
+| Class | Tests | Failed | Skipped |
+|---|---|---|---|
+| `HealthControllerTest` | 7 | 0 | 0 |
+| `QueryComparisonControllerTest` | 3 | 0 | 0 |
+| `QueryControllerTest` | 2 | 0 | 0 |
+| `SchemaControllerTest` | 15 | 0 | 0 |
+| *4 classes* | *27* | | |
+
+**`dialect`**
+
+| Class | Tests | Failed | Skipped |
+|---|---|---|---|
+| `DialectRegistryTest` | 3 | 0 | 0 |
+| `DialectTest` | 3 | 0 | 0 |
+| *2 classes* | *6* | | |
+
+**`exception`**
+
+| Class | Tests | Failed | Skipped |
+|---|---|---|---|
+| `MongoUnavailableMappingTest` | 1 | 0 | 0 |
+| *1 classes* | *1* | | |
+
+**`mongo`**
+
+| Class | Tests | Failed | Skipped |
+|---|---|---|---|
+| `MongoShellParserTest` | 11 | 0 | 0 |
+| `MongoShellWriterTest` | 11 | 0 | 0 |
+| *2 classes* | *22* | | |
+
+**`optimization`**
+
+| Class | Tests | Failed | Skipped |
+|---|---|---|---|
+| `IndexStatementsTest` | 4 | 0 | 0 |
+| `MongoCompareIntegrationTest` | 3 | 0 | 0 |
+| `MongoOptimizationRulesTest` | 11 | 0 | 0 |
+| `MongoQueryRewriterTest` | 18 | 0 | 0 |
+| `QueryRewriterTest` | 14 | 0 | 0 |
+| `SuggestedChangeTest` | 6 | 0 | 0 |
+| *6 classes* | *56* | | |
+
+**`querybuilder`**
+
+| Class | Tests | Failed | Skipped |
+|---|---|---|---|
+| `ChainEmitterTest` | 4 | 0 | 0 |
+| `DateEmissionTest` | 3 | 0 | 0 |
+| `DateReaderTest` | 8 | 0 | 0 |
+| `DatesTest` | 12 | 0 | 0 |
+| `DeclineBoundaryTest` | 18 | 0 | 0 |
+| `DialectParityTest` | 61 | 0 | 0 |
+| `EditsTest` | 2 | 0 | 0 |
+| `GeneratedQueryValidatorTest` | 8 | 0 | 0 |
+| `JoinChainTest` | 4 | 0 | 0 |
+| `JoinPathResolverTest` | 4 | 0 | 0 |
+| `MongoEmitterTest` | 24 | 0 | 0 |
+| `MongoGeneratedQueryValidatorTest` | 7 | 0 | 0 |
+| `MongoRuleEngineTest` | 11 | 0 | 0 |
+| `MultiTableJoinTest` | 11 | 0 | 0 |
+| `NumberReaderTest` | 6 | 0 | 0 |
+| `QueryIntentParserTest` | 30 | 0 | 0 |
+| `QuestionShapesTest` | 24 | 0 | 0 |
+| `RuleBasedQueryBuilderSchemaTest` | 4 | 0 | 0 |
+| `RuleBuildResultTest` | 3 | 0 | 0 |
+| `RuleTraceWordingTest` | 4 | 0 | 0 |
+| `SchemaBinderTest` | 11 | 0 | 0 |
+| `SchemaLexiconTest` | 5 | 0 | 0 |
+| `ShapeEmitterTest` | 5 | 0 | 0 |
+| `SqlEmitterTest` | 10 | 0 | 0 |
+| `SynonymListTest` | 3 | 0 | 0 |
+| `UnboundNounTest` | 5 | 0 | 0 |
+| `UnreadWordsTest` | 18 | 0 | 0 |
+| `VocabularyTest` | 16 | 0 | 0 |
+| *28 classes* | *321* | | |
+
+**`schema`**
+
+| Class | Tests | Failed | Skipped |
+|---|---|---|---|
+| `ActiveSchemaProviderTest` | 5 | 0 | 0 |
+| `KnownMongoSchemaMatchesSeedTest` | 7 | 0 | 0 |
+| `KnownMongoSchemaTest` | 4 | 0 | 0 |
+| `KnownSchemaMatchesSeedScriptsTest` | 6 | 0 | 0 |
+| `KnownSchemaTest` | 6 | 0 | 0 |
+| `SchemaAliasesTest` | 6 | 0 | 0 |
+| `SchemaEnumsTest` | 3 | 0 | 0 |
+| `SchemaLookupTest` | 6 | 0 | 0 |
+| *8 classes* | *43* | | |
+
+**`schema.ddl`**
+
+| Class | Tests | Failed | Skipped |
+|---|---|---|---|
+| `DdlSchemaParserTest` | 10 | 0 | 0 |
+| `ParsedSchemaTest` | 6 | 0 | 0 |
+| `SqlStatementSplitterTest` | 8 | 0 | 0 |
+| *3 classes* | *24* | | |
+
+**`schema.json`**
+
+| Class | Tests | Failed | Skipped |
+|---|---|---|---|
+| `JsonSchemaUploadParserTest` | 23 | 0 | 0 |
+| *1 classes* | *23* | | |
+
+**`schema.upload`**
+
+| Class | Tests | Failed | Skipped |
+|---|---|---|---|
+| `MongoDemoSeederTest` | 7 | 0 | 0 |
+| `MongoProvisionerTest` | 10 | 0 | 0 |
+| `MongoSchemaUploadValidatorTest` | 15 | 0 | 0 |
+| `MongoSeederTest` | 16 | 0 | 0 |
+| `MongoUploadIntegrationTest` | 6 | 0 | 0 |
+| `SchemaProvisionerTest` | 7 | 0 | 0 |
+| `SchemaSeederTest` | 13 | 0 | 0 |
+| `SchemaUploadServiceTest` | 16 | 0 | 0 |
+| `SchemaUploadValidatorTest` | 10 | 0 | 0 |
+| `ValueGeneratorTest` | 18 | 0 | 0 |
+| *10 classes* | *118* | | |
+
+**`service.impl`**
+
+| Class | Tests | Failed | Skipped |
+|---|---|---|---|
+| `MongoGenerationValidationTest` | 3 | 0 | 0 |
+| `MongoSchemaContextTest` | 4 | 0 | 0 |
+| `OffSchemaCacheRoundTripTest` | 3 | 0 | 0 |
+| `OllamaServiceTest` | 15 | 0 | 0 |
+| `OptimizedQueryRecorderTest` | 3 | 0 | 0 |
+| `QueryAnalysisServiceImplTest` | 3 | 0 | 0 |
+| `QueryComparisonServiceImplTest` | 11 | 0 | 0 |
+| `QueryGenerationServiceImplTest` | 10 | 0 | 0 |
+| `QueryHistoryRunContextTest` | 8 | 0 | 0 |
+| `SchemaAdvisorServiceImplTest` | 20 | 0 | 0 |
+| `SchemaScopedCacheTest` | 3 | 0 | 0 |
+| *11 classes* | *83* | | |
+
+### Frontend — every test file
+
+| File | Tests | Failed |
+|---|---|---|
+| `src/api/client.test.js` | 7 | 0 |
+| `src/api/comparison.test.js` | 5 | 0 |
+| `src/api/health.test.js` | 4 | 0 |
+| `src/api/schemaUpload.test.js` | 3 | 0 |
+| `src/components/analysis/ExplainPlanView.test.jsx` | 3 | 0 |
+| `src/components/analysis/PlanMetrics.test.jsx` | 3 | 0 |
+| `src/components/analysis/PlanTreeView.test.jsx` | 8 | 0 |
+| `src/components/analysis/RuleTracePanel.test.jsx` | 6 | 0 |
+| `src/components/analysis/SuggestionsList.test.jsx` | 1 | 0 |
+| `src/components/history/HistoryTable.test.jsx` | 9 | 0 |
+| `src/components/schemaSource/SchemaTablePreview.test.jsx` | 3 | 0 |
+| `src/components/shell/BackendHealthBanner.test.jsx` | 9 | 0 |
+| `src/components/shell/EngineStatusBar.test.jsx` | 3 | 0 |
+| `src/components/workbench/SchemaWarning.test.jsx` | 3 | 0 |
+| `src/context/ActiveSchemaContext.test.jsx` | 4 | 0 |
+| `src/hooks/useBackendHealth.test.jsx` | 5 | 0 |
+| `src/lib/applyScript.test.js` | 12 | 0 |
+| `src/mock/fixtures.test.js` | 4 | 0 |
+| `src/pages/NotFoundPage.test.jsx` | 3 | 0 |
+| `src/pages/OptimizationPage.test.jsx` | 2 | 0 |
+| `src/pages/SchemaAdvisorPage.test.jsx` | 2 | 0 |
+| `src/pages/SchemaSourcePage.test.jsx` | 4 | 0 |

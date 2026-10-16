@@ -101,8 +101,8 @@ class QueryIntentParserTest {
     @Test
     @DisplayName("a breakdown with no total, average or count to break down declines")
     void groupingWithoutAggregateDeclines() {
-        for (String question : List.of("total amount of payments per method",
-                "total quantity per status of orders")) {
+        for (String question : List.of("amount of payments per method",
+                "quantity per status of orders")) {
             RuleBuildResult result = parser.parse(question, Dialect.MYSQL);
             assertThat(result.built()).as("%s -> %s", question, result.sql()).isFalse();
             assertThat(result.trace().declineReason()).as(question).contains("nothing to group");
@@ -265,12 +265,12 @@ class QueryIntentParserTest {
     }
 
     @Test
-    @DisplayName("\"removed\" is not the verb \"remove\" — the question still asks to show")
+    @DisplayName("\"removed\" is not the verb \"remove\": it is an unread word, never a delete")
     void removedIsNotADeleteVerb() {
         RuleBuildResult result = parser.parse("show removed customers in mumbai", Dialect.MYSQL);
 
-        assertThat(result.built()).isTrue();
-        assertThat(result.sql()).startsWith("SELECT").doesNotContain("DELETE");
+        assertThat(result.built()).isFalse();
+        assertThat(result.trace().declineReason()).contains("\"removed\"").doesNotContain("delete rows");
     }
 
     @Test
@@ -278,8 +278,8 @@ class QueryIntentParserTest {
     void deletedIsNotADeleteVerb() {
         RuleBuildResult result = parser.parse("show deleted customers", Dialect.MYSQL);
 
-        assertThat(result.built()).isTrue();
-        assertThat(result.sql()).startsWith("SELECT").doesNotContain("DELETE");
+        assertThat(result.built()).isFalse();
+        assertThat(result.trace().declineReason()).contains("\"deleted\"").doesNotContain("delete rows");
     }
 
     @Test

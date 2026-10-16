@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { act, render, screen } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../api', () => ({ getActiveSchema: vi.fn(), resetSchema: vi.fn() }));
@@ -43,7 +43,7 @@ describe('ActiveSchemaProvider', () => {
     renderFor('MONGODB');
 
     expect(await screen.findByText('mongo demo')).toBeInTheDocument();
-    expect(captured.current.schemaFor('SQL')).toEqual(SQL);
+    await waitFor(() => expect(captured.current.schemaFor('SQL')).toEqual(SQL));
     expect(getActiveSchema).toHaveBeenCalledWith('SQL');
     expect(getActiveSchema).toHaveBeenCalledWith('MONGODB');
   });
@@ -81,7 +81,7 @@ describe('ActiveSchemaProvider', () => {
     renderFor('SQL');
     await screen.findByText('mysql demo');
 
-    expect(captured.current.errorFor('MONGODB')).toBe('MongoDB is down');
+    await waitFor(() => expect(captured.current.errorFor('MONGODB')).toBe('MongoDB is down'));
     expect(captured.current.errorFor('SQL')).toBeNull();
     expect(captured.current.error).toBeNull();
   });

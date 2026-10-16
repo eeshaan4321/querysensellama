@@ -32,6 +32,14 @@ class IndexStatementsTest {
     }
 
     @Test
+    @DisplayName("qualifiedColumns: a column qualified with its own table is stripped; another table's column gives nothing")
+    void qualifiedColumns() {
+        assertThat(IndexStatements.create(Dialect.MYSQL, "customers", "customers.city"))
+                .isEqualTo("CREATE INDEX idx_customers_city ON customers(city);");
+        assertThat(IndexStatements.create(Dialect.MYSQL, "orders", "customers.city")).isNull();
+    }
+
+    @Test
     @DisplayName("an unknown table or column gives no statement rather than a broken one")
     void unknownGivesNull() {
         assertThat(IndexStatements.create(Dialect.MYSQL, null, "status")).isNull();

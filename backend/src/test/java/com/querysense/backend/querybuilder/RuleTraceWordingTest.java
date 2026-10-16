@@ -72,7 +72,7 @@ class RuleTraceWordingTest {
                 "sum of quantity of orders with quantity 2",
                 "how many customers per city sorted by name",
                 "orders with status shipped",
-                "total amount of payments per method",
+                "amount of payments per method",
                 "show all order items",
                 "departments and suppliers",
                 "delete all customers");

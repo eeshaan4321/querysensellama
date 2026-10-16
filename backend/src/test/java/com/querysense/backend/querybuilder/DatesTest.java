@@ -124,4 +124,29 @@ class DatesTest {
         assertThat(sql("the oldest employee")).isEqualTo("SELECT * FROM employees ORDER BY hire_date ASC LIMIT 1;");
         assertThat(sql("most recent payments")).isEqualTo("SELECT * FROM payments ORDER BY payment_date DESC;");
     }
+
+    @Test
+    @DisplayName("repeatedWordsInADateQuestion: a word used twice does not crash the date reader")
+    void repeatedWordsInADateQuestion() {
+        assertThat(sql("show the orders from the last month"))
+                .isEqualTo("SELECT * FROM orders WHERE order_date >= '2026-09-01' AND order_date < '2026-10-01';");
+        assertThat(sql("orders between march 2025 and june 2025"))
+                .isEqualTo("SELECT * FROM orders WHERE order_date >= '2025-03-01' AND order_date < '2025-07-01';");
+        assertThat(sql("orders of customers in mumbai in 2025")).contains("orders.order_date >= '2025-01-01'");
+    }
+
+    @Test
+    @DisplayName("rangeSharesItsYear: 'between march and june 2025' reads march as march 2025")
+    void rangeSharesItsYear() {
+        assertThat(sql("orders between march and june 2025"))
+                .isEqualTo("SELECT * FROM orders WHERE order_date >= '2025-03-01' AND order_date < '2025-07-01';");
+        assertThat(sql("orders from january to march 2024"))
+                .isEqualTo("SELECT * FROM orders WHERE order_date >= '2024-01-01' AND order_date < '2024-04-01';");
+    }
+
+    @Test
+    @DisplayName("backwardsRangeDeclines: a range that ends before it starts is never built")
+    void backwardsRangeDeclines() {
+        assertThat(declineReason("orders between june 2025 and march 2025")).contains("ends before it starts");
+    }
 }

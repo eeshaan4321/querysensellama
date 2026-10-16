@@ -47,6 +47,57 @@ class SchemaAdvisorServiceImplTest {
     }
 
     @Test
+    @DisplayName("joinedFilterIsJudgedOnItsOwnTable: a full scan on the filtered table is advised even when another table uses an index")
+    void joinedFilterIsJudgedOnItsOwnTable() {
+        com.querysense.backend.dto.TableAnalysis customers = new com.querysense.backend.dto.TableAnalysis();
+        customers.setTableName("customers");
+        customers.setAccessType("ALL");
+        customers.setFullTableScan(true);
+        customers.setEstimatedRows(12000L);
+        com.querysense.backend.dto.TableAnalysis orders = new com.querysense.backend.dto.TableAnalysis();
+        orders.setTableName("orders");
+        orders.setAccessType("ref");
+        orders.setKeyUsed("customer_id");
+        orders.setUsesIndex(true);
+
+        QueryAnalysisResult result = base();
+        result.setTableName("customers");
+        result.setTables(List.of(customers, orders));
+        result.setHasFullTableScan(true);
+        result.setUsesIndex(true);
+        result.setFilteredColumn("customers.city");
+
+        List<SchemaRecommendation> recommendations = advisor.recommend(result);
+
+        assertThat(recommendations).singleElement().satisfies(r -> {
+            assertThat(r.getTargetTable()).isEqualTo("customers");
+            assertThat(r.getTargetColumn()).isEqualTo("city");
+            assertThat(r.getSuggestedAction()).isEqualTo("CREATE INDEX idx_customers_city ON customers(city);");
+        });
+    }
+
+    @Test
+    @DisplayName("unfilteredScanGetsNoIndex: a full scan that keeps every row has nothing an index could skip")
+    void unfilteredScanGetsNoIndex() {
+        QueryAnalysisResult result = fullScan();
+        result.setFilteredColumn(null);
+        result.setFiltered(100.0);
+
+        assertThat(advisor.recommend(result)).noneMatch(r -> "INDEX".equals(r.getType()));
+    }
+
+    @Test
+    @DisplayName("a filter whose column couldn't be read still gets the for-review placeholder")
+    void unreadFilterKeepsPlaceholder() {
+        QueryAnalysisResult result = fullScan();
+        result.setFilteredColumn(null);
+        result.setFiltered(20.0);
+
+        assertThat(advisor.recommend(result)).singleElement()
+                .satisfies(r -> assertThat(r.getSuggestedAction()).contains("<the column used in the WHERE clause>"));
+    }
+
+    @Test
     @DisplayName("a filesort is flagged even when the WHERE clause already uses an index")
     void filesortFlaggedIndependentlyOfIndexUse() {
         QueryAnalysisResult result = base();

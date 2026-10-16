@@ -44,6 +44,25 @@ class MongoGeneratedQueryValidatorTest {
     }
 
     @Test
+    @DisplayName("miscasedValueIsFlagged: a value stored with other capitalisation would match nothing in MongoDB")
+    void miscasedValueIsFlagged() {
+        com.querysense.backend.analysis.SchemaMetadata values = org.mockito.Mockito.mock(
+                com.querysense.backend.analysis.SchemaMetadata.class);
+        org.mockito.Mockito.when(values.getDistinctValues(org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.anyString())).thenReturn(java.util.List.of());
+        org.mockito.Mockito.when(values.getDistinctValues("customers", "city"))
+                .thenReturn(java.util.List.of("Mumbai", "Pune"));
+        GeneratedQueryValidator checking = new GeneratedQueryValidator(new ActiveSchemaProvider(), values);
+
+        assertThat(checking.namesUnknownIdentifiers("db.customers.find({ \"city\": \"mumbai\" })", "MongoDB"))
+                .hasValueSatisfying(w -> assertThat(w).contains("\"mumbai\"").contains("\"Mumbai\""));
+        assertThat(checking.namesUnknownIdentifiers(
+                "db.customers.find({\"city\": {\"$in\": [\"Pune\", \"mumbai\"]}})", "MongoDB")).isPresent();
+        assertThat(checking.namesUnknownIdentifiers("db.customers.find({\"city\": \"Mumbai\"})", "MongoDB")).isEmpty();
+        assertThat(checking.namesUnknownIdentifiers("db.customers.find({\"city\": \"Goa\"})", "MongoDB")).isEmpty();
+    }
+
+    @Test
     @DisplayName("an LLM pipeline that writes is flagged")
     void writeStageIsOffSchema() {
         assertThat(validator.namesUnknownIdentifiers(

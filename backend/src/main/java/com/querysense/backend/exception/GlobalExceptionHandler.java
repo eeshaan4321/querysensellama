@@ -1,6 +1,8 @@
 package com.querysense.backend.exception;
 
 import com.fasterxml.jackson.databind.exc.InvalidFormatException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -19,6 +21,8 @@ import java.util.stream.Collectors;
 /** Maps exceptions to JSON error responses. */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     private Map<String, Object> buildError(HttpStatus status, String message) {
         Map<String, Object> body = new HashMap<>();
@@ -121,6 +125,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Map<String, Object>> handleIllegalArgument(
             IllegalArgumentException ex) {
+        log.warn("Rejected request: {}", ex.getMessage(), ex);
 
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
@@ -129,6 +134,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleGenericError(Exception ex) {
+        log.error("Unhandled exception", ex);
 
         return ResponseEntity
                 .status(HttpStatus.INTERNAL_SERVER_ERROR)

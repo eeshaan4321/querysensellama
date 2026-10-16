@@ -34,7 +34,6 @@ public class QueryGenerationServiceImpl implements QueryGenerationService {
 
     private static final double CONFIDENCE_RULE_ENGINE = 0.95;
     private static final double CONFIDENCE_RULE_ENGINE_INTERPRETED = 0.85;
-    private static final double CONFIDENCE_CACHE = 1.0;
     private static final double CONFIDENCE_LLM = 0.65;
     private static final double CONFIDENCE_LLM_INCOMPLETE = 0.4;
     private static final double CONFIDENCE_LLM_OFF_SCHEMA = 0.2;
@@ -76,7 +75,7 @@ public class QueryGenerationServiceImpl implements QueryGenerationService {
             if (cached.isPresent()) {
                 generatedSql = cached.get().getGeneratedQuery();
                 source = SOURCE_CACHE;
-                confidence = CONFIDENCE_CACHE;
+                confidence = cached.get().getConfidence() == null ? CONFIDENCE_LLM : cached.get().getConfidence();
 
             } else {
                 generatedSql = llmFallbackService.generateQuery(input, databaseType);
@@ -105,11 +104,12 @@ public class QueryGenerationServiceImpl implements QueryGenerationService {
                 ruleResult.built() ? ruleResult.interpretations() : List.of());
     }
 
-    /** A cached answer serves only if it was written for the active schema and still fits it. */
+    /** A cached answer serves only if the LLM wrote it for the active schema and it still fits that schema. */
     private Optional<QueryHistory> servableCacheHit(String input, String databaseType) {
         return queryHistoryRepository
                 .findFirstByUserInputIgnoreCaseAndDatabaseTypeIgnoreCaseAndSchemaLabel(
                         input, databaseType, activeSchema.active(Dialect.from(databaseType)).label())
+                .filter(row -> SOURCE_LLM.equals(row.getSource()))
                 .filter(row -> generatedQueryValidator
                         .namesUnknownIdentifiers(row.getGeneratedQuery(), databaseType)
                         .isEmpty());

@@ -81,6 +81,22 @@ class HealthControllerTest {
     }
 
     @Test
+    @DisplayName("knownDownAnswersAtOnce: a failed driver heartbeat is DOWN without waiting on a ping")
+    void knownDownAnswersAtOnce() {
+        com.mongodb.connection.ServerDescription failed = com.mongodb.connection.ServerDescription.builder()
+                .address(new com.mongodb.ServerAddress("localhost", 27017))
+                .state(com.mongodb.connection.ServerConnectionState.CONNECTING)
+                .exception(new com.mongodb.MongoSocketOpenException("refused", new com.mongodb.ServerAddress()))
+                .build();
+        when(mongo.getClusterDescription()).thenReturn(new com.mongodb.connection.ClusterDescription(
+                com.mongodb.connection.ClusterConnectionMode.SINGLE, com.mongodb.connection.ClusterType.UNKNOWN,
+                java.util.List.of(failed)));
+
+        assertThat(controller().health().getMongo()).isEqualTo("DOWN");
+        org.mockito.Mockito.verify(admin, org.mockito.Mockito.never()).runCommand(any(Bson.class));
+    }
+
+    @Test
     @DisplayName("no MongoDB URI is NOT_CONFIGURED, and MongoDB is never contacted")
     void mongoNotConfigured() {
         environment.setProperty("spring.data.mongodb.uri", "");
