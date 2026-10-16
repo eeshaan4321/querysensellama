@@ -1292,6 +1292,8 @@ public class QueryIntentParser {
         Set<String> known = instructionWords();
         Set<String> bound = new HashSet<>();
         bindings.forEach(b -> bound.addAll(Arrays.asList((b.phrase() + " " + b.resolvedTo()).split("[^a-z0-9]+"))));
+        bindings.forEach(b -> Arrays.stream(b.resolvedTo().split("[^A-Za-z0-9_]+"))
+                .forEach(name -> bound.addAll(NameWords.words(name))));
         interpretations.forEach(i -> bound.addAll(Arrays.asList(i.phrase().split("[^a-z0-9]+"))));
         Set<String> usedColumns = new HashSet<>();
         for (RuleTrace.Binding b : bindings) {
