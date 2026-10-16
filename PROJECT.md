@@ -262,6 +262,14 @@ and the emitted column was simply wrong. It now works the other way round:
 find the column whose data actually contains the value, and decline if none
 does.
 
+**Updated 2026-10-16 — column names are read in any style.** A column is found
+whether it is written `student_name`, `studentName`, `StudentName`, `STUDENT_NAME`
+or `student name`, and whether the user types it as separate words or run
+together. In a university schema, `student name` reaches `students.student_name`
+and `admission year` reaches `admissionYear`. A word that is the table's own name
+may be dropped (`name` for `student_name` on `students`), and a shared last word
+is ambiguous rather than guessed. See §5 "Any naming".
+
 ### Verified behaviour
 
 These are the five sample prompts in the app, run against the live backend:
@@ -958,6 +966,80 @@ everything else.
 5. A table typo is tried only when no table matched.
 6. `SchemaBinder.bindColumn` keeps an exact-or-alias meaning for the
    parser's probe checks.
+
+### Any naming — built 2026-10-16
+
+Spec: `docs/superpowers/specs/2026-10-16-rule-engine-any-naming-design.md`.
+Plan: `docs/superpowers/plans/2026-10-16-rule-engine-any-naming.md`. Built on
+`feature/schema-adaptive-rule-engine`, commits 4c2e4a7 to ea9f5e4.
+
+**What changed**
+- Table and column names are split into words by one class (`NameWords`), so
+  snake case, camelCase, PascalCase, upper case, digits and spaces all match.
+- Multi-word columns work at every site that used to read one word: filters,
+  comparisons, ranges, sorting, ranking, grouping, distinct, totals and
+  projections. A phrase is taken as the longest run of words that names a column,
+  so `enrollments with grade a` stops at `grade` and leaves `a` as the value.
+- The snapshot carries primary keys (declared in the DDL or schema, `id` and `_id`
+  for the built-ins). Counting and comparison use the key, not `columns().get(0)`.
+  A composite key falls back rather than picking one half.
+- The label column on grouped counts is the first text column whose distinct
+  values are at least 90% of its rows. A table whose text columns all repeat
+  shows the key alone.
+- A column word the built query does not use now declines (see below).
+
+**Departures from the spec**
+1. The unread-word check counts a table word as read anywhere, and a column word
+   only if that column is used by the query.
+2. Two columns sharing a last word are Ambiguous only after aliases and synonyms
+   have failed, so a declared alias still wins.
+3. A typed phrase also matches when its words with spaces removed equal the
+   column's (`admissionyear`, `studentname`).
+4. When the distinct share cannot be read (no data, MongoDB down, a test mock),
+   the first text column is the label.
+
+**Still goes to the LLM:** abbreviation meanings (`dob`, `qty`) and the existing
+list in §2: ambiguous joins, unbound values, temporal arithmetic, and anything
+no pattern claims.
+
+**Behaviour that changed** (worth testing by hand)
+- Eight questions that built a query silently missing a column now decline,
+  naming the word, on both MySQL and MongoDB:
+  - `email customers in Delhi` (`email`)
+  - `name customers from Mumbai` (`name`)
+  - `email phone of customers` (`email`)
+  - `city customers` (`city`)
+  - `orders status and order date` (`status`)
+  - `customer name and order date of orders` (`name`)
+  - `total payment amount` (`amount`; it used to build `COUNT(*)`)
+  - `orders.order_date >= '2025-01-01'` (`date`; the condition was dropped)
+- Tokens like `name2` or `city2` are read whole and bind as typos at 0.85 with the
+  condition kept. Before, the digit was silently dropped: `count customers per
+  city2` now groups by city at 0.85.
+- Totals over a multi-word column show the whole phrase in the trace (`unit
+  price`, not `unit`). The same applies to three questions that already built
+  (`highest unit price of order items`); SQL and confidence are unchanged.
+- For a projection, a phrase that names a column wins over the same phrase as a
+  table. If a table name is also a column of the subject, `show the X of Y`
+  projects the column instead of `SELECT *`.
+- A column whose field type is unknown counts as a label candidate; only known
+  non-text types are skipped. Real uploads and the built-ins always carry types.
+- `no more than 5 orders` used to decline and now builds `SELECT * FROM orders
+  LIMIT 5` at 0.95.
+
+**Known gaps** (deferred, not fixed)
+- `AVG` and `SUM` over a date column build (`AVG(order_date)`); there is no type
+  check.
+- `between 2019 and 2021` on a year column is read as dates, not numbers.
+- The unread-word check compares bare column names, so `name` passes when only
+  `products.name` is used in a join where `customers.name` was meant.
+- `customers with 3 orders` and `orders 5 more than 3` silently drop the number
+  (unchanged from before).
+- `user_id` and `userid` compare equal; the first column wins.
+- Names are split as ASCII only; accented or non-Latin identifiers split badly.
+- MongoDB counts null or missing values as a group when working out the distinct
+  share; MySQL does not.
+- A table with no columns would throw in the primary-key fallback.
 
 ### Missing endpoints
 
@@ -3427,6 +3509,22 @@ more questions now fail with a 503 than did under the two-table schema.
 The same effect scales with an upload: the gate counts tables in whatever
 schema is active, so a client who uploads a twelve-table schema gets more of
 their questions routed to the LLM than a small schema would.
+
+### Session of 2026-10-16 — rule engine reads any naming style
+
+Backend tests: **942 run, 0 failures** (`./mvnw -q test` from `backend\`, run
+again on 2026-10-17 at the end of the work). The baseline before the plan was
+891.
+
+New test classes: `NameWordsTest`, `AnyNamingLexiconTest`, `PrimaryKeyTest`,
+`DistinctShareTest`, `IdentifyingColumnsTest`, `ColumnPhraseTest`,
+`AnyNamingParserTest`, `NamingStylesTest`. `NamingStylesTest` builds the same
+queries from six naming styles in both MySQL and MongoDB. Parity guards pin that
+every question that built before still builds the same SQL at the same
+confidence, apart from the changes listed in §5 "Any naming".
+
+**Not verified:** the running application was not exercised. The changes were
+checked through the test suite only; the user tests the app personally.
 
 ---
 
