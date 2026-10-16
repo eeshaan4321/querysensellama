@@ -190,4 +190,28 @@ class AnyNamingParserTest {
         assertThat(sql("which departments have more than three professors"))
                 .startsWith("SELECT departments.department_name, departments.department_id, COUNT(professors.professor_id)");
     }
+
+    @Test
+    @DisplayName("sorting, distinct and grouping keep the readings they had before column phrases")
+    void shapeParity() {
+        QueryIntentParser builtIn = builtInParser();
+        assertThat(builtIn.parse("customers sorted by name orders desc", Dialect.MYSQL).sql())
+                .isEqualTo("SELECT * FROM customers JOIN orders ON customers.id = orders.customer_id ORDER BY customers.name DESC;");
+        assertThat(builtIn.parse("distinct city and name of customers", Dialect.MYSQL).sql())
+                .isEqualTo("SELECT city, name FROM customers;");
+        assertThat(builtIn.parse("customers sorted by 2", Dialect.MYSQL).sql()).isEqualTo("SELECT * FROM customers;");
+        assertThat(builtIn.parse("count orders per 2", Dialect.MYSQL).sql()).isEqualTo("SELECT COUNT(*) FROM orders;");
+        RuleBuildResult descend = builtIn.parse("products sorted by price descend", Dialect.MYSQL);
+        assertThat(descend.built()).isFalse();
+        assertThat(descend.trace().declineReason()).isEqualTo("The question uses \"descend\", which isn't a table, column "
+                + "or stored value of the active schema, so this engine can't be sure it reads the whole question.");
+    }
+
+    @Test
+    @DisplayName("a total over a multi-word column names the whole column phrase in the trace")
+    void multiWordTotalTrace() {
+        RuleBuildResult result = builtInParser().parse("average and highest unit price of order items", Dialect.MYSQL);
+        assertThat(result.built()).as(String.valueOf(result.trace().declineReason())).isTrue();
+        assertThat(result.trace().bindings()).anySatisfy(b -> assertThat(b.phrase()).contains("unit price"));
+    }
 }

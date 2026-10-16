@@ -123,7 +123,7 @@ public class QueryIntentParser {
     private static final Pattern ORDER_BY = Pattern.compile(
             "\\b(?:order(?:ed)?\\s+by|sort(?:ed)?\\s+by)\\s+(?=[a-z])");
 
-    private static final Pattern DIRECTION = Pattern.compile("\\G\\s+(desc(?:ending)?|asc(?:ending)?)\\b");
+    private static final Pattern DIRECTION = Pattern.compile("\\G\\s+(desc(?:ending)?|asc(?:ending)?)");
 
     private static final Pattern SKIPPED_SORT_WORD = Pattern.compile("\\G\\s+(?!desc|asc)[a-z]+\\b");
 
@@ -505,7 +505,8 @@ public class QueryIntentParser {
                     rendered.add(aggregate.column() == null ? "COUNT(*)"
                             : aggregate.fn().name() + "(" + subject.name() + "." + col.get() + ")");
                 }
-                bindings.add(new RuleTrace.Binding(many.group(1) + " " + many.group(2), "AGGREGATE",
+                bindings.add(new RuleTrace.Binding(many.group(1) + " "
+                        + manyRead.map(ColumnPhrase.Reading::phrase).orElse(many.group(2)), "AGGREGATE",
                         String.join(", ", rendered)));
             } else if (agg.find() && !("total".equals(agg.group(1)) && countRequested)) {
                 String fn = AGGREGATE_FUNCTIONS.get(agg.group(1));
@@ -523,7 +524,7 @@ public class QueryIntentParser {
                             bindings);
                 }
                 aggregates.add(new QueryIntent.Aggregate(QueryIntent.Fn.valueOf(fn), qualify(col.get(), subject, joined)));
-                bindings.add(new RuleTrace.Binding(agg.group(2), "AGGREGATE",
+                bindings.add(new RuleTrace.Binding(aggRead.map(ColumnPhrase.Reading::phrase).orElse(agg.group(2)), "AGGREGATE",
                         fn + "(" + subject.name() + "." + col.get() + ")"));
             }
         }
@@ -1329,6 +1330,19 @@ public class QueryIntentParser {
         return before;
     }
 
+    private static String rankedPhraseAt(String text, int from) {
+        List<int[]> words = wordsFrom(text, from, 2);
+        if (words.isEmpty()) {
+            return "";
+        }
+        int end = words.get(0)[1];
+        if (words.size() == 2 && text.substring(words.get(0)[1], words.get(1)[0]).isBlank()
+                && text.substring(words.get(1)[0], words.get(1)[1]).matches("[a-z]+")) {
+            end = words.get(1)[1];
+        }
+        return text.substring(words.get(0)[0], end);
+    }
+
     private static String firstWordAt(String text, int from) {
         return wordsFrom(text, from, 1).stream().findFirst().map(w -> text.substring(w[0], w[1])).orElse("");
     }
@@ -1457,7 +1471,7 @@ public class QueryIntentParser {
         if (top.find()) {
             Optional<ColumnPhrase.Reading> topRead = phrases.after(text, top.end(), List.of(subject));
             if (topRead.isEmpty()) {
-                throw new DeclineException("The question ranks by \"" + firstWordAt(text, top.end())
+                throw new DeclineException("The question ranks by \"" + rankedPhraseAt(text, top.end())
                         + "\", which is not a column of " + subject.name() + ".");
             }
             use(topRead.get(), false, interpretations);
