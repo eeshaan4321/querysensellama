@@ -119,4 +119,23 @@ class AnyNamingParserTest {
         assertThat(result.built()).as(String.valueOf(result.trace().declineReason())).isTrue();
         assertThat(result.sql()).isEqualTo("SELECT students FROM departments;");
     }
+
+    @Test
+    @DisplayName("filters and comparisons read multi-word columns")
+    void conditions() {
+        assertThat(sql("students with admission year 2022"))
+                .isEqualTo("SELECT * FROM students WHERE admission_year = 2022;");
+        assertThat(sql("students where admission_year is 2022"))
+                .isEqualTo("SELECT * FROM students WHERE admission_year = 2022;");
+        assertThat(sql("students with admission year above 2020"))
+                .isEqualTo("SELECT * FROM students WHERE admission_year > 2020;");
+        assertThat(sql("students with student name not asha"))
+                .isEqualTo("SELECT * FROM students WHERE student_name != 'asha';");
+    }
+
+    @Test
+    @DisplayName("a value right after the column is the value, not part of the column")
+    void valueAfterColumn() {
+        assertThat(sql("enrollments with grade a")).isEqualTo("SELECT * FROM enrollments WHERE grade = 'a';");
+    }
 }

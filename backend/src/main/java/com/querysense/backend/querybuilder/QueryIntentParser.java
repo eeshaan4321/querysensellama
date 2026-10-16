@@ -50,9 +50,9 @@ public class QueryIntentParser {
             Map.entry("up to", QueryIntent.Op.LTE));
 
     private static final Pattern COMPARISON = Pattern.compile(
-            "\\b([a-z_]+)\\s+(?:is\\s+)?(" + alternation(COMPARISON_OPS.keySet()) + ")\\s+(.+)$");
+            "\\b(?:is\\s+)?(" + alternation(COMPARISON_OPS.keySet()) + ")\\s+(.+)$");
 
-    private static final Pattern BETWEEN = Pattern.compile("\\b([a-z_]+)\\s+(?:is\\s+)?between\\s+(.+)$");
+    private static final Pattern BETWEEN = Pattern.compile("\\b(?:is\\s+)?between\\s+(.+)$");
 
     private static String alternation(Collection<String> words) {
         return words.stream()
@@ -101,7 +101,7 @@ public class QueryIntentParser {
     private static final Pattern EXCLUDING = Pattern.compile(
             "\\b(?:other than|excluding|except|not in|not from)\\s+(?=[a-z])");
 
-    private static final Pattern NOT_VALUE = Pattern.compile("\\b([a-z_]+)\\s+(?:is\\s+)?not\\s+(?=[a-z])");
+    private static final Pattern NOT_VALUE = Pattern.compile("\\b(?:is\\s+)?not\\s+(?=[a-z])");
 
     private static final int LONGEST_VALUE_WORDS = 4;
 
@@ -126,8 +126,11 @@ public class QueryIntentParser {
             "\\b(average|avg|mean|sum|total(?!\\s+number)|maximum|max|highest|minimum|min|lowest)\\s+"
                     + "(?:of\\s+)?(?:the\\s+)?([a-z_ ]+?)\\b");
 
-    private static final Pattern WITH_VALUE = Pattern.compile(
-            "\\b(?:with|whose|where)\\s+([a-z_]+)\\s+(?:(?:is|equals|=)\\s+)?([a-z0-9_]+)\\b");
+    private static final Pattern WITH_VALUE = Pattern.compile("\\b(?:with|whose|where)\\s+(?=[a-z0-9])");
+
+    private static final Pattern VALUE_START = Pattern.compile("\\G\\s+(?:(?:is|equals|=)\\s+)?(?=[a-z0-9_])");
+
+    private static final Pattern WORD = Pattern.compile("[a-z0-9]+");
 
     private static final Pattern BARE_BY = Pattern.compile("(?<!sorted |ordered |order |sort |grouped |group )\\bby\\s+(?:the\\s+)?([a-z_]+)");
 
@@ -527,8 +530,11 @@ public class QueryIntentParser {
         }
 
         Matcher between = BETWEEN.matcher(text);
-        if (between.find()) {
-            String rest = between.group(2);
+        if (between.find() && adjacentWordBefore(text, between.start()).isPresent()) {
+            String rest = between.group(1);
+            Optional<ColumnPhrase.Reading> rangeRead = phrases.before(text, between.start(), List.of(subject));
+            String rangePhrase = rangeRead.map(ColumnPhrase.Reading::phrase)
+                    .orElse(wordBefore(text, between.start()).map(w -> text.substring(w[0], w[1])).orElse(""));
             Optional<NumberReader.Reading> low = NumberReader.leading(rest);
             String after = low.map(r -> rest.substring(r.phrase().length()).trim()).orElse("");
             Optional<NumberReader.Reading> high = after.startsWith("and ")
@@ -536,26 +542,25 @@ public class QueryIntentParser {
                     : Optional.empty();
             if (low.isEmpty() || high.isEmpty()) {
                 return RuleBuildResult.declined(
-                        "The question asks for " + between.group(1) + " between \"" + rest
+                        "The question asks for " + rangePhrase + " between \"" + rest
                                 + "\", but this engine can only read a range between two numbers.",
                         bindings);
             }
-            Optional<String> rangeColumn = column(subject, between.group(1), interpretations);
-            if (rangeColumn.isEmpty()) {
+            if (rangeRead.isEmpty()) {
                 return RuleBuildResult.declined(
-                        "The question asks for a range of \"" + between.group(1) + "\", which is not a column of "
+                        "The question asks for a range of \"" + rangePhrase + "\", which is not a column of "
                                 + subject.name() + ".",
                         bindings);
             }
+            QueryIntent.ColumnRef rangeRef = use(rangeRead.get(), joined, interpretations);
             QueryIntent.Literal from = QueryIntent.Literal.number(low.get().value());
             QueryIntent.Literal to = QueryIntent.Literal.number(high.get().value());
-            where.add(new QueryIntent.Predicate(qualify(rangeColumn.get(), subject, joined),
-                    QueryIntent.Op.BETWEEN, List.of(from, to)));
-            conditionSpans.add(new int[]{between.start(), between.start(2)
+            where.add(new QueryIntent.Predicate(rangeRef, QueryIntent.Op.BETWEEN, List.of(from, to)));
+            conditionSpans.add(new int[]{rangeRead.get().start(), between.start(1)
                     + rest.indexOf(high.get().phrase(), low.get().phrase().length()) + high.get().phrase().length()});
-            String lhs = joined ? subject.name() + "." + rangeColumn.get() : rangeColumn.get();
+            String lhs = joined ? subject.name() + "." + rangeRead.get().column() : rangeRead.get().column();
             bindings.add(new RuleTrace.Binding(
-                    between.group(1) + " between " + low.get().phrase() + " and " + high.get().phrase(),
+                    rangePhrase + " between " + low.get().phrase() + " and " + high.get().phrase(),
                     "COMPARISON", lhs + " BETWEEN " + from.text() + " AND " + to.text()));
         }
 
@@ -564,12 +569,17 @@ public class QueryIntentParser {
         int searchFrom = 0;
         while (searchFrom < text.length() && comparison.find(searchFrom)) {
             if (insideAny(comparison.start(), conditionSpans)) {
-                searchFrom = comparison.end(2);
+                searchFrom = comparison.end(1);
                 continue;
             }
-            QueryIntent.Op op = COMPARISON_OPS.get(comparison.group(2));
+            Optional<int[]> previous = adjacentWordBefore(text, comparison.start());
+            if (previous.isEmpty()) {
+                searchFrom = comparison.end(1);
+                continue;
+            }
+            QueryIntent.Op op = COMPARISON_OPS.get(comparison.group(1));
             String operator = op.sql();
-            String rest = comparison.group(3);
+            String rest = comparison.group(2);
             Optional<NumberReader.Reading> reading = NumberReader.leading(rest);
             if (reading.isEmpty()) {
                 return RuleBuildResult.declined(
@@ -578,15 +588,19 @@ public class QueryIntentParser {
                         bindings);
             }
             QueryIntent.Literal number = QueryIntent.Literal.number(reading.get().value());
-            int[] span = {comparison.start(), comparison.start(3) + reading.get().phrase().length()};
+            Optional<ColumnPhrase.Reading> lhsRead = phrases.before(text, comparison.start(), chainTables);
+            String lhsPhrase = lhsRead.map(ColumnPhrase.Reading::phrase)
+                    .orElse(text.substring(previous.get()[0], previous.get()[1]));
+            int start = lhsRead.map(ColumnPhrase.Reading::start).orElse(previous.get()[0]);
+            int[] span = {start, comparison.start(2) + reading.get().phrase().length()};
 
-            Optional<QueryIntent.ColumnRef> lhsRef = chainColumn(comparison.group(1), chainTables, joined, interpretations);
-            if (lhsRef.isPresent()) {
-                String lhs = SqlEmitter.column(lhsRef.get());
-                where.add(new QueryIntent.Predicate(lhsRef.get(), op, List.of(number)));
+            if (lhsRead.isPresent()) {
+                QueryIntent.ColumnRef lhsRef = use(lhsRead.get(), joined, interpretations);
+                String lhs = SqlEmitter.column(lhsRef);
+                where.add(new QueryIntent.Predicate(lhsRef, op, List.of(number)));
                 conditionSpans.add(span);
                 bindings.add(new RuleTrace.Binding(
-                        comparison.group(1) + " " + comparison.group(2) + " " + reading.get().phrase(),
+                        lhsPhrase + " " + comparison.group(1) + " " + reading.get().phrase(),
                         "COMPARISON", lhs + " " + operator + " " + number.text()));
             } else if (joined) {
                 if (countTargetColumn != null) {
@@ -601,11 +615,11 @@ public class QueryIntentParser {
                         op, List.of(number)));
                 conditionSpans.add(span);
                 bindings.add(new RuleTrace.Binding(
-                        comparison.group(2) + " " + reading.get().phrase() + " " + related.name(),
+                        comparison.group(1) + " " + reading.get().phrase() + " " + related.name(),
                         "COMPARISON", rendered + " " + operator + " " + number.text()));
             } else {
                 return RuleBuildResult.declined(
-                        "The question compares \"" + comparison.group(1) + "\", which is not a "
+                        "The question compares \"" + lhsPhrase + "\", which is not a "
                                 + "column of " + subject.name() + ".",
                         bindings);
             }
@@ -670,25 +684,26 @@ public class QueryIntentParser {
             conditionSpans.add(new int[]{excluding.start(), list.get().end()});
         } else {
             Matcher notValue = NOT_VALUE.matcher(text);
-            if (notValue.find()) {
-                Optional<String> notColumn = binder.bindColumn(subject, notValue.group(1));
-                if (notColumn.isPresent()) {
-                    Optional<ValueList> list = readValues(text, notValue.end(), chainTables, joined, notColumn.get(),
+            if (notValue.find() && adjacentWordBefore(text, notValue.start()).isPresent()) {
+                Optional<ColumnPhrase.Reading> notRead = phrases.beforeExact(text, notValue.start(), subject);
+                if (notRead.isPresent()) {
+                    String notColumn = notRead.get().column();
+                    Optional<ValueList> list = readValues(text, notValue.end(), chainTables, joined, notColumn,
                             metadata, dialect, interpretations);
                     if (list.isEmpty()) {
                         return RuleBuildResult.declined(
-                                "The question says " + notValue.group(1) + " is not something, but no stored value "
-                                        + "of " + subject.name() + "." + notColumn.get() + " follows.",
+                                "The question says " + notRead.get().phrase() + " is not something, but no stored value "
+                                        + "of " + subject.name() + "." + notColumn + " follows.",
                                 bindings);
                     }
-                    where.add(new QueryIntent.Predicate(qualify(notColumn.get(), subject, joined),
+                    where.add(new QueryIntent.Predicate(qualify(notColumn, subject, joined),
                             list.get().typed().size() == 1 ? QueryIntent.Op.NE : QueryIntent.Op.NOT_IN,
                             List.copyOf(list.get().literals())));
-                    bindings.add(new RuleTrace.Binding(notValue.group(1) + " not "
+                    bindings.add(new RuleTrace.Binding(notRead.get().phrase() + " not "
                             + String.join(" and ", list.get().typed()), "FILTER",
-                            subject.name() + "." + notColumn.get()));
-                    consumed.add(new int[]{notValue.start(), list.get().end()});
-                    conditionSpans.add(new int[]{notValue.start(), list.get().end()});
+                            subject.name() + "." + notColumn));
+                    consumed.add(new int[]{notRead.get().start(), list.get().end()});
+                    conditionSpans.add(new int[]{notRead.get().start(), list.get().end()});
                 }
             }
         }
@@ -720,51 +735,70 @@ public class QueryIntentParser {
         }
 
         Matcher with = WITH_VALUE.matcher(text);
-        if (with.find() && !insideAny(with.start(1), conditionSpans) && !insideAny(with.start(), conditionSpans)
-                && !VALUE_STOPWORDS.contains(with.group(1)) && !NON_COLUMN_WORDS.contains(with.group(1))
-                && conditionSpans.stream().noneMatch(s -> s[0] >= with.start() && s[0] < with.end())) {
-            Optional<QueryIntent.ColumnRef> withRef = chainColumn(with.group(1), chainTables, joined, interpretations);
-            if (withRef.isEmpty()) {
-                return RuleBuildResult.declined(
-                        "The question filters on \"" + with.group(1) + "\", which is not a column of "
-                                + subject.name() + ".",
-                        bindings);
+        int[] withFirst = null;
+        int withSecondEnd = -1;
+        while (with.find()) {
+            List<int[]> following = wordsFrom(text, with.end(), 2);
+            if (following.size() == 2 && following.get(0)[0] == with.end()) {
+                withFirst = following.get(0);
+                withSecondEnd = following.get(1)[1];
+                break;
             }
-            KnownSchema.Table withTable = withRef.get().table() == null ? subject
-                    : binder.tableNamed(withRef.get().table(), dialect).orElse(subject);
-            String value = with.group(2);
-            Optional<NumberReader.Reading> number = NumberReader.leading(text.substring(with.start(2)));
-            QueryIntent.Literal literalValue;
-            int valueEnd;
-            if (number.isPresent()) {
-                literalValue = QueryIntent.Literal.number(number.get().value());
-                value = number.get().phrase();
-                valueEnd = with.start(2) + value.length();
-            } else {
-                List<String> run = valueWords(text.substring(with.start(2)), chainTables, dialect);
-                Optional<String> stored = Optional.empty();
-                int n = run.size();
-                for (; n >= 1 && stored.isEmpty(); n--) {
-                    stored = storedValueOf(withTable, withRef.get().column(), String.join(" ", run.subList(0, n)), metadata);
-                }
-                if (stored.isPresent()) {
-                    run = run.subList(0, n + 1);
-                }
-                value = String.join(" ", run);
-                if (stored.isEmpty() && dialect == Dialect.MONGODB) {
+        }
+        if (withFirst != null) {
+            String first = text.substring(withFirst[0], withFirst[1]);
+            int withStart = with.start();
+            int matchEnd = withSecondEnd;
+            if (!insideAny(withFirst[0], conditionSpans) && !insideAny(withStart, conditionSpans)
+                    && !VALUE_STOPWORDS.contains(first) && !NON_COLUMN_WORDS.contains(first)
+                    && conditionSpans.stream().noneMatch(s -> s[0] >= withStart && s[0] < matchEnd)) {
+                Optional<ColumnPhrase.Reading> withRead = phrases.after(text, withFirst[0], chainTables);
+                if (withRead.isEmpty()) {
                     return RuleBuildResult.declined(
-                            "Couldn't confirm how \"" + value + "\" is stored in " + withTable.name() + "."
-                                    + withRef.get().column() + ", and MongoDB matches text exactly, so this "
-                                    + "engine won't guess its capitalisation.",
+                            "The question filters on \"" + first + "\", which is not a column of "
+                                    + subject.name() + ".",
                             bindings);
                 }
-                literalValue = QueryIntent.Literal.text(value, stored.orElse(value));
-                valueEnd = text.indexOf(value, with.start(2)) + value.length();
+                Matcher valueStart = VALUE_START.matcher(text);
+                if (valueStart.find(withRead.get().end())) {
+                    QueryIntent.ColumnRef withRef = use(withRead.get(), joined, interpretations);
+                    KnownSchema.Table withTable = withRead.get().table();
+                    int valueAt = valueStart.end();
+                    String value;
+                    Optional<NumberReader.Reading> number = NumberReader.leading(text.substring(valueAt));
+                    QueryIntent.Literal literalValue;
+                    int valueEnd;
+                    if (number.isPresent()) {
+                        literalValue = QueryIntent.Literal.number(number.get().value());
+                        value = number.get().phrase();
+                        valueEnd = valueAt + value.length();
+                    } else {
+                        List<String> run = valueWords(text.substring(valueAt), chainTables, dialect);
+                        Optional<String> stored = Optional.empty();
+                        int n = run.size();
+                        for (; n >= 1 && stored.isEmpty(); n--) {
+                            stored = storedValueOf(withTable, withRead.get().column(), String.join(" ", run.subList(0, n)), metadata);
+                        }
+                        if (stored.isPresent()) {
+                            run = run.subList(0, n + 1);
+                        }
+                        value = String.join(" ", run);
+                        if (stored.isEmpty() && dialect == Dialect.MONGODB) {
+                            return RuleBuildResult.declined(
+                                    "Couldn't confirm how \"" + value + "\" is stored in " + withTable.name() + "."
+                                            + withRead.get().column() + ", and MongoDB matches text exactly, so this "
+                                            + "engine won't guess its capitalisation.",
+                                    bindings);
+                        }
+                        literalValue = QueryIntent.Literal.text(value, stored.orElse(value));
+                        valueEnd = text.indexOf(value, valueAt) + value.length();
+                    }
+                    where.add(new QueryIntent.Predicate(withRef, QueryIntent.Op.EQ, List.of(literalValue)));
+                    conditionSpans.add(new int[]{withStart, valueEnd});
+                    bindings.add(new RuleTrace.Binding(withRead.get().phrase() + " " + value, "FILTER",
+                            withTable.name() + "." + withRead.get().column()));
+                }
             }
-            where.add(new QueryIntent.Predicate(withRef.get(), QueryIntent.Op.EQ, List.of(literalValue)));
-            conditionSpans.add(new int[]{with.start(), valueEnd});
-            bindings.add(new RuleTrace.Binding(with.group(1) + " " + value, "FILTER",
-                    withTable.name() + "." + withRef.get().column()));
         }
 
         boolean anyOf = false;
@@ -1273,6 +1307,28 @@ public class QueryIntentParser {
 
     private static QueryIntent.ColumnRef valueRef(ValueList list, boolean joined) {
         return new QueryIntent.ColumnRef(joined ? list.table() : null, list.column());
+    }
+
+    private static Optional<int[]> wordBefore(String text, int to) {
+        Matcher m = WORD.matcher(text);
+        int[] last = null;
+        while (m.find() && m.end() <= to) {
+            last = new int[]{m.start(), m.end()};
+        }
+        return Optional.ofNullable(last);
+    }
+
+    private static Optional<int[]> adjacentWordBefore(String text, int to) {
+        return wordBefore(text, to).filter(w -> w[1] < to && text.substring(w[1], to).isBlank());
+    }
+
+    private static List<int[]> wordsFrom(String text, int from, int max) {
+        List<int[]> found = new ArrayList<>();
+        Matcher m = WORD.matcher(text);
+        while (found.size() < max && m.find(found.isEmpty() ? from : found.get(found.size() - 1)[1])) {
+            found.add(new int[]{m.start(), m.end()});
+        }
+        return found;
     }
 
     private static boolean insideAny(int position, List<int[]> spans) {
