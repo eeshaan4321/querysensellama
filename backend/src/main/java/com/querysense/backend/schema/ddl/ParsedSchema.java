@@ -22,6 +22,17 @@ public record ParsedSchema(List<ParsedTable> tables, List<String> warnings, List
         this(tables, warnings, indexes, Map.of());
     }
 
+    public Map<String, String> primaryKeys() {
+        Map<String, String> keys = new LinkedHashMap<>();
+        for (ParsedTable table : tables) {
+            List<String> key = table.columns().stream().filter(ParsedColumn::primaryKey).map(ParsedColumn::name).toList();
+            if (key.size() == 1) {
+                keys.put(table.name(), key.get(0));
+            }
+        }
+        return keys;
+    }
+
     public Optional<ParsedTable> table(String name) {
         return tables.stream().filter(t -> t.name().equalsIgnoreCase(name)).findFirst();
     }

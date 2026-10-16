@@ -5,6 +5,7 @@ import com.querysense.backend.dialect.Dialect;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /** The built-in MongoDB demo: the shop domain as collections, with order items embedded. */
 public final class KnownMongoSchema {
@@ -91,6 +92,7 @@ public final class KnownMongoSchema {
                 INDEXES,
                 FIELD_TYPES,
                 ENUMS,
-                ALIASES);
+                ALIASES,
+                TABLES.stream().collect(Collectors.toMap(KnownSchema.Table::name, t -> "_id")));
     }
 }

@@ -96,7 +96,8 @@ public class SchemaUploadService {
                 parsed.indexes(),
                 parsed.fieldTypes(),
                 parsed.enums(),
-                aliases.aliases());
+                aliases.aliases(),
+                parsed.primaryKeys());
 
         log.info("Uploaded {} schema '{}': {} tables, {} rows total",
                 dialect.label(), snapshot.label(), snapshot.tables().size(),

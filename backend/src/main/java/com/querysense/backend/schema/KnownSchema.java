@@ -6,6 +6,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 /** The built-in demo schema: tables, columns and foreign keys. */
 public final class KnownSchema {
@@ -104,6 +105,7 @@ public final class KnownSchema {
                 List.of(),
                 FIELD_TYPES,
                 Map.of(),
-                ALIASES);
+                ALIASES,
+                TABLES.stream().collect(Collectors.toMap(Table::name, t -> "id")));
     }
 }

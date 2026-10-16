@@ -19,9 +19,40 @@ public record SchemaSnapshot(
         List<IndexSpec> indexes,
         Map<String, Map<String, String>> fieldTypes,
         Map<String, Map<String, List<String>>> enums,
-        Map<String, SchemaAliases.TableAliases> aliases) {
+        Map<String, SchemaAliases.TableAliases> aliases,
+        Map<String, String> primaryKeys) {
 
     public static final String BUILT_IN_ID = "builtin";
+
+    public SchemaSnapshot(String id, String label, String catalog,
+                          List<KnownSchema.Table> tables,
+                          List<KnownSchema.ForeignKey> foreignKeys,
+                          Map<String, Integer> rowCounts,
+                          Instant loadedAt,
+                          Dialect dialect,
+                          List<IndexSpec> indexes,
+                          Map<String, Map<String, String>> fieldTypes,
+                          Map<String, Map<String, List<String>>> enums,
+                          Map<String, SchemaAliases.TableAliases> aliases) {
+        this(id, label, catalog, tables, foreignKeys, rowCounts, loadedAt, dialect, indexes, fieldTypes, enums,
+                aliases, Map.of());
+    }
+
+    public String primaryKeyFor(KnownSchema.Table table) {
+        String declared = primaryKeys.get(table.name());
+        if (declared != null) {
+            return declared;
+        }
+        if (dialect == Dialect.MONGODB && table.columns().contains("_id")) {
+            return "_id";
+        }
+        return foreignKeys.stream()
+                .filter(fk -> fk.toTable().equalsIgnoreCase(table.name()))
+                .map(KnownSchema.ForeignKey::toColumn)
+                .filter(table.columns()::contains)
+                .findFirst()
+                .orElse(table.columns().get(0));
+    }
 
     public SchemaSnapshot(String id, String label, String catalog,
                           List<KnownSchema.Table> tables,
