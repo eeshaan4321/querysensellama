@@ -102,6 +102,34 @@ class AnyNamingParserTest {
     }
 
     @Test
+    @DisplayName("a count across a linking table reads 'in' and a verb formed from a table's name")
+    void countThroughLinkingTable() {
+        QueryIntentParser small = parserOver(List.of(
+                        new KnownSchema.ForeignKey("enrollments", "student_id", "students", "student_id"),
+                        new KnownSchema.ForeignKey("enrollments", "section_id", "sections", "section_id")),
+                new KnownSchema.Table("students", List.of("student_id", "student_name")),
+                new KnownSchema.Table("sections", List.of("section_id", "semester")),
+                new KnownSchema.Table("enrollments", List.of("enrollment_id", "student_id", "section_id")));
+        RuleBuildResult result = small.parse("Which students are enrolled in more than five sections?", Dialect.MYSQL);
+        assertThat(result.built()).as(String.valueOf(result.trace().declineReason())).isTrue();
+        assertThat(result.sql()).contains("JOIN enrollments").contains("HAVING COUNT(sections.section_id) > 5");
+    }
+
+    @Test
+    @DisplayName("a verb formed from a linking table's name counts as read")
+    void verbFromTableName() {
+        QueryIntentParser small = parserOver(List.of(
+                        new KnownSchema.ForeignKey("rentals", "customer_id", "customers", "customer_id"),
+                        new KnownSchema.ForeignKey("rentals", "movie_id", "movies", "movie_id")),
+                new KnownSchema.Table("customers", List.of("customer_id", "first_name")),
+                new KnownSchema.Table("movies", List.of("movie_id", "title")),
+                new KnownSchema.Table("rentals", List.of("rental_id", "customer_id", "movie_id")));
+        RuleBuildResult result = small.parse("Which customers rented more than five movies?", Dialect.MYSQL);
+        assertThat(result.built()).as(String.valueOf(result.trace().declineReason())).isTrue();
+        assertThat(result.sql()).contains("JOIN rentals").contains("HAVING COUNT(movies.movie_id) > 5");
+    }
+
+    @Test
     @DisplayName("a column name with a digit is read in a column list")
     void digitsInColumnList() {
         QueryIntentParser small = parserOver(List.of(), new KnownSchema.Table("people", List.of("person_id", "address2", "city")));

@@ -729,7 +729,7 @@ public class QueryIntentParser {
 
         Matcher preposition = PREPOSITION.matcher(text);
         while (preposition.find()) {
-            if (insideAny(preposition.start(), consumed)) {
+            if (insideAny(preposition.start(), consumed) || insideAny(preposition.end(), conditionSpans)) {
                 continue;
             }
             Optional<ValueList> list = readValues(text, preposition.end(), chainTables, joined, null, metadata, dialect,
@@ -1313,6 +1313,7 @@ public class QueryIntentParser {
                     || COMPARISON_OPS.keySet().stream().anyMatch(op -> op.matches("(?:.* )?" + Pattern.quote(w) + "(?: .*)?"))
                     || ADJECTIVES.entries().containsKey(w) || w.matches("\\d+") || NumberReader.leading(w).isPresent()
                     || !binder.tableMatches(w, dialect).hits().isEmpty()
+                    || namesChainTable(w, chainTables)
                     || chainTables.stream().anyMatch(t -> binder.columnMatch(t, w) instanceof SchemaLexicon.Bound b
                             && usedColumns.contains(b.binding().item().toLowerCase(Locale.ROOT)))) {
                 continue;
@@ -1320,6 +1321,16 @@ public class QueryIntentParser {
             return Optional.of(w);
         }
         return Optional.empty();
+    }
+
+    private static boolean namesChainTable(String word, List<KnownSchema.Table> chainTables) {
+        String stem = word.replaceAll("(?:ing|ed|d|s)$", "");
+        if (stem.length() < 4) {
+            return false;
+        }
+        return chainTables.stream()
+                .flatMap(t -> NameWords.words(t.name()).stream())
+                .anyMatch(tableWord -> tableWord.startsWith(stem));
     }
 
     private static QueryIntent.ColumnRef valueRef(ValueList list, boolean joined) {
