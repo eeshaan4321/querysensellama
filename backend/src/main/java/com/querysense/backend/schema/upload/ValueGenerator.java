@@ -110,7 +110,7 @@ public class ValueGenerator {
         int wholeDigits = Math.max(1, precision - scale);
         long bound = (long) Math.pow(10, Math.min(wholeDigits, 9));
         double raw = random.nextDouble() * bound;
-        return BigDecimal.valueOf(raw).setScale(scale, RoundingMode.HALF_UP);
+        return BigDecimal.valueOf(raw).setScale(scale, RoundingMode.DOWN);
     }
 
     private LocalDate dateValue() {

@@ -4,6 +4,7 @@ import com.querysense.backend.dialect.Dialect;
 import com.querysense.backend.exception.SchemaUploadException;
 import com.querysense.backend.schema.IndexSpec;
 import com.querysense.backend.schema.KnownSchema;
+import com.querysense.backend.schema.ddl.DdlSchemaParser;
 import com.querysense.backend.schema.ddl.ParsedColumn;
 import com.querysense.backend.schema.ddl.ParsedSchema;
 import com.querysense.backend.schema.ddl.ParsedTable;
@@ -158,8 +159,11 @@ public class SchemaUploadValidator {
 
         for (KnownSchema.ForeignKey fk : schema.allForeignKeys()) {
             ParsedTable target = schema.table(fk.toTable()).orElseThrow(() -> new SchemaUploadException(
-                    "Foreign key " + fk.fromTable() + "." + fk.fromColumn() + " references the table '"
-                            + fk.toTable() + "', which is not in the uploaded schema."));
+                    DdlSchemaParser.skipReason(schema.warnings(), fk.toTable())
+                            .map(reason -> "Foreign key " + fk.fromTable() + "." + fk.fromColumn() + " references the table '"
+                                    + fk.toTable() + "', which is in the file but could not be read (" + reason + ").")
+                            .orElse("Foreign key " + fk.fromTable() + "." + fk.fromColumn() + " references the table '"
+                                    + fk.toTable() + "', which is not in the uploaded schema.")));
             if (target.column(fk.toColumn()).isEmpty()) {
                 throw new SchemaUploadException(
                         "Foreign key " + fk.fromTable() + "." + fk.fromColumn() + " references '"

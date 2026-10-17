@@ -192,6 +192,77 @@ class SchemaSeederTest {
                 assertThat((Integer) row[1]).isBetween(1, 50));
     }
 
+    @Test
+    @DisplayName("a foreign key takes the parent's stored values, so text keys match")
+    @SuppressWarnings("unchecked")
+    void foreignKeyUsesStoredParentValues() {
+        org.mockito.Mockito.when(jdbcTemplate.queryForList(
+                        org.mockito.ArgumentMatchers.contains("`grade_scale`"), org.mockito.ArgumentMatchers.eq(Object.class)))
+                .thenReturn(List.of("A", "B"));
+        ParsedTable scale = new ParsedTable("grade_scale",
+                List.of(new ParsedColumn("letter", "VARCHAR", List.of("255"), true, false, false, true)), List.of());
+        ParsedTable enrollments = new ParsedTable("enrollments",
+                List.of(pk("id"), col("grade_letter", "VARCHAR")),
+                List.of(new KnownSchema.ForeignKey("enrollments", "grade_letter", "grade_scale", "letter")));
+
+        seeder.seed(new ParsedSchema(List.of(scale, enrollments), List.of()));
+
+        ArgumentCaptor<List<Object[]>> batches = ArgumentCaptor.forClass(List.class);
+        verify(jdbcTemplate, atLeastOnce()).batchUpdate(
+                org.mockito.ArgumentMatchers.contains("`enrollments`"), batches.capture());
+        assertThat(batches.getAllValues().stream().flatMap(List::stream).map(row -> row[1]).distinct().toList())
+                .isNotEmpty().allSatisfy(v -> assertThat(v).isIn("A", "B"));
+    }
+
+    @Test
+    @DisplayName("a two-column primary key never repeats a pair")
+    @SuppressWarnings("unchecked")
+    void compositeKeyPairsAreUnique() {
+        org.mockito.Mockito.when(jdbcTemplate.queryForList(
+                        org.mockito.ArgumentMatchers.contains("`students`"), org.mockito.ArgumentMatchers.eq(Object.class)))
+                .thenReturn(List.of(1, 2, 3));
+        org.mockito.Mockito.when(jdbcTemplate.queryForList(
+                        org.mockito.ArgumentMatchers.contains("`clubs`"), org.mockito.ArgumentMatchers.eq(Object.class)))
+                .thenReturn(List.of(1, 2, 3));
+        ParsedTable students = new ParsedTable("students", List.of(pk("student_id")), List.of());
+        ParsedTable clubs = new ParsedTable("clubs", List.of(pk("club_id")), List.of());
+        ParsedTable memberships = new ParsedTable("memberships",
+                List.of(new ParsedColumn("student_id", "INT", List.of(), true, false, false, true),
+                        new ParsedColumn("club_id", "INT", List.of(), true, false, false, true)),
+                List.of(new KnownSchema.ForeignKey("memberships", "student_id", "students", "student_id"),
+                        new KnownSchema.ForeignKey("memberships", "club_id", "clubs", "club_id")));
+
+        seeder.seed(new ParsedSchema(List.of(students, clubs, memberships), List.of()));
+
+        ArgumentCaptor<List<Object[]>> batches = ArgumentCaptor.forClass(List.class);
+        verify(jdbcTemplate, atLeastOnce()).batchUpdate(
+                org.mockito.ArgumentMatchers.contains("`memberships`"), batches.capture());
+        List<String> pairs = batches.getAllValues().stream().flatMap(List::stream)
+                .map(row -> row[0] + "-" + row[1]).toList();
+        assertThat(pairs).isNotEmpty().doesNotHaveDuplicates().hasSizeLessThanOrEqualTo(9);
+    }
+
+    @Test
+    @DisplayName("a unique foreign key takes each parent value once, and no more rows than the parent has")
+    @SuppressWarnings("unchecked")
+    void uniqueForeignKeyTakesEachParentOnce() {
+        org.mockito.Mockito.when(jdbcTemplate.queryForList(
+                        org.mockito.ArgumentMatchers.contains("`applications`"), org.mockito.ArgumentMatchers.eq(Object.class)))
+                .thenReturn(List.of(4, 5, 6));
+        ParsedTable applications = new ParsedTable("applications", List.of(pk("application_id")), List.of());
+        ParsedTable offers = new ParsedTable("offers",
+                List.of(pk("offer_id"), new ParsedColumn("application_id", "INT", List.of(), true, false, true, false)),
+                List.of(new KnownSchema.ForeignKey("offers", "application_id", "applications", "application_id")));
+
+        seeder.seed(new ParsedSchema(List.of(applications, offers), List.of()));
+
+        ArgumentCaptor<List<Object[]>> batches = ArgumentCaptor.forClass(List.class);
+        verify(jdbcTemplate, atLeastOnce()).batchUpdate(
+                org.mockito.ArgumentMatchers.contains("`offers`"), batches.capture());
+        assertThat(batches.getAllValues().stream().flatMap(List::stream).map(row -> row[1]).toList())
+                .containsExactlyInAnyOrder(4, 5, 6);
+    }
+
     private static ParsedSchema customersAndOrders() {
         ParsedTable customers = new ParsedTable("customers",
                 List.of(pk("id"), col("name", "VARCHAR")), List.of());

@@ -196,4 +196,13 @@ class ValueGeneratorTest {
     private static ParsedColumn col(String name, String type, List<String> args) {
         return new ParsedColumn(name, type, args, true, false, false, false);
     }
+
+    @Test
+    @DisplayName("a decimal never rounds past its declared size")
+    void decimalStaysInsideItsPrecision() {
+        ParsedColumn points = new ParsedColumn("points", "NUMERIC", List.of("3", "2"), true, false, false, false);
+        for (int row = 0; row < 20_000; row++) {
+            assertThat((BigDecimal) generator.valueFor(points, row, 20_000)).isLessThan(new BigDecimal("10"));
+        }
+    }
 }

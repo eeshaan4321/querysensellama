@@ -15,11 +15,13 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -45,20 +47,68 @@ public class DdlSchemaParser implements SchemaUploadParser {
             if (!startsCreateTable(statement)) {
                 continue;
             }
+            List<String> statementWarnings = new ArrayList<>();
             try {
-                Statement parsed = CCJSqlParserUtil.parse(statement);
+                Statement parsed = CCJSqlParserUtil.parse(PostgresDdl.clean(statement, statementWarnings));
                 if (parsed instanceof CreateTable createTable) {
-                    ParsedTable table = toParsedTable(createTable);
+                    ParsedTable table = toParsedTable(createTable, statementWarnings);
                     tables.add(table);
+                    warnings.addAll(statementWarnings);
                     aliasesOf(createTable).ifPresent(a -> aliases.put(table.name(), a));
                 }
             } catch (Exception e) {
-                warnings.add("Skipped a statement that could not be parsed: " + snippet(statement));
+                String reason = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage().split("\\R", 2)[0];
+                warnings.add(skippedTableWarning(PostgresDdl.tableName(statement), reason, snippet(statement)));
                 log.warn("Skipping unparseable DDL statement: {}", e.getMessage());
             }
         }
 
-        return new ParsedSchema(List.copyOf(tables), List.copyOf(warnings), List.of(), Map.copyOf(aliases));
+        return new ParsedSchema(widenKeyedText(tables), List.copyOf(warnings), List.of(), Map.copyOf(aliases));
+    }
+
+    private static final String SKIPPED_PREFIX = "Skipped table '";
+
+    private static String skippedTableWarning(String table, String reason, String snippet) {
+        return SKIPPED_PREFIX + table + "': it could not be read (" + reason + "). Statement: " + snippet;
+    }
+
+    public static Optional<String> skipReason(List<String> warnings, String table) {
+        String marker = SKIPPED_PREFIX + table + "'";
+        return warnings.stream()
+                .filter(w -> w.regionMatches(true, 0, marker, 0, marker.length()))
+                .findFirst()
+                .map(w -> w.substring(w.indexOf("(") + 1, w.indexOf("). Statement:")));
+    }
+
+    private List<ParsedTable> widenKeyedText(List<ParsedTable> tables) {
+        Set<String> keyed = new HashSet<>();
+        for (ParsedTable table : tables) {
+            for (ParsedColumn c : table.columns()) {
+                if (c.primaryKey() || c.unique()) {
+                    keyed.add(key(table.name(), c.name()));
+                }
+            }
+            for (KnownSchema.ForeignKey fk : table.foreignKeys()) {
+                keyed.add(key(fk.fromTable(), fk.fromColumn()));
+                keyed.add(key(fk.toTable(), fk.toColumn()));
+            }
+        }
+        List<ParsedTable> out = new ArrayList<>();
+        for (ParsedTable table : tables) {
+            List<ParsedColumn> columns = table.columns().stream()
+                    .map(c -> keyed.contains(key(table.name(), c.name()))
+                            && PostgresDdl.TEXT_TYPES.contains(c.normalisedType())
+                            ? new ParsedColumn(c.name(), "VARCHAR", List.of("255"), c.notNull(), c.autoIncrement(),
+                                    c.unique(), c.primaryKey())
+                            : c)
+                    .toList();
+            out.add(new ParsedTable(table.name(), columns, table.foreignKeys(), table.embeddedArrays(), table.validator()));
+        }
+        return List.copyOf(out);
+    }
+
+    private static String key(String table, String column) {
+        return table.toLowerCase(Locale.ROOT) + "." + column.toLowerCase(Locale.ROOT);
     }
 
     private Optional<SchemaAliases.TableAliases> aliasesOf(CreateTable createTable) {
@@ -95,7 +145,7 @@ public class DdlSchemaParser implements SchemaUploadParser {
         return head.startsWith("CREATE TABLE");
     }
 
-    private ParsedTable toParsedTable(CreateTable createTable) {
+    private ParsedTable toParsedTable(CreateTable createTable, List<String> warnings) {
         String tableName = unquote(createTable.getTable().getName());
         List<ParsedColumn> columns = new ArrayList<>();
         List<KnownSchema.ForeignKey> foreignKeys = new ArrayList<>();
@@ -108,12 +158,18 @@ public class DdlSchemaParser implements SchemaUploadParser {
             List<String> specs = definition.getColumnSpecs() == null ? List.of() : definition.getColumnSpecs();
             String specText = String.join(" ", specs).toUpperCase(Locale.ROOT);
 
+            String declaredType = bareType(definition.getColDataType().getDataType());
+            PostgresDdl.MappedType type = PostgresDdl.mapType(declaredType, typeArgsOf(definition));
+            if (type.storedAsText()) {
+                warnings.add("Stored " + tableName + "." + columnName + " (PostgreSQL type "
+                        + declaredType.toUpperCase(Locale.ROOT) + ") as TEXT in the sample database.");
+            }
             columns.add(new ParsedColumn(
                     columnName,
-                    bareType(definition.getColDataType().getDataType()),
-                    typeArgsOf(definition),
+                    type.type(),
+                    type.args(),
                     specText.contains("NOT NULL"),
-                    specText.contains("AUTO_INCREMENT"),
+                    type.serial() || specText.contains("AUTO_INCREMENT"),
                     specText.contains("UNIQUE"),
                     specText.contains("PRIMARY KEY")));
 

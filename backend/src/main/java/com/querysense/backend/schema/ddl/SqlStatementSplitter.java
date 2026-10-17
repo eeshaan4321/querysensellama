@@ -2,9 +2,13 @@ package com.querysense.backend.schema.ddl;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /** Splits a SQL script into individual statements. */
 public final class SqlStatementSplitter {
+
+    private static final Pattern DOLLAR_TAG = Pattern.compile("\\$[A-Za-z_]*\\$");
 
     private SqlStatementSplitter() {}
 
@@ -66,6 +70,17 @@ public final class SqlStatementSplitter {
                 quote = c;
                 current.append(c);
                 continue;
+            }
+
+            if (c == '$') {
+                Matcher tag = DOLLAR_TAG.matcher(sql).region(i, sql.length());
+                if (tag.lookingAt()) {
+                    int end = sql.indexOf(tag.group(), tag.end());
+                    int stop = end < 0 ? sql.length() : end + tag.group().length();
+                    current.append(sql, i, stop);
+                    i = stop - 1;
+                    continue;
+                }
             }
 
             if (c == ';') {

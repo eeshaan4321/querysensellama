@@ -13,6 +13,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -28,6 +30,8 @@ public class SchemaSeeder implements SchemaSeeding {
 
     private static final Logger log = LoggerFactory.getLogger(SchemaSeeder.class);
     private static final int BATCH_SIZE = 200;
+    private static final int KEY_ATTEMPTS = 20;
+    private static final int PARENT_VALUE_LIMIT = 20_000;
 
     private final JdbcTemplate jdbcTemplate;
     private final String uploadCatalog;
@@ -144,19 +148,45 @@ public class SchemaSeeder implements SchemaSeeding {
 
         ValueGenerator generator = new ValueGenerator(seed + table.name().hashCode());
         Random fkPicker = new Random(seed + table.name().hashCode() + 1);
+        Map<String, List<Object>> parentValues = parentValuesFor(table);
+        List<Integer> keyColumns = new ArrayList<>();
+        for (int i = 0; i < columns.size(); i++) {
+            if (columns.get(i).primaryKey()) {
+                keyColumns.add(i);
+            }
+        }
+        Set<List<Object>> usedKeys = new HashSet<>();
+        Set<String> oneEach = new HashSet<>();
+        for (ParsedColumn column : columns) {
+            String name = column.name().toLowerCase(Locale.ROOT);
+            boolean singleKey = column.unique() || (column.primaryKey() && keyColumns.size() == 1);
+            if (singleKey && parentValues.containsKey(name)) {
+                oneEach.add(name);
+                targetRows = Math.min(targetRows, parentValues.get(name).size());
+            }
+        }
 
         List<Object[]> batch = new ArrayList<>(BATCH_SIZE);
         int inserted = 0;
         String[] firstFailure = new String[1];
 
         for (int row = 0; row < targetRows; row++) {
-            Object[] values = new Object[columns.size()];
-            for (int i = 0; i < columns.size(); i++) {
-                values[i] = valueForColumn(table, columns.get(i), generator, fkPicker, row, targetRows);
+            Object[] values = null;
+            for (int attempt = 0; attempt < KEY_ATTEMPTS && values == null; attempt++) {
+                Object[] candidate = new Object[columns.size()];
+                for (int i = 0; i < columns.size(); i++) {
+                    candidate[i] = valueForColumn(table, columns.get(i), generator, fkPicker, row, targetRows,
+                            parentValues, oneEach);
+                }
+                if (keyColumns.size() < 2 || usedKeys.add(keyColumns.stream().map(i -> candidate[i]).toList())) {
+                    values = candidate;
+                }
             }
-            batch.add(values);
+            if (values != null) {
+                batch.add(values);
+            }
 
-            if (batch.size() == BATCH_SIZE || row == targetRows - 1) {
+            if (!batch.isEmpty() && (batch.size() == BATCH_SIZE || row == targetRows - 1)) {
                 inserted += flush(sql, batch, table.name(), firstFailure);
                 batch.clear();
             }
@@ -164,15 +194,43 @@ public class SchemaSeeder implements SchemaSeeding {
         return new TableSeedResult(inserted, firstFailure[0]);
     }
 
+    private Map<String, List<Object>> parentValuesFor(ParsedTable table) {
+        Map<String, List<Object>> values = new HashMap<>();
+        for (KnownSchema.ForeignKey fk : table.foreignKeys()) {
+            if (fk.toTable().equalsIgnoreCase(table.name())) {
+                continue;
+            }
+            String sql = "SELECT DISTINCT `" + fk.toColumn() + "` FROM `" + uploadCatalog + "`.`" + fk.toTable()
+                    + "` WHERE `" + fk.toColumn() + "` IS NOT NULL LIMIT " + PARENT_VALUE_LIMIT;
+            try {
+                List<Object> found = jdbcTemplate.queryForList(sql, Object.class);
+                if (found != null && !found.isEmpty()) {
+                    values.put(fk.fromColumn().toLowerCase(Locale.ROOT), found);
+                }
+            } catch (DataAccessException e) {
+                log.warn("Could not read parent values {}.{}: {}", fk.toTable(), fk.toColumn(), e.getMessage());
+            }
+        }
+        return values;
+    }
+
     private Object valueForColumn(ParsedTable table, ParsedColumn column,
                                   ValueGenerator generator, Random fkPicker, int row,
-                                  int targetRows) {
+                                  int targetRows, Map<String, List<Object>> parentValues, Set<String> oneEach) {
         for (KnownSchema.ForeignKey fk : table.foreignKeys()) {
             if (!fk.fromColumn().equalsIgnoreCase(column.name())) {
                 continue;
             }
             if (fk.toTable().equalsIgnoreCase(table.name())) {
                 return null;
+            }
+            String name = column.name().toLowerCase(Locale.ROOT);
+            List<Object> stored = parentValues.get(name);
+            if (stored != null && oneEach.contains(name)) {
+                return stored.get(row);
+            }
+            if (stored != null) {
+                return stored.get(fkPicker.nextInt(stored.size()));
             }
             long ceiling = Math.min(targetRows, ValueGenerator.maxFor(column));
             return 1 + fkPicker.nextInt((int) Math.max(1, ceiling));
