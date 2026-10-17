@@ -1570,11 +1570,15 @@ public class QueryIntentParser {
 
     private Optional<String> extractTrailingColumnPhrase(String text, KnownSchema.Table table,
                                                          Dialect dialect) {
-        List<List<String>> owners = SchemaLexicon.ownerWords(table);
+        List<String> owners = new ArrayList<>();
+        SchemaLexicon.ownerWords(table).forEach(w -> owners.add(String.join(" ", w)));
+        owners.add(SchemaBinder.normalize(table.name()));
+        owners.add(SchemaBinder.normalize(table.singularName()));
+        owners.removeIf(String::isEmpty);
         if (owners.isEmpty()) {
             return Optional.empty();
         }
-        String names = owners.stream().map(w -> Pattern.quote(String.join(" ", w))).collect(Collectors.joining("|"));
+        String names = owners.stream().distinct().map(Pattern::quote).collect(Collectors.joining("|"));
         Pattern pattern = Pattern.compile("\\b(?:" + names + ")\\s+([a-z0-9 ]+)$");
         Matcher matcher = pattern.matcher(text);
         if (!matcher.find()) {

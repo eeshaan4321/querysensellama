@@ -101,19 +101,22 @@ public class SchemaMetadataService implements SchemaMetadata {
             return OptionalDouble.empty();
         }
         String key = tableName.toLowerCase() + "." + columnName.toLowerCase();
-        return shareCache.computeIfAbsent(key, k -> loadShare(tableName, columnName));
-    }
-
-    private OptionalDouble loadShare(String tableName, String columnName) {
+        OptionalDouble cached = shareCache.get(key);
+        if (cached != null) {
+            return cached;
+        }
         if (!recognized(tableName, columnName)) {
+            shareCache.put(key, OptionalDouble.empty());
             return OptionalDouble.empty();
         }
         try {
             String sql = "SELECT COUNT(DISTINCT " + columnName + "), COUNT(*) FROM " + tableName;
             long[] counts = explainExecutor.withActiveCatalog(jdbc -> jdbc.queryForObject(sql,
                     (rs, row) -> new long[]{rs.getLong(1), rs.getLong(2)}));
-            return counts == null || counts[1] == 0 ? OptionalDouble.empty()
+            OptionalDouble share = counts == null || counts[1] == 0 ? OptionalDouble.empty()
                     : OptionalDouble.of((double) counts[0] / counts[1]);
+            shareCache.put(key, share);
+            return share;
         } catch (Exception e) {
             log.warn("Could not count distinct values for {}.{}: {}", tableName, columnName, e.getMessage());
             return OptionalDouble.empty();

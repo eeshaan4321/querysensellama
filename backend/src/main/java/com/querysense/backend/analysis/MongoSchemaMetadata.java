@@ -138,7 +138,8 @@ public class MongoSchemaMetadata implements SchemaMetadata {
 
     long countDistinct(String tableName, String field) {
         Document first = client.getDatabase(activeSchema.catalog(Dialect.MONGODB)).getCollection(tableName)
-                .aggregate(List.of(new Document("$group", new Document("_id", "$" + field)),
+                .aggregate(List.of(new Document("$match", new Document(field, new Document("$ne", null))),
+                        new Document("$group", new Document("_id", "$" + field)),
                         new Document("$count", "n")))
                 .first();
         return first == null ? 0 : ((Number) first.get("n")).longValue();

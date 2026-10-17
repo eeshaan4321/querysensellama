@@ -200,15 +200,18 @@ public class SchemaLexicon {
         }
         Set<String> candidates = phraseForms(typed);
         for (String candidate : candidates) {
+            MatchKind kind = candidate.equals(typed) ? MatchKind.EXACT : MatchKind.INFLECTION;
             for (String col : table.columns()) {
-                String words = NameWords.phrase(col);
-                if (words.isEmpty()) {
-                    continue;
+                if (NameWords.phrase(col).equals(candidate) || SchemaBinder.normalize(col).equals(candidate)) {
+                    return new Bound(new Binding(col, token, kind));
                 }
-                if (words.equals(candidate) || NameWords.compact(words).equals(NameWords.compact(candidate))) {
-                    return new Bound(new Binding(col, token,
-                            candidate.equals(typed) ? MatchKind.EXACT : MatchKind.INFLECTION));
-                }
+            }
+            List<String> compact = table.columns().stream()
+                    .filter(col -> !NameWords.phrase(col).isEmpty())
+                    .filter(col -> NameWords.compact(NameWords.phrase(col)).equals(NameWords.compact(candidate)))
+                    .toList();
+            if (!compact.isEmpty()) {
+                return pick(table, token, compact, kind);
             }
         }
         List<String> owned = table.columns().stream()
@@ -301,19 +304,10 @@ public class SchemaLexicon {
                 phraseForms(alias).forEach(f -> put(all, f, table, MatchKind.SCHEMA_ALIAS));
             }
             List<List<String>> owners = ownerWords(table);
-            if (owners.isEmpty()) {
-                continue;
+            if (!owners.isEmpty()) {
+                putName(all, table, NameWords.phrase(table.name()), String.join(" ", owners.get(owners.size() - 1)));
             }
-            String name = NameWords.phrase(table.name());
-            String singular = String.join(" ", owners.get(owners.size() - 1));
-            put(all, name, table, MatchKind.EXACT);
-            put(all, singular, table, MatchKind.INFLECTION);
-            phraseForms(name).forEach(f -> put(all, f, table, MatchKind.INFLECTION));
-            if (!name.contains(" ")) {
-                Set<String> related = new LinkedHashSet<>(synonyms.of(name));
-                related.addAll(synonyms.of(singular));
-                related.forEach(word -> forms(word).forEach(f -> put(all, f, table, MatchKind.SYNONYM)));
-            }
+            putName(all, table, SchemaBinder.normalize(table.name()), SchemaBinder.normalize(table.singularName()));
         }
         Map<String, List<Entry>> best = new LinkedHashMap<>();
         Set<String> known = new HashSet<>(synonyms.allWords());
@@ -325,6 +319,20 @@ public class SchemaLexicon {
             known.addAll(List.of(phrase.split(" ")));
         });
         return new Index(best, known);
+    }
+
+    private void putName(Map<String, List<Entry>> all, KnownSchema.Table table, String name, String singular) {
+        if (name.isEmpty()) {
+            return;
+        }
+        put(all, name, table, MatchKind.EXACT);
+        put(all, singular, table, MatchKind.INFLECTION);
+        phraseForms(name).forEach(f -> put(all, f, table, MatchKind.INFLECTION));
+        if (!name.contains(" ")) {
+            Set<String> related = new LinkedHashSet<>(synonyms.of(name));
+            related.addAll(synonyms.of(singular));
+            related.forEach(word -> forms(word).forEach(f -> put(all, f, table, MatchKind.SYNONYM)));
+        }
     }
 
     private static void put(Map<String, List<Entry>> all, String phrase, KnownSchema.Table table, MatchKind kind) {

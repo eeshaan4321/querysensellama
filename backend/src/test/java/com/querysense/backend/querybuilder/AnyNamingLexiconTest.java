@@ -1,5 +1,6 @@
 package com.querysense.backend.querybuilder;
 
+import com.querysense.backend.analysis.SchemaMetadata;
 import com.querysense.backend.dialect.Dialect;
 import com.querysense.backend.schema.ActiveSchemaProvider;
 import com.querysense.backend.schema.KnownSchema;
@@ -13,6 +14,9 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class AnyNamingLexiconTest {
 
@@ -122,5 +126,57 @@ class AnyNamingLexiconTest {
         assertThat(matches.hits().get(0).table().name()).isEqualTo("students");
         assertThat(lexicon.column(students, "日本", SchemaAliases.TableAliases.NONE))
                 .isInstanceOf(SchemaLexicon.Unbound.class);
+    }
+
+    @Test
+    @DisplayName("a run-together table name is found as typed and with its spaced words")
+    void runTogetherTables() {
+        publish(Dialect.MYSQL, new KnownSchema.Table("OrderItems", List.of("id", "quantity")),
+                new KnownSchema.Table("table2", List.of("id")));
+        assertThat(tableNames("show all orderitems")).containsExactly("OrderItems");
+        assertThat(tableNames("each orderitem")).containsExactly("OrderItems");
+        assertThat(tableNames("show all order items")).containsExactly("OrderItems");
+        assertThat(tableNames("show all table2")).containsExactly("table2");
+        assertThat(tableNames("show all table 2")).containsExactly("table2");
+    }
+
+    @Test
+    @DisplayName("a column after a run-together table name is read as the projection")
+    void runTogetherTrailingColumn() {
+        publish(Dialect.MYSQL, new KnownSchema.Table("OrderItems", List.of("id", "quantity")));
+        SchemaMetadata mysql = mock(SchemaMetadata.class);
+        when(mysql.dialect()).thenReturn(Dialect.MYSQL);
+        when(mysql.getColumnNames(anyString())).thenReturn(List.of());
+        when(mysql.getDistinctValues(anyString(), anyString())).thenReturn(List.of());
+        SchemaMetadata mongo = mock(SchemaMetadata.class);
+        when(mongo.dialect()).thenReturn(Dialect.MONGODB);
+        QueryIntentParser parser = TestParsers.parser(schemas, mysql, mongo);
+        RuleBuildResult result = parser.parse("show orderitems quantity", Dialect.MYSQL);
+        assertThat(result.built()).isTrue();
+        assertThat(result.sql()).isEqualTo("SELECT quantity FROM OrderItems;");
+    }
+
+    @Test
+    @DisplayName("exact words or the exact name outrank a run-together match, and two run-together matches are ambiguous")
+    void compactAfterWords() {
+        KnownSchema.Table users = new KnownSchema.Table("accounts", List.of("userid", "user_id"));
+        publish(Dialect.MYSQL, users);
+        assertThat(bound(users, "user id")).isEqualTo("user_id");
+        assertThat(bound(users, "userid")).isEqualTo("userid");
+
+        KnownSchema.Table cased = new KnownSchema.Table("accounts", List.of("user_id", "UserId"));
+        publish(Dialect.MYSQL, cased);
+        assertThat(bound(cased, "userid")).isEqualTo("UserId");
+
+        KnownSchema.Table twins = new KnownSchema.Table("accounts", List.of("user_id", "use_rid"));
+        publish(Dialect.MYSQL, twins);
+        SchemaLexicon.ColumnMatch match = lexicon.column(twins, "userid", SchemaAliases.TableAliases.NONE);
+        assertThat(match).isInstanceOf(SchemaLexicon.Ambiguous.class);
+        assertThat(((SchemaLexicon.Ambiguous) match).ambiguity().candidates())
+                .containsExactlyInAnyOrder("user_id", "use_rid");
+    }
+
+    private List<String> tableNames(String text) {
+        return lexicon.tables(text, Dialect.MYSQL).hits().stream().map(h -> h.table().name()).toList();
     }
 }

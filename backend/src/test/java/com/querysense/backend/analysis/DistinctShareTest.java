@@ -68,4 +68,18 @@ class DistinctShareTest {
         assertThat(metadata.distinctShare("students", "studentName")).isEqualTo(OptionalDouble.of(0.95));
         assertThat(metadata.distinctShare("students", "missing")).isEmpty();
     }
+
+    @Test
+    @DisplayName("MySQL: a failed count is not remembered, so the next read can succeed")
+    void mysqlFailureNotCached() {
+        ActiveSchemaProvider provider = new ActiveSchemaProvider();
+        ExplainExecutor executor = mock(ExplainExecutor.class);
+        when(executor.withActiveCatalog(any()))
+                .thenThrow(new RuntimeException("connection reset"))
+                .thenReturn(new long[]{9, 10});
+        SchemaMetadataService metadata = new SchemaMetadataService(executor, provider);
+
+        assertThat(metadata.distinctShare("customers", "name")).isEmpty();
+        assertThat(metadata.distinctShare("customers", "name")).isEqualTo(OptionalDouble.of(0.9));
+    }
 }
