@@ -107,9 +107,8 @@ public class QueryGenerationServiceImpl implements QueryGenerationService {
     /** A cached answer serves only if the LLM wrote it for the active schema and it still fits that schema. */
     private Optional<QueryHistory> servableCacheHit(String input, String databaseType) {
         return queryHistoryRepository
-                .findFirstByUserInputIgnoreCaseAndDatabaseTypeIgnoreCaseAndSchemaLabel(
-                        input, databaseType, activeSchema.active(Dialect.from(databaseType)).label())
-                .filter(row -> SOURCE_LLM.equals(row.getSource()))
+                .findFirstByUserInputIgnoreCaseAndDatabaseTypeIgnoreCaseAndSchemaLabelAndSourceOrderByCreatedAtDescIdDesc(
+                        input, databaseType, activeSchema.active(Dialect.from(databaseType)).label(), SOURCE_LLM)
                 .filter(row -> generatedQueryValidator
                         .namesUnknownIdentifiers(row.getGeneratedQuery(), databaseType)
                         .isEmpty());

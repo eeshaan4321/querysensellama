@@ -20,6 +20,9 @@ public interface QueryHistoryRepository extends JpaRepository<QueryHistory, Long
     Optional<QueryHistory> findFirstByUserInputIgnoreCaseAndDatabaseTypeIgnoreCaseAndSchemaLabelOrderByCreatedAtDescIdDesc(
             String userInput, String databaseType, String schemaLabel);
 
+    Optional<QueryHistory> findFirstByUserInputIgnoreCaseAndDatabaseTypeIgnoreCaseAndSchemaLabelAndSourceOrderByCreatedAtDescIdDesc(
+            String userInput, String databaseType, String schemaLabel, String source);
+
     List<QueryHistory> findTop50ByDatabaseTypeIgnoreCaseAndSchemaLabelOrderByCreatedAtDescIdDesc(
             String databaseType, String schemaLabel);
 }

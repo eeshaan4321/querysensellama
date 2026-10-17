@@ -46,12 +46,13 @@ class QueryHistoryRunContextTest {
             stored.add(call.getArgument(0));
             return call.getArgument(0);
         });
-        when(history.findFirstByUserInputIgnoreCaseAndDatabaseTypeIgnoreCaseAndSchemaLabel(
-                anyString(), anyString(), anyString()))
+        when(history.findFirstByUserInputIgnoreCaseAndDatabaseTypeIgnoreCaseAndSchemaLabelAndSourceOrderByCreatedAtDescIdDesc(
+                anyString(), anyString(), anyString(), anyString()))
                 .thenAnswer(call -> stored.stream()
                         .filter(h -> h.getUserInput().equalsIgnoreCase(call.getArgument(0)))
                         .filter(h -> call.getArgument(2).equals(h.getSchemaLabel()))
-                        .findFirst());
+                        .filter(h -> call.getArgument(3).equals(h.getSource()))
+                        .reduce((older, newer) -> newer));
 
         rules = mock(RuleBasedQueryBuilder.class);
         llm = mock(LlmFallbackService.class);
@@ -146,8 +147,8 @@ class QueryHistoryRunContextTest {
         when(validator.namesUnknownIdentifiers(anyString(), anyString()))
                 .thenReturn(Optional.of("names 'transactions', which is not in the active schema"));
         QueryHistoryRepository history = mock(QueryHistoryRepository.class);
-        when(history.findFirstByUserInputIgnoreCaseAndDatabaseTypeIgnoreCaseAndSchemaLabel(
-                anyString(), anyString(), anyString()))
+        when(history.findFirstByUserInputIgnoreCaseAndDatabaseTypeIgnoreCaseAndSchemaLabelAndSourceOrderByCreatedAtDescIdDesc(
+                anyString(), anyString(), anyString(), anyString()))
                 .thenReturn(Optional.empty());
         when(rules.build(anyString(), anyString()))
                 .thenReturn(RuleBuildResult.declined("too complex", null));

@@ -46,8 +46,8 @@ class QueryGenerationServiceImplTest {
 
         when(validator.looksIncomplete(anyString(), anyString(), anyString())).thenReturn(false);
         when(validator.namesUnknownIdentifiers(anyString(), anyString())).thenReturn(Optional.empty());
-        when(history.findFirstByUserInputIgnoreCaseAndDatabaseTypeIgnoreCaseAndSchemaLabel(
-                anyString(), anyString(), anyString()))
+        when(history.findFirstByUserInputIgnoreCaseAndDatabaseTypeIgnoreCaseAndSchemaLabelAndSourceOrderByCreatedAtDescIdDesc(
+                anyString(), anyString(), anyString(), anyString()))
                 .thenReturn(Optional.empty());
         when(history.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -95,8 +95,8 @@ class QueryGenerationServiceImplTest {
 
         when(rules.build(anyString(), anyString()))
                 .thenReturn(RuleBuildResult.declined("The question names three tables.", List.of()));
-        when(history.findFirstByUserInputIgnoreCaseAndDatabaseTypeIgnoreCaseAndSchemaLabel(
-                anyString(), anyString(), anyString()))
+        when(history.findFirstByUserInputIgnoreCaseAndDatabaseTypeIgnoreCaseAndSchemaLabelAndSourceOrderByCreatedAtDescIdDesc(
+                anyString(), anyString(), anyString(), anyString()))
                 .thenReturn(Optional.of(cached));
 
         QueryResponse response = service.generateQuery("something complex", "MySQL");
@@ -109,21 +109,15 @@ class QueryGenerationServiceImplTest {
     @Test
     @DisplayName("onlyLlmRowsServeFromCache: a row the rule engine wrote is never served once the rules decline")
     void onlyLlmRowsServeFromCache() {
-        QueryHistory oldRule = new QueryHistory();
-        oldRule.setGeneratedQuery("SELECT * FROM customers;");
-        oldRule.setSource("RULE_ENGINE");
-        oldRule.setConfidence(0.95);
-
         when(rules.build(anyString(), anyString()))
                 .thenReturn(RuleBuildResult.declined("The question uses \"spent\".", List.of()));
-        when(history.findFirstByUserInputIgnoreCaseAndDatabaseTypeIgnoreCaseAndSchemaLabel(
-                anyString(), anyString(), anyString()))
-                .thenReturn(Optional.of(oldRule));
         when(llm.generateQuery(anyString(), anyString())).thenReturn("SELECT name FROM customers;");
 
         QueryResponse response = service.generateQuery("which customers spent the most money", "MySQL");
 
         assertThat(response.getHandledBy()).isEqualTo("OLLAMA");
+        verify(history).findFirstByUserInputIgnoreCaseAndDatabaseTypeIgnoreCaseAndSchemaLabelAndSourceOrderByCreatedAtDescIdDesc(
+                anyString(), anyString(), anyString(), org.mockito.ArgumentMatchers.eq("OLLAMA"));
     }
 
     @Test
