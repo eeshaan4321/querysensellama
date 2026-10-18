@@ -116,6 +116,18 @@ class AnyNamingParserTest {
     }
 
     @Test
+    @DisplayName("a breakdown 'per' a related table groups by the column that points at it")
+    void groupByRelatedTable() {
+        QueryIntentParser small = parserOver(List.of(
+                        new KnownSchema.ForeignKey("students", "program_id", "programs", "program_id")),
+                new KnownSchema.Table("students", List.of("student_id", "full_name", "program_id")),
+                new KnownSchema.Table("programs", List.of("program_id", "name")));
+        RuleBuildResult result = small.parse("count students per program", Dialect.MYSQL);
+        assertThat(result.built()).as(String.valueOf(result.trace().declineReason())).isTrue();
+        assertThat(result.sql()).contains("COUNT(").contains("GROUP BY").contains("program_id");
+    }
+
+    @Test
     @DisplayName("a verb formed from a linking table's name counts as read")
     void verbFromTableName() {
         QueryIntentParser small = parserOver(List.of(
@@ -165,6 +177,28 @@ class AnyNamingParserTest {
     @DisplayName("a value right after the column is the value, not part of the column")
     void valueAfterColumn() {
         assertThat(sql("enrollments with grade a")).isEqualTo("SELECT * FROM enrollments WHERE grade = 'a';");
+    }
+
+    @Test
+    @DisplayName("'in the <value>' reads the value after the article, including a joined table's value")
+    void articleBeforeValue() {
+        SchemaMetadata mysql = mock(SchemaMetadata.class);
+        when(mysql.dialect()).thenReturn(Dialect.MYSQL);
+        when(mysql.getColumnNames(anyString())).thenReturn(List.of());
+        when(mysql.getDistinctValues(anyString(), anyString())).thenReturn(List.of());
+        when(mysql.getDistinctValues(eq("customers"), eq("city"))).thenReturn(List.of("Mumbai", "Pune"));
+        when(mysql.getDistinctValues(eq("departments"), eq("name"))).thenReturn(List.of("Mathematics", "Computer Science"));
+        SchemaMetadata mongo = mock(SchemaMetadata.class);
+        when(mongo.dialect()).thenReturn(Dialect.MONGODB);
+        QueryIntentParser demo = TestParsers.parser(new ActiveSchemaProvider(), mysql, mongo);
+
+        RuleBuildResult city = demo.parse("customers in the mumbai", Dialect.MYSQL);
+        assertThat(city.built()).as(String.valueOf(city.trace().declineReason())).isTrue();
+        assertThat(city.sql()).isEqualTo("SELECT * FROM customers WHERE city = 'mumbai';");
+
+        RuleBuildResult dept = demo.parse("show employees in the computer science department", Dialect.MYSQL);
+        assertThat(dept.built()).as(String.valueOf(dept.trace().declineReason())).isTrue();
+        assertThat(dept.sql()).contains("departments.name = 'computer science'");
     }
 
     private QueryIntentParser builtInParser() {

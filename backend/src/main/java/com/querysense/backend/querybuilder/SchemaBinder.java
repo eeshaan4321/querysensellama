@@ -81,6 +81,16 @@ public class SchemaBinder {
         return snapshotOf(table).map(s -> s.primaryKeyFor(table)).orElse(table.columns().get(0));
     }
 
+    public List<String> columnsPointingAt(KnownSchema.Table table, KnownSchema.Table target) {
+        return snapshotOf(table).map(s -> s.foreignKeys().stream()
+                        .filter(fk -> fk.fromTable().equalsIgnoreCase(table.name())
+                                && fk.toTable().equalsIgnoreCase(target.name()))
+                        .map(KnownSchema.ForeignKey::fromColumn)
+                        .distinct()
+                        .toList())
+                .orElse(List.of());
+    }
+
     public Set<String> foreignKeyColumns(KnownSchema.Table table) {
         return snapshotOf(table).map(s -> s.foreignKeys().stream()
                         .filter(fk -> fk.fromTable().equalsIgnoreCase(table.name()))

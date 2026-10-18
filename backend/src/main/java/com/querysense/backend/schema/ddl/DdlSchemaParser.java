@@ -43,8 +43,16 @@ public class DdlSchemaParser implements SchemaUploadParser {
         List<String> warnings = new ArrayList<>();
         Map<String, SchemaAliases.TableAliases> aliases = new LinkedHashMap<>();
 
+        List<SampleInsert> samples = new ArrayList<>();
         for (String statement : SqlStatementSplitter.split(ddl)) {
             if (!startsCreateTable(statement)) {
+                InsertRows.read(statement).ifPresent(sample -> {
+                    samples.add(sample);
+                    if (sample.skippedRows() > 0) {
+                        warnings.add("Skipped " + sample.skippedRows() + " sample row(s) for '" + sample.table()
+                                + "': they use expressions rather than plain values.");
+                    }
+                });
                 continue;
             }
             List<String> statementWarnings = new ArrayList<>();
@@ -63,7 +71,8 @@ public class DdlSchemaParser implements SchemaUploadParser {
             }
         }
 
-        return new ParsedSchema(widenKeyedText(tables), List.copyOf(warnings), List.of(), Map.copyOf(aliases));
+        return new ParsedSchema(widenKeyedText(tables), List.copyOf(warnings), List.of(), Map.copyOf(aliases),
+                List.copyOf(samples));
     }
 
     private static final String SKIPPED_PREFIX = "Skipped table '";

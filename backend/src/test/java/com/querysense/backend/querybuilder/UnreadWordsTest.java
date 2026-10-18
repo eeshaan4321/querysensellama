@@ -155,8 +155,9 @@ class UnreadWordsTest {
     void inEachGroups() {
         assertThat(sql("number of orders in each status", Dialect.MYSQL))
                 .isEqualTo("SELECT status, COUNT(*) FROM orders GROUP BY status;");
-        RuleBuildResult result = parser.parse("how many employees in each department", Dialect.MYSQL);
-        assertThat(result.built()).as("built %s", result.sql()).isFalse();
+        assertThat(sql("how many employees in each department", Dialect.MYSQL))
+                .isEqualTo("SELECT departments.id, departments.name, COUNT(*) FROM employees JOIN departments "
+                        + "ON employees.department_id = departments.id GROUP BY departments.id, departments.name;");
     }
 
     @Test

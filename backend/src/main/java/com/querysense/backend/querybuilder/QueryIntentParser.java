@@ -530,19 +530,35 @@ public class QueryIntentParser {
         }
 
         String groupColumn = null;
+        List<QueryIntent.ColumnRef> groupByRelated = List.of();
         String groupPhrase = null;
         Matcher per = PER_GROUP.matcher(text);
         if (per.find()) {
             Optional<ColumnPhrase.Reading> groupRead = phrases.after(text, per.end(), List.of(subject));
             groupPhrase = groupRead.map(ColumnPhrase.Reading::phrase).orElse(firstWordAt(text, per.end()));
-            if (groupRead.isEmpty()) {
-                return RuleBuildResult.declined(
-                        "The question asks for a breakdown by \"" + groupPhrase
-                                + "\", which is not a column of " + subject.name() + ".",
-                        bindings);
+            if (groupRead.isPresent()) {
+                use(groupRead.get(), false, interpretations);
+                groupColumn = groupRead.get().column();
+            } else {
+                List<String> pointing = binder.tableMatches(groupPhrase, dialect).hits().stream()
+                        .map(hit -> binder.columnsPointingAt(subject, hit.table()))
+                        .filter(found -> !found.isEmpty())
+                        .findFirst()
+                        .orElse(List.of());
+                if (pointing.size() != 1) {
+                    return RuleBuildResult.declined(
+                            "The question asks for a breakdown by \"" + groupPhrase
+                                    + "\", which is not a column of " + subject.name() + ".",
+                            bindings);
+                }
+                groupColumn = pointing.get(0);
+                KnownSchema.Table groupTable = binder.tableMatches(groupPhrase, dialect).hits().get(0).table();
+                if (joined && chainTables.contains(groupTable)) {
+                    groupByRelated = IdentifyingColumns.of(groupTable, binder, metadata).stream()
+                            .map(c -> new QueryIntent.ColumnRef(groupTable.name(), c))
+                            .toList();
+                }
             }
-            use(groupRead.get(), false, interpretations);
-            groupColumn = groupRead.get().column();
             bindings.add(new RuleTrace.Binding(groupPhrase, "GROUPING", subject.name() + "." + groupColumn));
         }
 
@@ -850,7 +866,9 @@ public class QueryIntentParser {
                 && where.stream().anyMatch(p -> p.lhs() instanceof QueryIntent.ColumnRef r
                         && r.table() != null && !r.table().equals(subject.name()));
 
-        if (groupColumn != null) {
+        if (!groupByRelated.isEmpty()) {
+            groupByRelated.forEach(ref -> selectItems.add(new QueryIntent.SelectItem(ref)));
+        } else if (groupColumn != null) {
             selectItems.add(new QueryIntent.SelectItem(qualify(groupColumn, subject, joined)));
         }
         if (!aggregates.isEmpty()) {
@@ -1208,7 +1226,7 @@ public class QueryIntentParser {
         List<QueryIntent.Literal> literals = new ArrayList<>();
         String valueColumn = null;
         int end = from;
-        int i = 0;
+        int i = array.length > 1 && Set.of("the", "a", "an").contains(array[0]) ? 1 : 0;
         while (i < array.length) {
             String first = array[i];
             if (VALUE_STOPWORDS.contains(first)

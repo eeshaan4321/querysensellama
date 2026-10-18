@@ -263,6 +263,80 @@ class SchemaSeederTest {
                 .containsExactlyInAnyOrder(4, 5, 6);
     }
 
+    @Test
+    @DisplayName("the file's own rows go in first, then generated rows continue after their ids")
+    @SuppressWarnings("unchecked")
+    void fileRowsFirstThenGenerated() {
+        ParsedTable departments = new ParsedTable("departments",
+                List.of(pk("dept_id"), col("name", "VARCHAR"), new ParsedColumn("parent_id", "INT", List.of(), false, false, false, false)),
+                List.of(new KnownSchema.ForeignKey("departments", "parent_id", "departments", "dept_id")));
+        com.querysense.backend.schema.ddl.SampleInsert sample = new com.querysense.backend.schema.ddl.SampleInsert(
+                "departments", List.of("name", "parent_id", "slot_range"),
+                List.of(java.util.Arrays.asList("Computer Science", null, "x"),
+                        java.util.Arrays.asList("Mathematics", new java.math.BigDecimal("1"), "y")), 0);
+
+        com.querysense.backend.schema.upload.SeedReport report = seeder.seed(new ParsedSchema(
+                List.of(departments), List.of(), List.of(), Map.of(), List.of(sample)));
+
+        ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<List<Object[]>> batches = ArgumentCaptor.forClass(List.class);
+        verify(jdbcTemplate, atLeastOnce()).batchUpdate(sql.capture(), batches.capture());
+
+        assertThat(sql.getAllValues().get(0))
+                .isEqualTo("INSERT INTO `querysense_uploads`.`departments` (`name`, `parent_id`) VALUES (?, ?)");
+        assertThat(batches.getAllValues().get(0)).extracting(row -> row[0]).containsExactly("Computer Science", "Mathematics");
+        assertThat(batches.getAllValues().get(1).get(0)[0]).as("first generated id").isEqualTo(3);
+        assertThat(report.rowCounts()).containsEntry("departments", 50);
+
+        ArgumentCaptor<String> executed = ArgumentCaptor.forClass(String.class);
+        verify(jdbcTemplate, atLeastOnce()).execute(executed.capture());
+        assertThat(executed.getAllValues()).anySatisfy(s -> assertThat(s)
+                .startsWith("UPDATE `querysense_uploads`.`departments`").endsWith("WHERE `dept_id` > 2"));
+    }
+
+    @Test
+    @DisplayName("a required column the file's rows leave out is filled with a generated value")
+    @SuppressWarnings("unchecked")
+    void requiredColumnLeftOutIsGenerated() {
+        ParsedTable students = new ParsedTable("students",
+                List.of(pk("student_id"), col("full_name", "VARCHAR"),
+                        new ParsedColumn("updated_at", "TIMESTAMP", List.of(), true, false, false, false),
+                        new ParsedColumn("nickname", "VARCHAR", List.of("64"), false, false, false, false)),
+                List.of());
+        com.querysense.backend.schema.ddl.SampleInsert sample = new com.querysense.backend.schema.ddl.SampleInsert(
+                "students", List.of("full_name"), List.of(List.of("Asha Rao")), 0);
+
+        seeder.seed(new ParsedSchema(List.of(students), List.of(), List.of(), Map.of(), List.of(sample)));
+
+        ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<List<Object[]>> batches = ArgumentCaptor.forClass(List.class);
+        verify(jdbcTemplate, atLeastOnce()).batchUpdate(sql.capture(), batches.capture());
+        assertThat(sql.getAllValues().get(0))
+                .isEqualTo("INSERT INTO `querysense_uploads`.`students` (`full_name`, `updated_at`) VALUES (?, ?)");
+        Object[] row = batches.getAllValues().get(0).get(0);
+        assertThat(row[0]).isEqualTo("Asha Rao");
+        assertThat(row[1]).isNotNull();
+    }
+
+    @Test
+    @DisplayName("a sample INSERT without a column list fills the columns in declared order")
+    @SuppressWarnings("unchecked")
+    void sampleWithoutColumnList() {
+        ParsedTable scale = new ParsedTable("grade_scale",
+                List.of(new ParsedColumn("letter", "VARCHAR", List.of("255"), true, false, false, true),
+                        new ParsedColumn("points", "DECIMAL", List.of("3", "2"), true, false, false, false)),
+                List.of());
+        com.querysense.backend.schema.ddl.SampleInsert sample = new com.querysense.backend.schema.ddl.SampleInsert(
+                "grade_scale", List.of(), List.of(List.of("A", new java.math.BigDecimal("4.00"))), 0);
+
+        seeder.seed(new ParsedSchema(List.of(scale), List.of(), List.of(), Map.of(), List.of(sample)));
+
+        ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+        verify(jdbcTemplate, atLeastOnce()).batchUpdate(sql.capture(), any(List.class));
+        assertThat(sql.getAllValues().get(0))
+                .isEqualTo("INSERT INTO `querysense_uploads`.`grade_scale` (`letter`, `points`) VALUES (?, ?)");
+    }
+
     private static ParsedSchema customersAndOrders() {
         ParsedTable customers = new ParsedTable("customers",
                 List.of(pk("id"), col("name", "VARCHAR")), List.of());

@@ -12,7 +12,16 @@ import java.util.Optional;
 
 /** The tables parsed from an uploaded file, with their indexes and any skipped statements. */
 public record ParsedSchema(List<ParsedTable> tables, List<String> warnings, List<IndexSpec> indexes,
-                           Map<String, SchemaAliases.TableAliases> aliases) {
+                           Map<String, SchemaAliases.TableAliases> aliases, List<SampleInsert> samples) {
+
+    public ParsedSchema(List<ParsedTable> tables, List<String> warnings, List<IndexSpec> indexes,
+                        Map<String, SchemaAliases.TableAliases> aliases) {
+        this(tables, warnings, indexes, aliases, List.of());
+    }
+
+    public List<SampleInsert> samplesFor(String table) {
+        return samples.stream().filter(s -> s.table().equalsIgnoreCase(table)).toList();
+    }
 
     public ParsedSchema(List<ParsedTable> tables, List<String> warnings) {
         this(tables, warnings, List.of(), Map.of());
