@@ -1,0 +1,1719 @@
+{
+  "routing": {
+    "RULE_ENGINE": {
+      "n": 33,
+      "ids": [
+        1,
+        2,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        19,
+        21,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44,
+        46
+      ],
+      "runnable": 33,
+      "executed": 33,
+      "truth_checked": 33,
+      "truth_identical": 32,
+      "truth_fewer_cols": 0,
+      "truth_other": [
+        [
+          39,
+          "different"
+        ]
+      ],
+      "median_ms": 28.6,
+      "max_ms": 245.5
+    },
+    "OLLAMA": {
+      "n": 14,
+      "ids": [
+        3,
+        18,
+        20,
+        22,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        45,
+        47
+      ],
+      "runnable": 13,
+      "executed": 14,
+      "truth_checked": 13,
+      "truth_identical": 2,
+      "truth_fewer_cols": 8,
+      "truth_other": [
+        [
+          32,
+          "different"
+        ],
+        [
+          35,
+          "different"
+        ],
+        [
+          37,
+          "different"
+        ]
+      ],
+      "median_ms": 673.9,
+      "max_ms": 1154.3
+    },
+    "OLLAMA_FLAGGED": {
+      "n": 3,
+      "ids": [
+        48,
+        49,
+        50
+      ],
+      "runnable": 0,
+      "executed": 0,
+      "truth_checked": 0,
+      "truth_identical": 0,
+      "truth_fewer_cols": 0,
+      "truth_other": [],
+      "median_ms": 200.1,
+      "max_ms": 228.8
+    },
+    "CACHE": {
+      "n": 14,
+      "identical": 14,
+      "median_ms": 30.8,
+      "max_ms": 57.5
+    }
+  },
+  "tokens": {
+    "llm_only": {
+      "calls": 50,
+      "input": 33201,
+      "output": 1182,
+      "total": 34383,
+      "llm_ms": 20681.0
+    },
+    "pipeline_first_pass": {
+      "calls": 17,
+      "input": 10985,
+      "output": 480,
+      "total": 11465,
+      "llm_ms": 8736.6
+    },
+    "pipeline_with_unsafe_repeats": {
+      "calls": 20,
+      "input": 12723,
+      "output": 503,
+      "total": 13226,
+      "llm_ms": 9366.0
+    },
+    "baseline_same_questions_as_pipeline": {
+      "calls": 17,
+      "input": 10985,
+      "output": 482,
+      "total": 11467,
+      "llm_ms": 8018.1
+    },
+    "reduction_pct": {
+      "input": 66.9,
+      "output": 59.4,
+      "total": 66.7,
+      "calls": 66.0,
+      "llm_ms": 57.8
+    }
+  },
+  "fidelity": [
+    {
+      "id": "A1",
+      "sql": "SELECT * FROM employee WHERE salary > 100000;",
+      "kind": "full scan, filter",
+      "tables": 1,
+      "match": true,
+      "mismatches": [],
+      "raw_cost": 1280.05,
+      "qs_cost": 1280.05,
+      "cost_match": true,
+      "raw": [
+        {
+          "table": "employee",
+          "type": "ALL",
+          "key": "NULL",
+          "rows": "12398",
+          "filtered": "33.33",
+          "Extra": "Using where"
+        }
+      ],
+      "verdict": {
+        "severity": "CRITICAL",
+        "label": "Needs attention",
+        "headline": "Reads the whole employee table \u2014 about 12,398 rows \u2014 then discards 66.7% of what it read.",
+        "detail": "MySQL reported no index it could have used for this table."
+      }
+    },
+    {
+      "id": "A2",
+      "sql": "SELECT * FROM employee WHERE salary BETWEEN 100000 AND 200000;",
+      "kind": "full scan, BETWEEN",
+      "tables": 1,
+      "match": true,
+      "mismatches": [],
+      "raw_cost": 1280.05,
+      "qs_cost": 1280.05,
+      "cost_match": true,
+      "raw": [
+        {
+          "table": "employee",
+          "type": "ALL",
+          "key": "NULL",
+          "rows": "12398",
+          "filtered": "11.11",
+          "Extra": "Using where"
+        }
+      ],
+      "verdict": {
+        "severity": "CRITICAL",
+        "label": "Needs attention",
+        "headline": "Reads the whole employee table \u2014 about 12,398 rows \u2014 then discards 88.9% of what it read.",
+        "detail": "MySQL reported no index it could have used for this table."
+      }
+    },
+    {
+      "id": "A3",
+      "sql": "SELECT * FROM project WHERE site = 'pune';",
+      "kind": "full scan, text filter",
+      "tables": 1,
+      "match": true,
+      "mismatches": [],
+      "raw_cost": 1194.65,
+      "qs_cost": 1194.65,
+      "cost_match": true,
+      "raw": [
+        {
+          "table": "project",
+          "type": "ALL",
+          "key": "NULL",
+          "rows": "11704",
+          "filtered": "10.00",
+          "Extra": "Using where"
+        }
+      ],
+      "verdict": {
+        "severity": "CRITICAL",
+        "label": "Needs attention",
+        "headline": "Reads the whole project table \u2014 about 11,704 rows \u2014 then discards 90% of what it read.",
+        "detail": "MySQL reported no index it could have used for this table."
+      }
+    },
+    {
+      "id": "A4",
+      "sql": "SELECT * FROM employee WHERE dept_no = 5;",
+      "kind": "ref lookup on FK index",
+      "tables": 1,
+      "match": true,
+      "mismatches": [],
+      "raw_cost": 2.45,
+      "qs_cost": 2.45,
+      "cost_match": true,
+      "raw": [
+        {
+          "table": "employee",
+          "type": "ref",
+          "key": "fk_employee_1",
+          "rows": "7",
+          "filtered": "100.00",
+          "Extra": "NULL"
+        }
+      ],
+      "verdict": {
+        "severity": "INFO",
+        "label": "Looks efficient",
+        "headline": "Uses the fk_employee_1 index to find rows instead of reading the whole table.",
+        "detail": "About 7 rows are expected to be read."
+      }
+    },
+    {
+      "id": "A5",
+      "sql": "SELECT * FROM dependent WHERE relationship = 'spouse';",
+      "kind": "full scan, text filter",
+      "tables": 1,
+      "match": true,
+      "mismatches": [],
+      "raw_cost": 1188.45,
+      "qs_cost": 1188.45,
+      "cost_match": true,
+      "raw": [
+        {
+          "table": "dependent",
+          "type": "ALL",
+          "key": "NULL",
+          "rows": "11642",
+          "filtered": "10.00",
+          "Extra": "Using where"
+        }
+      ],
+      "verdict": {
+        "severity": "CRITICAL",
+        "label": "Needs attention",
+        "headline": "Reads the whole dependent table \u2014 about 11,642 rows \u2014 then discards 90% of what it read.",
+        "detail": "MySQL reported no index it could have used for this table."
+      }
+    },
+    {
+      "id": "A6",
+      "sql": "SELECT COUNT(*) FROM employee;",
+      "kind": "COUNT(*)",
+      "tables": 1,
+      "match": true,
+      "mismatches": [],
+      "raw_cost": 1280.05,
+      "qs_cost": 1280.05,
+      "cost_match": true,
+      "raw": [
+        {
+          "table": "employee",
+          "type": "index",
+          "key": "fk_employee_1",
+          "rows": "12398",
+          "filtered": "100.00",
+          "Extra": "Using index"
+        }
+      ],
+      "verdict": {
+        "severity": "INFO",
+        "label": "Looks efficient",
+        "headline": "Uses the fk_employee_1 index to find rows instead of reading the whole table.",
+        "detail": "About 12,398 rows are expected to be read."
+      }
+    },
+    {
+      "id": "A7",
+      "sql": "SELECT AVG(salary) FROM employee;",
+      "kind": "aggregate, full scan",
+      "tables": 1,
+      "match": true,
+      "mismatches": [],
+      "raw_cost": 1280.05,
+      "qs_cost": 1280.05,
+      "cost_match": true,
+      "raw": [
+        {
+          "table": "employee",
+          "type": "ALL",
+          "key": "NULL",
+          "rows": "12398",
+          "filtered": "100.00",
+          "Extra": "NULL"
+        }
+      ],
+      "verdict": {
+        "severity": "INFO",
+        "label": "Looks reasonable",
+        "headline": "Reads the whole employee table \u2014 about 12,398 rows \u2014 and returns most of them.",
+        "detail": "A full scan is the efficient plan when a query genuinely needs this much of the table, so there is little an index could save here."
+      }
+    },
+    {
+      "id": "A8",
+      "sql": "SELECT SUM(hours) FROM assignment;",
+      "kind": "aggregate, full scan",
+      "tables": 1,
+      "match": true,
+      "mismatches": [],
+      "raw_cost": 1208.25,
+      "qs_cost": 1208.25,
+      "cost_match": true,
+      "raw": [
+        {
+          "table": "assignment",
+          "type": "ALL",
+          "key": "NULL",
+          "rows": "12000",
+          "filtered": "100.00",
+          "Extra": "NULL"
+        }
+      ],
+      "verdict": {
+        "severity": "INFO",
+        "label": "Looks reasonable",
+        "headline": "Reads the whole assignment table \u2014 about 12,000 rows \u2014 and returns most of them.",
+        "detail": "A full scan is the efficient plan when a query genuinely needs this much of the table, so there is little an index could save here."
+      }
+    },
+    {
+      "id": "A9",
+      "sql": "SELECT dept_no, COUNT(*) FROM employee GROUP BY dept_no;",
+      "kind": "GROUP BY on indexed column",
+      "tables": 1,
+      "match": true,
+      "mismatches": [],
+      "raw_cost": 1280.05,
+      "qs_cost": 1280.05,
+      "cost_match": true,
+      "raw": [
+        {
+          "table": "employee",
+          "type": "index",
+          "key": "fk_employee_1",
+          "rows": "12398",
+          "filtered": "100.00",
+          "Extra": "Using index"
+        }
+      ],
+      "verdict": {
+        "severity": "INFO",
+        "label": "Looks efficient",
+        "headline": "Uses the fk_employee_1 index to find rows instead of reading the whole table.",
+        "detail": "About 12,398 rows are expected to be read."
+      }
+    },
+    {
+      "id": "A10",
+      "sql": "SELECT dept_no, COUNT(*) FROM project GROUP BY dept_no;",
+      "kind": "GROUP BY on indexed column",
+      "tables": 1,
+      "match": true,
+      "mismatches": [],
+      "raw_cost": 1194.65,
+      "qs_cost": 1194.65,
+      "cost_match": true,
+      "raw": [
+        {
+          "table": "project",
+          "type": "index",
+          "key": "fk_project_4",
+          "rows": "11704",
+          "filtered": "100.00",
+          "Extra": "Using index"
+        }
+      ],
+      "verdict": {
+        "severity": "INFO",
+        "label": "Looks efficient",
+        "headline": "Uses the fk_project_4 index to find rows instead of reading the whole table.",
+        "detail": "About 11,704 rows are expected to be read."
+      }
+    },
+    {
+      "id": "A11",
+      "sql": "SELECT relationship, COUNT(*) FROM dependent GROUP BY relationship;",
+      "kind": "GROUP BY unindexed (temporary table)",
+      "tables": 1,
+      "match": true,
+      "mismatches": [],
+      "raw_cost": 1188.45,
+      "qs_cost": 1188.45,
+      "cost_match": true,
+      "raw": [
+        {
+          "table": "dependent",
+          "type": "ALL",
+          "key": "NULL",
+          "rows": "11642",
+          "filtered": "100.00",
+          "Extra": "Using temporary"
+        }
+      ],
+      "verdict": {
+        "severity": "WARNING",
+        "label": "Could be better",
+        "headline": "MySQL has to assemble roughly 11,642 rows after reading them.",
+        "detail": "No index supplied the rows in the order this query needs, so the ordering or grouping work happens as a separate step."
+      }
+    },
+    {
+      "id": "A12",
+      "sql": "SELECT project_no, SUM(hours) AS total_hours FROM assignment GROUP BY project_no;",
+      "kind": "GROUP BY + SUM",
+      "tables": 1,
+      "match": true,
+      "mismatches": [],
+      "raw_cost": 1208.25,
+      "qs_cost": 1208.25,
+      "cost_match": true,
+      "raw": [
+        {
+          "table": "assignment",
+          "type": "index",
+          "key": "fk_assignment_6",
+          "rows": "12000",
+          "filtered": "100.00",
+          "Extra": "NULL"
+        }
+      ],
+      "verdict": {
+        "severity": "INFO",
+        "label": "Looks efficient",
+        "headline": "Uses the fk_assignment_6 index to find rows instead of reading the whole table.",
+        "detail": "About 12,000 rows are expected to be read."
+      }
+    },
+    {
+      "id": "A13",
+      "sql": "SELECT * FROM employee ORDER BY salary DESC LIMIT 5;",
+      "kind": "sort + LIMIT (filesort)",
+      "tables": 1,
+      "match": true,
+      "mismatches": [],
+      "raw_cost": 1280.05,
+      "qs_cost": 1280.05,
+      "cost_match": true,
+      "raw": [
+        {
+          "table": "employee",
+          "type": "ALL",
+          "key": "NULL",
+          "rows": "12398",
+          "filtered": "100.00",
+          "Extra": "Using filesort"
+        }
+      ],
+      "verdict": {
+        "severity": "WARNING",
+        "label": "Could be better",
+        "headline": "MySQL has to sort roughly 12,398 rows after reading them.",
+        "detail": "No index supplied the rows in the order this query needs, so the ordering or grouping work happens as a separate step."
+      }
+    },
+    {
+      "id": "A14",
+      "sql": "SELECT * FROM department ORDER BY dept_name ASC;",
+      "kind": "sort on unique column",
+      "tables": 1,
+      "match": true,
+      "mismatches": [],
+      "raw_cost": 13601.55,
+      "qs_cost": 13601.55,
+      "cost_match": true,
+      "raw": [
+        {
+          "table": "department",
+          "type": "ALL",
+          "key": "NULL",
+          "rows": "12343",
+          "filtered": "100.00",
+          "Extra": "Using filesort"
+        }
+      ],
+      "verdict": {
+        "severity": "WARNING",
+        "label": "Could be better",
+        "headline": "MySQL has to sort roughly 12,343 rows after reading them.",
+        "detail": "No index supplied the rows in the order this query needs, so the ordering or grouping work happens as a separate step."
+      }
+    },
+    {
+      "id": "A15",
+      "sql": "SELECT * FROM employee ORDER BY birth_date ASC LIMIT 1;",
+      "kind": "sort + LIMIT 1 on date",
+      "tables": 1,
+      "match": true,
+      "mismatches": [],
+      "raw_cost": 1280.05,
+      "qs_cost": 1280.05,
+      "cost_match": true,
+      "raw": [
+        {
+          "table": "employee",
+          "type": "ALL",
+          "key": "NULL",
+          "rows": "12398",
+          "filtered": "100.00",
+          "Extra": "Using filesort"
+        }
+      ],
+      "verdict": {
+        "severity": "WARNING",
+        "label": "Could be better",
+        "headline": "MySQL has to sort roughly 12,398 rows after reading them.",
+        "detail": "No index supplied the rows in the order this query needs, so the ordering or grouping work happens as a separate step."
+      }
+    },
+    {
+      "id": "A16",
+      "sql": "SELECT * FROM dependent JOIN employee ON dependent.emp_id = employee.emp_id;",
+      "kind": "2-table join",
+      "tables": 2,
+      "match": true,
+      "mismatches": [],
+      "raw_cost": 5263.15,
+      "qs_cost": 5263.15,
+      "cost_match": true,
+      "raw": [
+        {
+          "table": "dependent",
+          "type": "ALL",
+          "key": "NULL",
+          "rows": "11642",
+          "filtered": "100.00",
+          "Extra": "NULL"
+        },
+        {
+          "table": "employee",
+          "type": "eq_ref",
+          "key": "PRIMARY",
+          "rows": "1",
+          "filtered": "100.00",
+          "Extra": "NULL"
+        }
+      ],
+      "verdict": {
+        "severity": "WARNING",
+        "label": "Could be better",
+        "headline": "An index on dependent was available, but MySQL chose not to use it.",
+        "detail": "MySQL only uses an index when it estimates that doing so is cheaper. On a small table, or for a query that matches most rows, reading the table directly genuinely is cheaper."
+      }
+    },
+    {
+      "id": "A17",
+      "sql": "SELECT * FROM employee JOIN department ON employee.dept_no = department.dept_no;",
+      "kind": "2-table join",
+      "tables": 2,
+      "match": true,
+      "mismatches": [],
+      "raw_cost": 5619.35,
+      "qs_cost": 5619.35,
+      "cost_match": true,
+      "raw": [
+        {
+          "table": "employee",
+          "type": "ALL",
+          "key": "NULL",
+          "rows": "12398",
+          "filtered": "100.00",
+          "Extra": "NULL"
+        },
+        {
+          "table": "department",
+          "type": "eq_ref",
+          "key": "PRIMARY",
+          "rows": "1",
+          "filtered": "100.00",
+          "Extra": "NULL"
+        }
+      ],
+      "verdict": {
+        "severity": "WARNING",
+        "label": "Could be better",
+        "headline": "An index on employee was available, but MySQL chose not to use it.",
+        "detail": "MySQL only uses an index when it estimates that doing so is cheaper. On a small table, or for a query that matches most rows, reading the table directly genuinely is cheaper."
+      }
+    },
+    {
+      "id": "A18",
+      "sql": "SELECT e.first_name, e.middle_initial, e.last_name FROM employee e JOIN assignment a ON e.emp_id = a.emp_id JOIN project p ON a.project_no = p.project_no WHERE p.project_name = 'Atlas';",
+      "kind": "3-table join with const lookup",
+      "tables": 3,
+      "match": true,
+      "mismatches": [],
+      "raw_cost": 1.85,
+      "qs_cost": 1.85,
+      "cost_match": true,
+      "raw": [
+        {
+          "table": "p",
+          "type": "const",
+          "key": "project_name",
+          "rows": "1",
+          "filtered": "100.00",
+          "Extra": "Using index"
+        },
+        {
+          "table": "a",
+          "type": "ref",
+          "key": "fk_assignment_6",
+          "rows": "2",
+          "filtered": "100.00",
+          "Extra": "Using index"
+        },
+        {
+          "table": "e",
+          "type": "eq_ref",
+          "key": "PRIMARY",
+          "rows": "1",
+          "filtered": "100.00",
+          "Extra": "NULL"
+        }
+      ],
+      "verdict": {
+        "severity": "INFO",
+        "label": "Looks efficient",
+        "headline": "Uses the project_name index to find rows instead of reading the whole table.",
+        "detail": "About 2 rows are expected to be read."
+      }
+    },
+    {
+      "id": "A19",
+      "sql": "SELECT e.emp_id, e.first_name, e.last_name, p.project_name FROM employee e JOIN assignment a ON e.emp_id = a.emp_id JOIN project p ON a.project_no = p.project_no;",
+      "kind": "3-table join",
+      "tables": 3,
+      "match": true,
+      "mismatches": [],
+      "raw_cost": 9608.25,
+      "qs_cost": 9608.25,
+      "cost_match": true,
+      "raw": [
+        {
+          "table": "a",
+          "type": "index",
+          "key": "fk_assignment_6",
+          "rows": "12000",
+          "filtered": "100.00",
+          "Extra": "Using index"
+        },
+        {
+          "table": "p",
+          "type": "eq_ref",
+          "key": "PRIMARY",
+          "rows": "1",
+          "filtered": "100.00",
+          "Extra": "NULL"
+        },
+        {
+          "table": "e",
+          "type": "eq_ref",
+          "key": "PRIMARY",
+          "rows": "1",
+          "filtered": "100.00",
+          "Extra": "NULL"
+        }
+      ],
+      "verdict": {
+        "severity": "INFO",
+        "label": "Looks efficient",
+        "headline": "Uses the fk_assignment_6 index to find rows instead of reading the whole table.",
+        "detail": "About 12,000 rows are expected to be read."
+      }
+    },
+    {
+      "id": "A20",
+      "sql": "SELECT d.dependent_name, d.gender, d.birth_date, d.relationship FROM dependent d JOIN employee e ON d.emp_id = e.emp_id JOIN assignment a ON e.emp_id = a.emp_id JOIN project p ON a.project_no = p.project_no WHERE p.project_name = 'Atlas';",
+      "kind": "4-table join",
+      "tables": 4,
+      "match": true,
+      "mismatches": [],
+      "raw_cost": 2.64,
+      "qs_cost": 2.64,
+      "cost_match": true,
+      "raw": [
+        {
+          "table": "p",
+          "type": "const",
+          "key": "project_name",
+          "rows": "1",
+          "filtered": "100.00",
+          "Extra": "Using index"
+        },
+        {
+          "table": "a",
+          "type": "ref",
+          "key": "fk_assignment_6",
+          "rows": "2",
+          "filtered": "100.00",
+          "Extra": "Using index"
+        },
+        {
+          "table": "e",
+          "type": "eq_ref",
+          "key": "PRIMARY",
+          "rows": "1",
+          "filtered": "100.00",
+          "Extra": "Using index"
+        },
+        {
+          "table": "d",
+          "type": "ref",
+          "key": "PRIMARY",
+          "rows": "1",
+          "filtered": "100.00",
+          "Extra": "NULL"
+        }
+      ],
+      "verdict": {
+        "severity": "INFO",
+        "label": "Looks efficient",
+        "headline": "Uses the project_name index to find rows instead of reading the whole table.",
+        "detail": "About 2 rows are expected to be read."
+      }
+    },
+    {
+      "id": "A21",
+      "sql": "SELECT e.emp_id, e.first_name, e.middle_initial, e.last_name FROM employee e JOIN employee m ON e.manager_id = m.emp_id WHERE m.first_name = 'Kavita' AND m.last_name = 'Rao';",
+      "kind": "self-join with filter",
+      "tables": 2,
+      "match": true,
+      "mismatches": [],
+      "raw_cost": 1369.71,
+      "qs_cost": 1369.71,
+      "cost_match": true,
+      "raw": [
+        {
+          "table": "m",
+          "type": "ALL",
+          "key": "NULL",
+          "rows": "12398",
+          "filtered": "1.00",
+          "Extra": "Using where"
+        },
+        {
+          "table": "e",
+          "type": "ref",
+          "key": "fk_employee_0",
+          "rows": "2",
+          "filtered": "100.00",
+          "Extra": "NULL"
+        }
+      ],
+      "verdict": {
+        "severity": "CRITICAL",
+        "label": "Needs attention",
+        "headline": "Reads the whole employee table \u2014 about 12,398 rows \u2014 then discards 99% of what it read.",
+        "detail": "MySQL listed PRIMARY on employee as usable for this query and then chose not to use it."
+      }
+    },
+    {
+      "id": "A22",
+      "sql": "SELECT manager_id, COUNT(emp_id) AS num_employees FROM employee GROUP BY manager_id;",
+      "kind": "GROUP BY on self-FK",
+      "tables": 1,
+      "match": true,
+      "mismatches": [],
+      "raw_cost": 1280.05,
+      "qs_cost": 1280.05,
+      "cost_match": true,
+      "raw": [
+        {
+          "table": "employee",
+          "type": "index",
+          "key": "fk_employee_0",
+          "rows": "12398",
+          "filtered": "100.00",
+          "Extra": "Using index"
+        }
+      ],
+      "verdict": {
+        "severity": "INFO",
+        "label": "Looks efficient",
+        "headline": "Uses the fk_employee_0 index to find rows instead of reading the whole table.",
+        "detail": "About 12,398 rows are expected to be read."
+      }
+    },
+    {
+      "id": "A23",
+      "sql": "SELECT employee.* FROM employee LEFT JOIN dependent ON employee.emp_id = dependent.emp_id WHERE dependent.emp_id IS NULL;",
+      "kind": "anti-join",
+      "tables": 2,
+      "match": true,
+      "mismatches": [],
+      "raw_cost": 6194.21,
+      "qs_cost": 6194.21,
+      "cost_match": true,
+      "raw": [
+        {
+          "table": "employee",
+          "type": "ALL",
+          "key": "NULL",
+          "rows": "12398",
+          "filtered": "100.00",
+          "Extra": "NULL"
+        },
+        {
+          "table": "dependent",
+          "type": "ref",
+          "key": "PRIMARY",
+          "rows": "1",
+          "filtered": "100.00",
+          "Extra": "Using where; Not exists; Using index"
+        }
+      ],
+      "verdict": {
+        "severity": "INFO",
+        "label": "Looks reasonable",
+        "headline": "Reads the whole employee table \u2014 about 12,398 rows \u2014 and returns most of them.",
+        "detail": "A full scan is the efficient plan when a query genuinely needs this much of the table, so there is little an index could save here."
+      }
+    },
+    {
+      "id": "A24",
+      "sql": "SELECT * FROM employee WHERE emp_id = 'E1001';",
+      "kind": "const lookup on primary key",
+      "tables": 1,
+      "match": true,
+      "mismatches": [],
+      "raw_cost": 1.0,
+      "qs_cost": 1.0,
+      "cost_match": true,
+      "raw": [
+        {
+          "table": "employee",
+          "type": "const",
+          "key": "PRIMARY",
+          "rows": "1",
+          "filtered": "100.00",
+          "Extra": "NULL"
+        }
+      ],
+      "verdict": {
+        "severity": "INFO",
+        "label": "Looks efficient",
+        "headline": "Uses the PRIMARY index to find rows instead of reading the whole table.",
+        "detail": "About 1 rows are expected to be read."
+      }
+    },
+    {
+      "id": "A25",
+      "sql": "SELECT * FROM employee WHERE YEAR(birth_date) > 1965;",
+      "kind": "non-sargable filter",
+      "tables": 1,
+      "match": true,
+      "mismatches": [],
+      "raw_cost": 1280.05,
+      "qs_cost": 1280.05,
+      "cost_match": true,
+      "raw": [
+        {
+          "table": "employee",
+          "type": "ALL",
+          "key": "NULL",
+          "rows": "12398",
+          "filtered": "100.00",
+          "Extra": "Using where"
+        }
+      ],
+      "verdict": {
+        "severity": "INFO",
+        "label": "Looks reasonable",
+        "headline": "Reads the whole employee table \u2014 about 12,398 rows \u2014 and returns most of them.",
+        "detail": "A full scan is the efficient plan when a query genuinely needs this much of the table, so there is little an index could save here."
+      }
+    },
+    {
+      "id": "A26",
+      "sql": "SELECT * FROM employee WHERE birth_date >= '1966-01-01';",
+      "kind": "sargable date range, no index",
+      "tables": 1,
+      "match": true,
+      "mismatches": [],
+      "raw_cost": 1280.05,
+      "qs_cost": 1280.05,
+      "cost_match": true,
+      "raw": [
+        {
+          "table": "employee",
+          "type": "ALL",
+          "key": "NULL",
+          "rows": "12398",
+          "filtered": "33.33",
+          "Extra": "Using where"
+        }
+      ],
+      "verdict": {
+        "severity": "CRITICAL",
+        "label": "Needs attention",
+        "headline": "Reads the whole employee table \u2014 about 12,398 rows \u2014 then discards 66.7% of what it read.",
+        "detail": "MySQL reported no index it could have used for this table."
+      }
+    }
+  ],
+  "levels": {
+    "LOW": {
+      "total": 44,
+      "CRITICAL": 24,
+      "WARNING": 16,
+      "INFO": 4,
+      "median_ms": 10.8,
+      "min_ms": 7.1,
+      "max_ms": 73.4
+    },
+    "MEDIUM": {
+      "total": 28,
+      "CRITICAL": 20,
+      "WARNING": 4,
+      "INFO": 4,
+      "median_ms": 25.5,
+      "min_ms": 7.3,
+      "max_ms": 36.2
+    },
+    "HIGH": {
+      "total": 28,
+      "CRITICAL": 0,
+      "WARNING": 20,
+      "INFO": 8,
+      "median_ms": 28.0,
+      "min_ms": 7.1,
+      "max_ms": 34.8
+    }
+  },
+  "levels_per_query": [
+    {
+      "id": "A1",
+      "sql": "SELECT * FROM employee WHERE salary > 100000;",
+      "LOW": [
+        {
+          "source": "DOMAIN",
+          "severity": "CRITICAL",
+          "message": "Full table scan on 'employee' in a transactional query. This query path is expected to run frequently \u2014 a missing index here means this scan repeats on every call. Add an index on the lookup column(s) immediately."
+        },
+        {
+          "source": "RESOURCE",
+          "severity": "WARNING",
+          "message": "Full table scan over a significant row count while available memory is low \u2014 this increases pressure on the buffer pool and can slow down other concurrent queries, not just this one."
+        }
+      ],
+      "MEDIUM": [
+        {
+          "source": "DOMAIN",
+          "severity": "CRITICAL",
+          "message": "Full table scan on 'employee' in a transactional query. This query path is expected to run frequently \u2014 a missing index here means this scan repeats on every call. Add an index on the lookup column(s) immediately."
+        }
+      ],
+      "HIGH": [
+        {
+          "source": "DOMAIN",
+          "severity": "WARNING",
+          "message": "Full table scan on 'employee' in a transactional query. This query path is expected to run frequently \u2014 a missing index here means this scan repeats on every call. Add an index on the lookup column(s) immediately."
+        }
+      ]
+    },
+    {
+      "id": "A2",
+      "sql": "SELECT * FROM employee WHERE salary BETWEEN 100000 AND 200000;",
+      "LOW": [
+        {
+          "source": "DOMAIN",
+          "severity": "CRITICAL",
+          "message": "Full table scan on 'employee' in a transactional query. This query path is expected to run frequently \u2014 a missing index here means this scan repeats on every call. Add an index on the lookup column(s) immediately."
+        },
+        {
+          "source": "RESOURCE",
+          "severity": "WARNING",
+          "message": "Full table scan over a significant row count while available memory is low \u2014 this increases pressure on the buffer pool and can slow down other concurrent queries, not just this one."
+        }
+      ],
+      "MEDIUM": [
+        {
+          "source": "DOMAIN",
+          "severity": "CRITICAL",
+          "message": "Full table scan on 'employee' in a transactional query. This query path is expected to run frequently \u2014 a missing index here means this scan repeats on every call. Add an index on the lookup column(s) immediately."
+        }
+      ],
+      "HIGH": [
+        {
+          "source": "DOMAIN",
+          "severity": "WARNING",
+          "message": "Full table scan on 'employee' in a transactional query. This query path is expected to run frequently \u2014 a missing index here means this scan repeats on every call. Add an index on the lookup column(s) immediately."
+        }
+      ]
+    },
+    {
+      "id": "A3",
+      "sql": "SELECT * FROM project WHERE site = 'pune';",
+      "LOW": [
+        {
+          "source": "DOMAIN",
+          "severity": "CRITICAL",
+          "message": "Full table scan on 'project' in a transactional query. This query path is expected to run frequently \u2014 a missing index here means this scan repeats on every call. Add an index on the lookup column(s) immediately."
+        },
+        {
+          "source": "RESOURCE",
+          "severity": "WARNING",
+          "message": "Full table scan over a significant row count while available memory is low \u2014 this increases pressure on the buffer pool and can slow down other concurrent queries, not just this one."
+        }
+      ],
+      "MEDIUM": [
+        {
+          "source": "DOMAIN",
+          "severity": "CRITICAL",
+          "message": "Full table scan on 'project' in a transactional query. This query path is expected to run frequently \u2014 a missing index here means this scan repeats on every call. Add an index on the lookup column(s) immediately."
+        }
+      ],
+      "HIGH": [
+        {
+          "source": "DOMAIN",
+          "severity": "WARNING",
+          "message": "Full table scan on 'project' in a transactional query. This query path is expected to run frequently \u2014 a missing index here means this scan repeats on every call. Add an index on the lookup column(s) immediately."
+        }
+      ]
+    },
+    {
+      "id": "A4",
+      "sql": "SELECT * FROM employee WHERE dept_no = 5;",
+      "LOW": [
+        {
+          "source": "DOMAIN",
+          "severity": "INFO",
+          "message": "Query resolves via index 'fk_employee_1' with access type 'ref' \u2014 this is the ideal shape for a transactional lookup."
+        }
+      ],
+      "MEDIUM": [
+        {
+          "source": "DOMAIN",
+          "severity": "INFO",
+          "message": "Query resolves via index 'fk_employee_1' with access type 'ref' \u2014 this is the ideal shape for a transactional lookup."
+        }
+      ],
+      "HIGH": [
+        {
+          "source": "DOMAIN",
+          "severity": "INFO",
+          "message": "Query resolves via index 'fk_employee_1' with access type 'ref' \u2014 this is the ideal shape for a transactional lookup."
+        }
+      ]
+    },
+    {
+      "id": "A5",
+      "sql": "SELECT * FROM dependent WHERE relationship = 'spouse';",
+      "LOW": [
+        {
+          "source": "DOMAIN",
+          "severity": "CRITICAL",
+          "message": "Full table scan on 'dependent' in a transactional query. This query path is expected to run frequently \u2014 a missing index here means this scan repeats on every call. Add an index on the lookup column(s) immediately."
+        },
+        {
+          "source": "RESOURCE",
+          "severity": "WARNING",
+          "message": "Full table scan over a significant row count while available memory is low \u2014 this increases pressure on the buffer pool and can slow down other concurrent queries, not just this one."
+        }
+      ],
+      "MEDIUM": [
+        {
+          "source": "DOMAIN",
+          "severity": "CRITICAL",
+          "message": "Full table scan on 'dependent' in a transactional query. This query path is expected to run frequently \u2014 a missing index here means this scan repeats on every call. Add an index on the lookup column(s) immediately."
+        }
+      ],
+      "HIGH": [
+        {
+          "source": "DOMAIN",
+          "severity": "WARNING",
+          "message": "Full table scan on 'dependent' in a transactional query. This query path is expected to run frequently \u2014 a missing index here means this scan repeats on every call. Add an index on the lookup column(s) immediately."
+        }
+      ]
+    },
+    {
+      "id": "A6",
+      "sql": "SELECT COUNT(*) FROM employee;",
+      "LOW": [],
+      "MEDIUM": [],
+      "HIGH": []
+    },
+    {
+      "id": "A7",
+      "sql": "SELECT AVG(salary) FROM employee;",
+      "LOW": [
+        {
+          "source": "DOMAIN",
+          "severity": "CRITICAL",
+          "message": "Full table scan on 'employee' in a transactional query. This query path is expected to run frequently \u2014 a missing index here means this scan repeats on every call. Add an index on the lookup column(s) immediately."
+        },
+        {
+          "source": "RESOURCE",
+          "severity": "WARNING",
+          "message": "Full table scan over a significant row count while available memory is low \u2014 this increases pressure on the buffer pool and can slow down other concurrent queries, not just this one."
+        }
+      ],
+      "MEDIUM": [
+        {
+          "source": "DOMAIN",
+          "severity": "CRITICAL",
+          "message": "Full table scan on 'employee' in a transactional query. This query path is expected to run frequently \u2014 a missing index here means this scan repeats on every call. Add an index on the lookup column(s) immediately."
+        }
+      ],
+      "HIGH": [
+        {
+          "source": "DOMAIN",
+          "severity": "WARNING",
+          "message": "Full table scan on 'employee' in a transactional query. This query path is expected to run frequently \u2014 a missing index here means this scan repeats on every call. Add an index on the lookup column(s) immediately."
+        }
+      ]
+    },
+    {
+      "id": "A8",
+      "sql": "SELECT SUM(hours) FROM assignment;",
+      "LOW": [
+        {
+          "source": "DOMAIN",
+          "severity": "CRITICAL",
+          "message": "Full table scan on 'assignment' in a transactional query. This query path is expected to run frequently \u2014 a missing index here means this scan repeats on every call. Add an index on the lookup column(s) immediately."
+        },
+        {
+          "source": "RESOURCE",
+          "severity": "WARNING",
+          "message": "Full table scan over a significant row count while available memory is low \u2014 this increases pressure on the buffer pool and can slow down other concurrent queries, not just this one."
+        }
+      ],
+      "MEDIUM": [
+        {
+          "source": "DOMAIN",
+          "severity": "CRITICAL",
+          "message": "Full table scan on 'assignment' in a transactional query. This query path is expected to run frequently \u2014 a missing index here means this scan repeats on every call. Add an index on the lookup column(s) immediately."
+        }
+      ],
+      "HIGH": [
+        {
+          "source": "DOMAIN",
+          "severity": "WARNING",
+          "message": "Full table scan on 'assignment' in a transactional query. This query path is expected to run frequently \u2014 a missing index here means this scan repeats on every call. Add an index on the lookup column(s) immediately."
+        }
+      ]
+    },
+    {
+      "id": "A9",
+      "sql": "SELECT dept_no, COUNT(*) FROM employee GROUP BY dept_no;",
+      "LOW": [],
+      "MEDIUM": [],
+      "HIGH": []
+    },
+    {
+      "id": "A10",
+      "sql": "SELECT dept_no, COUNT(*) FROM project GROUP BY dept_no;",
+      "LOW": [],
+      "MEDIUM": [],
+      "HIGH": []
+    },
+    {
+      "id": "A11",
+      "sql": "SELECT relationship, COUNT(*) FROM dependent GROUP BY relationship;",
+      "LOW": [
+        {
+          "source": "DOMAIN",
+          "severity": "CRITICAL",
+          "message": "Full table scan on 'dependent' in a transactional query. This query path is expected to run frequently \u2014 a missing index here means this scan repeats on every call. Add an index on the lookup column(s) immediately."
+        },
+        {
+          "source": "DOMAIN",
+          "severity": "CRITICAL",
+          "message": "Query uses a temporary table. This usually means a GROUP BY, DISTINCT, or subquery, which is unusual for a transactional query \u2014 this logic may be better suited to a batch or analytical path rather than running on every transactional call."
+        },
+        {
+          "source": "RESOURCE",
+          "severity": "CRITICAL",
+          "message": "Available memory is low and this query builds a temporary table \u2014 under memory pressure this is more likely to be written to disk rather than held in memory, adding significant latency."
+        },
+        {
+          "source": "RESOURCE",
+          "severity": "WARNING",
+          "message": "Full table scan over a significant row count while available memory is low \u2014 this increases pressure on the buffer pool and can slow down other concurrent queries, not just this one."
+        }
+      ],
+      "MEDIUM": [
+        {
+          "source": "DOMAIN",
+          "severity": "CRITICAL",
+          "message": "Full table scan on 'dependent' in a transactional query. This query path is expected to run frequently \u2014 a missing index here means this scan repeats on every call. Add an index on the lookup column(s) immediately."
+        },
+        {
+          "source": "DOMAIN",
+          "severity": "CRITICAL",
+          "message": "Query uses a temporary table. This usually means a GROUP BY, DISTINCT, or subquery, which is unusual for a transactional query \u2014 this logic may be better suited to a batch or analytical path rather than running on every transactional call."
+        },
+        {
+          "source": "RESOURCE",
+          "severity": "WARNING",
+          "message": "Query builds a temporary table. Acceptable at medium available memory, but keep an eye on it if row counts grow."
+        }
+      ],
+      "HIGH": [
+        {
+          "source": "DOMAIN",
+          "severity": "WARNING",
+          "message": "Full table scan on 'dependent' in a transactional query. This query path is expected to run frequently \u2014 a missing index here means this scan repeats on every call. Add an index on the lookup column(s) immediately."
+        },
+        {
+          "source": "DOMAIN",
+          "severity": "WARNING",
+          "message": "Query uses a temporary table. This usually means a GROUP BY, DISTINCT, or subquery, which is unusual for a transactional query \u2014 this logic may be better suited to a batch or analytical path rather than running on every transactional call."
+        },
+        {
+          "source": "RESOURCE",
+          "severity": "INFO",
+          "message": "Temporary table required, but available memory is high \u2014 unlikely to be a bottleneck."
+        }
+      ]
+    },
+    {
+      "id": "A12",
+      "sql": "SELECT project_no, SUM(hours) AS total_hours FROM assignment GROUP BY project_no;",
+      "LOW": [],
+      "MEDIUM": [],
+      "HIGH": []
+    },
+    {
+      "id": "A13",
+      "sql": "SELECT * FROM employee ORDER BY salary DESC LIMIT 5;",
+      "LOW": [
+        {
+          "source": "DOMAIN",
+          "severity": "CRITICAL",
+          "message": "Full table scan on 'employee' in a transactional query. This query path is expected to run frequently \u2014 a missing index here means this scan repeats on every call. Add an index on the lookup column(s) immediately."
+        },
+        {
+          "source": "DOMAIN",
+          "severity": "CRITICAL",
+          "message": "Query requires a filesort. Transactional queries should be simple key lookups \u2014 a sort step here suggests this query is doing more than it should on a hot path. Consider an index covering the sort order, or reconsider whether this belongs in the transactional path at all."
+        },
+        {
+          "source": "RESOURCE",
+          "severity": "CRITICAL",
+          "message": "Available memory is low and this filesort covers a significant row count \u2014 it is likely to spill to disk, which is much slower than an in-memory sort. Avoiding the sort (via an index) matters more under these constraints than it would otherwise."
+        },
+        {
+          "source": "RESOURCE",
+          "severity": "WARNING",
+          "message": "Full table scan over a significant row count while available memory is low \u2014 this increases pressure on the buffer pool and can slow down other concurrent queries, not just this one."
+        }
+      ],
+      "MEDIUM": [
+        {
+          "source": "DOMAIN",
+          "severity": "CRITICAL",
+          "message": "Full table scan on 'employee' in a transactional query. This query path is expected to run frequently \u2014 a missing index here means this scan repeats on every call. Add an index on the lookup column(s) immediately."
+        },
+        {
+          "source": "DOMAIN",
+          "severity": "CRITICAL",
+          "message": "Query requires a filesort. Transactional queries should be simple key lookups \u2014 a sort step here suggests this query is doing more than it should on a hot path. Consider an index covering the sort order, or reconsider whether this belongs in the transactional path at all."
+        },
+        {
+          "source": "RESOURCE",
+          "severity": "WARNING",
+          "message": "Filesort over a significant row count. At medium available memory this is usually fine, but worth monitoring if memory pressure increases."
+        }
+      ],
+      "HIGH": [
+        {
+          "source": "DOMAIN",
+          "severity": "WARNING",
+          "message": "Full table scan on 'employee' in a transactional query. This query path is expected to run frequently \u2014 a missing index here means this scan repeats on every call. Add an index on the lookup column(s) immediately."
+        },
+        {
+          "source": "DOMAIN",
+          "severity": "WARNING",
+          "message": "Query requires a filesort. Transactional queries should be simple key lookups \u2014 a sort step here suggests this query is doing more than it should on a hot path. Consider an index covering the sort order, or reconsider whether this belongs in the transactional path at all."
+        },
+        {
+          "source": "RESOURCE",
+          "severity": "INFO",
+          "message": "Filesort detected, but available memory is high \u2014 this is unlikely to cause a disk-based sort or noticeable slowdown."
+        }
+      ]
+    },
+    {
+      "id": "A14",
+      "sql": "SELECT * FROM department ORDER BY dept_name ASC;",
+      "LOW": [
+        {
+          "source": "DOMAIN",
+          "severity": "CRITICAL",
+          "message": "Full table scan on 'department' in a transactional query. This query path is expected to run frequently \u2014 a missing index here means this scan repeats on every call. Add an index on the lookup column(s) immediately."
+        },
+        {
+          "source": "DOMAIN",
+          "severity": "CRITICAL",
+          "message": "Query requires a filesort. Transactional queries should be simple key lookups \u2014 a sort step here suggests this query is doing more than it should on a hot path. Consider an index covering the sort order, or reconsider whether this belongs in the transactional path at all."
+        },
+        {
+          "source": "RESOURCE",
+          "severity": "CRITICAL",
+          "message": "Available memory is low and this filesort covers a significant row count \u2014 it is likely to spill to disk, which is much slower than an in-memory sort. Avoiding the sort (via an index) matters more under these constraints than it would otherwise."
+        },
+        {
+          "source": "RESOURCE",
+          "severity": "WARNING",
+          "message": "Full table scan over a significant row count while available memory is low \u2014 this increases pressure on the buffer pool and can slow down other concurrent queries, not just this one."
+        }
+      ],
+      "MEDIUM": [
+        {
+          "source": "DOMAIN",
+          "severity": "CRITICAL",
+          "message": "Full table scan on 'department' in a transactional query. This query path is expected to run frequently \u2014 a missing index here means this scan repeats on every call. Add an index on the lookup column(s) immediately."
+        },
+        {
+          "source": "DOMAIN",
+          "severity": "CRITICAL",
+          "message": "Query requires a filesort. Transactional queries should be simple key lookups \u2014 a sort step here suggests this query is doing more than it should on a hot path. Consider an index covering the sort order, or reconsider whether this belongs in the transactional path at all."
+        },
+        {
+          "source": "RESOURCE",
+          "severity": "WARNING",
+          "message": "Filesort over a significant row count. At medium available memory this is usually fine, but worth monitoring if memory pressure increases."
+        }
+      ],
+      "HIGH": [
+        {
+          "source": "DOMAIN",
+          "severity": "WARNING",
+          "message": "Full table scan on 'department' in a transactional query. This query path is expected to run frequently \u2014 a missing index here means this scan repeats on every call. Add an index on the lookup column(s) immediately."
+        },
+        {
+          "source": "DOMAIN",
+          "severity": "WARNING",
+          "message": "Query requires a filesort. Transactional queries should be simple key lookups \u2014 a sort step here suggests this query is doing more than it should on a hot path. Consider an index covering the sort order, or reconsider whether this belongs in the transactional path at all."
+        },
+        {
+          "source": "RESOURCE",
+          "severity": "INFO",
+          "message": "Filesort detected, but available memory is high \u2014 this is unlikely to cause a disk-based sort or noticeable slowdown."
+        }
+      ]
+    },
+    {
+      "id": "A15",
+      "sql": "SELECT * FROM employee ORDER BY birth_date ASC LIMIT 1;",
+      "LOW": [
+        {
+          "source": "DOMAIN",
+          "severity": "CRITICAL",
+          "message": "Full table scan on 'employee' in a transactional query. This query path is expected to run frequently \u2014 a missing index here means this scan repeats on every call. Add an index on the lookup column(s) immediately."
+        },
+        {
+          "source": "DOMAIN",
+          "severity": "CRITICAL",
+          "message": "Query requires a filesort. Transactional queries should be simple key lookups \u2014 a sort step here suggests this query is doing more than it should on a hot path. Consider an index covering the sort order, or reconsider whether this belongs in the transactional path at all."
+        },
+        {
+          "source": "RESOURCE",
+          "severity": "CRITICAL",
+          "message": "Available memory is low and this filesort covers a significant row count \u2014 it is likely to spill to disk, which is much slower than an in-memory sort. Avoiding the sort (via an index) matters more under these constraints than it would otherwise."
+        },
+        {
+          "source": "RESOURCE",
+          "severity": "WARNING",
+          "message": "Full table scan over a significant row count while available memory is low \u2014 this increases pressure on the buffer pool and can slow down other concurrent queries, not just this one."
+        }
+      ],
+      "MEDIUM": [
+        {
+          "source": "DOMAIN",
+          "severity": "CRITICAL",
+          "message": "Full table scan on 'employee' in a transactional query. This query path is expected to run frequently \u2014 a missing index here means this scan repeats on every call. Add an index on the lookup column(s) immediately."
+        },
+        {
+          "source": "DOMAIN",
+          "severity": "CRITICAL",
+          "message": "Query requires a filesort. Transactional queries should be simple key lookups \u2014 a sort step here suggests this query is doing more than it should on a hot path. Consider an index covering the sort order, or reconsider whether this belongs in the transactional path at all."
+        },
+        {
+          "source": "RESOURCE",
+          "severity": "WARNING",
+          "message": "Filesort over a significant row count. At medium available memory this is usually fine, but worth monitoring if memory pressure increases."
+        }
+      ],
+      "HIGH": [
+        {
+          "source": "DOMAIN",
+          "severity": "WARNING",
+          "message": "Full table scan on 'employee' in a transactional query. This query path is expected to run frequently \u2014 a missing index here means this scan repeats on every call. Add an index on the lookup column(s) immediately."
+        },
+        {
+          "source": "DOMAIN",
+          "severity": "WARNING",
+          "message": "Query requires a filesort. Transactional queries should be simple key lookups \u2014 a sort step here suggests this query is doing more than it should on a hot path. Consider an index covering the sort order, or reconsider whether this belongs in the transactional path at all."
+        },
+        {
+          "source": "RESOURCE",
+          "severity": "INFO",
+          "message": "Filesort detected, but available memory is high \u2014 this is unlikely to cause a disk-based sort or noticeable slowdown."
+        }
+      ]
+    },
+    {
+      "id": "A16",
+      "sql": "SELECT * FROM dependent JOIN employee ON dependent.emp_id = employee.emp_id;",
+      "LOW": [
+        {
+          "source": "DOMAIN",
+          "severity": "CRITICAL",
+          "message": "Full table scan on 'dependent' in a transactional query. This query path is expected to run frequently \u2014 a missing index here means this scan repeats on every call. Add an index on the lookup column(s) immediately."
+        },
+        {
+          "source": "RESOURCE",
+          "severity": "WARNING",
+          "message": "Full table scan over a significant row count while available memory is low \u2014 this increases pressure on the buffer pool and can slow down other concurrent queries, not just this one."
+        }
+      ],
+      "MEDIUM": [
+        {
+          "source": "DOMAIN",
+          "severity": "CRITICAL",
+          "message": "Full table scan on 'dependent' in a transactional query. This query path is expected to run frequently \u2014 a missing index here means this scan repeats on every call. Add an index on the lookup column(s) immediately."
+        }
+      ],
+      "HIGH": [
+        {
+          "source": "DOMAIN",
+          "severity": "WARNING",
+          "message": "Full table scan on 'dependent' in a transactional query. This query path is expected to run frequently \u2014 a missing index here means this scan repeats on every call. Add an index on the lookup column(s) immediately."
+        }
+      ]
+    },
+    {
+      "id": "A17",
+      "sql": "SELECT * FROM employee JOIN department ON employee.dept_no = department.dept_no;",
+      "LOW": [
+        {
+          "source": "DOMAIN",
+          "severity": "CRITICAL",
+          "message": "Full table scan on 'employee' in a transactional query. This query path is expected to run frequently \u2014 a missing index here means this scan repeats on every call. Add an index on the lookup column(s) immediately."
+        },
+        {
+          "source": "RESOURCE",
+          "severity": "WARNING",
+          "message": "Full table scan over a significant row count while available memory is low \u2014 this increases pressure on the buffer pool and can slow down other concurrent queries, not just this one."
+        }
+      ],
+      "MEDIUM": [
+        {
+          "source": "DOMAIN",
+          "severity": "CRITICAL",
+          "message": "Full table scan on 'employee' in a transactional query. This query path is expected to run frequently \u2014 a missing index here means this scan repeats on every call. Add an index on the lookup column(s) immediately."
+        }
+      ],
+      "HIGH": [
+        {
+          "source": "DOMAIN",
+          "severity": "WARNING",
+          "message": "Full table scan on 'employee' in a transactional query. This query path is expected to run frequently \u2014 a missing index here means this scan repeats on every call. Add an index on the lookup column(s) immediately."
+        }
+      ]
+    },
+    {
+      "id": "A18",
+      "sql": "SELECT e.first_name, e.middle_initial, e.last_name FROM employee e JOIN assignment a ON e.emp_id = a.emp_id JOIN project p ON a.project_no = p.project_no WHERE p.project_name = 'Atlas';",
+      "LOW": [
+        {
+          "source": "DOMAIN",
+          "severity": "INFO",
+          "message": "Query resolves via index 'project_name' with access type 'ref' \u2014 this is the ideal shape for a transactional lookup."
+        }
+      ],
+      "MEDIUM": [
+        {
+          "source": "DOMAIN",
+          "severity": "INFO",
+          "message": "Query resolves via index 'project_name' with access type 'ref' \u2014 this is the ideal shape for a transactional lookup."
+        }
+      ],
+      "HIGH": [
+        {
+          "source": "DOMAIN",
+          "severity": "INFO",
+          "message": "Query resolves via index 'project_name' with access type 'ref' \u2014 this is the ideal shape for a transactional lookup."
+        }
+      ]
+    },
+    {
+      "id": "A19",
+      "sql": "SELECT e.emp_id, e.first_name, e.last_name, p.project_name FROM employee e JOIN assignment a ON e.emp_id = a.emp_id JOIN project p ON a.project_no = p.project_no;",
+      "LOW": [],
+      "MEDIUM": [],
+      "HIGH": []
+    },
+    {
+      "id": "A20",
+      "sql": "SELECT d.dependent_name, d.gender, d.birth_date, d.relationship FROM dependent d JOIN employee e ON d.emp_id = e.emp_id JOIN assignment a ON e.emp_id = a.emp_id JOIN project p ON a.project_no = p.project_no WHERE p.project_name = 'Atlas';",
+      "LOW": [
+        {
+          "source": "DOMAIN",
+          "severity": "INFO",
+          "message": "Query resolves via index 'project_name' with access type 'ref' \u2014 this is the ideal shape for a transactional lookup."
+        }
+      ],
+      "MEDIUM": [
+        {
+          "source": "DOMAIN",
+          "severity": "INFO",
+          "message": "Query resolves via index 'project_name' with access type 'ref' \u2014 this is the ideal shape for a transactional lookup."
+        }
+      ],
+      "HIGH": [
+        {
+          "source": "DOMAIN",
+          "severity": "INFO",
+          "message": "Query resolves via index 'project_name' with access type 'ref' \u2014 this is the ideal shape for a transactional lookup."
+        }
+      ]
+    },
+    {
+      "id": "A21",
+      "sql": "SELECT e.emp_id, e.first_name, e.middle_initial, e.last_name FROM employee e JOIN employee m ON e.manager_id = m.emp_id WHERE m.first_name = 'Kavita' AND m.last_name = 'Rao';",
+      "LOW": [
+        {
+          "source": "DOMAIN",
+          "severity": "CRITICAL",
+          "message": "Full table scan on 'employee' in a transactional query. This query path is expected to run frequently \u2014 a missing index here means this scan repeats on every call. Add an index on the lookup column(s) immediately."
+        },
+        {
+          "source": "RESOURCE",
+          "severity": "WARNING",
+          "message": "Full table scan over a significant row count while available memory is low \u2014 this increases pressure on the buffer pool and can slow down other concurrent queries, not just this one."
+        }
+      ],
+      "MEDIUM": [
+        {
+          "source": "DOMAIN",
+          "severity": "CRITICAL",
+          "message": "Full table scan on 'employee' in a transactional query. This query path is expected to run frequently \u2014 a missing index here means this scan repeats on every call. Add an index on the lookup column(s) immediately."
+        }
+      ],
+      "HIGH": [
+        {
+          "source": "DOMAIN",
+          "severity": "WARNING",
+          "message": "Full table scan on 'employee' in a transactional query. This query path is expected to run frequently \u2014 a missing index here means this scan repeats on every call. Add an index on the lookup column(s) immediately."
+        }
+      ]
+    },
+    {
+      "id": "A22",
+      "sql": "SELECT manager_id, COUNT(emp_id) AS num_employees FROM employee GROUP BY manager_id;",
+      "LOW": [],
+      "MEDIUM": [],
+      "HIGH": []
+    },
+    {
+      "id": "A23",
+      "sql": "SELECT employee.* FROM employee LEFT JOIN dependent ON employee.emp_id = dependent.emp_id WHERE dependent.emp_id IS NULL;",
+      "LOW": [
+        {
+          "source": "DOMAIN",
+          "severity": "CRITICAL",
+          "message": "Full table scan on 'employee' in a transactional query. This query path is expected to run frequently \u2014 a missing index here means this scan repeats on every call. Add an index on the lookup column(s) immediately."
+        },
+        {
+          "source": "RESOURCE",
+          "severity": "WARNING",
+          "message": "Full table scan over a significant row count while available memory is low \u2014 this increases pressure on the buffer pool and can slow down other concurrent queries, not just this one."
+        }
+      ],
+      "MEDIUM": [
+        {
+          "source": "DOMAIN",
+          "severity": "CRITICAL",
+          "message": "Full table scan on 'employee' in a transactional query. This query path is expected to run frequently \u2014 a missing index here means this scan repeats on every call. Add an index on the lookup column(s) immediately."
+        }
+      ],
+      "HIGH": [
+        {
+          "source": "DOMAIN",
+          "severity": "WARNING",
+          "message": "Full table scan on 'employee' in a transactional query. This query path is expected to run frequently \u2014 a missing index here means this scan repeats on every call. Add an index on the lookup column(s) immediately."
+        }
+      ]
+    },
+    {
+      "id": "A24",
+      "sql": "SELECT * FROM employee WHERE emp_id = 'E1001';",
+      "LOW": [
+        {
+          "source": "DOMAIN",
+          "severity": "INFO",
+          "message": "Query resolves via index 'PRIMARY' with access type 'const' \u2014 this is the ideal shape for a transactional lookup."
+        }
+      ],
+      "MEDIUM": [
+        {
+          "source": "DOMAIN",
+          "severity": "INFO",
+          "message": "Query resolves via index 'PRIMARY' with access type 'const' \u2014 this is the ideal shape for a transactional lookup."
+        }
+      ],
+      "HIGH": [
+        {
+          "source": "DOMAIN",
+          "severity": "INFO",
+          "message": "Query resolves via index 'PRIMARY' with access type 'const' \u2014 this is the ideal shape for a transactional lookup."
+        }
+      ]
+    },
+    {
+      "id": "A25",
+      "sql": "SELECT * FROM employee WHERE YEAR(birth_date) > 1965;",
+      "LOW": [
+        {
+          "source": "DOMAIN",
+          "severity": "CRITICAL",
+          "message": "Full table scan on 'employee' in a transactional query. This query path is expected to run frequently \u2014 a missing index here means this scan repeats on every call. Add an index on the lookup column(s) immediately."
+        },
+        {
+          "source": "RESOURCE",
+          "severity": "WARNING",
+          "message": "Full table scan over a significant row count while available memory is low \u2014 this increases pressure on the buffer pool and can slow down other concurrent queries, not just this one."
+        }
+      ],
+      "MEDIUM": [
+        {
+          "source": "DOMAIN",
+          "severity": "CRITICAL",
+          "message": "Full table scan on 'employee' in a transactional query. This query path is expected to run frequently \u2014 a missing index here means this scan repeats on every call. Add an index on the lookup column(s) immediately."
+        }
+      ],
+      "HIGH": [
+        {
+          "source": "DOMAIN",
+          "severity": "WARNING",
+          "message": "Full table scan on 'employee' in a transactional query. This query path is expected to run frequently \u2014 a missing index here means this scan repeats on every call. Add an index on the lookup column(s) immediately."
+        }
+      ]
+    },
+    {
+      "id": "A26",
+      "sql": "SELECT * FROM employee WHERE birth_date >= '1966-01-01';",
+      "LOW": [
+        {
+          "source": "DOMAIN",
+          "severity": "CRITICAL",
+          "message": "Full table scan on 'employee' in a transactional query. This query path is expected to run frequently \u2014 a missing index here means this scan repeats on every call. Add an index on the lookup column(s) immediately."
+        },
+        {
+          "source": "RESOURCE",
+          "severity": "WARNING",
+          "message": "Full table scan over a significant row count while available memory is low \u2014 this increases pressure on the buffer pool and can slow down other concurrent queries, not just this one."
+        }
+      ],
+      "MEDIUM": [
+        {
+          "source": "DOMAIN",
+          "severity": "CRITICAL",
+          "message": "Full table scan on 'employee' in a transactional query. This query path is expected to run frequently \u2014 a missing index here means this scan repeats on every call. Add an index on the lookup column(s) immediately."
+        }
+      ],
+      "HIGH": [
+        {
+          "source": "DOMAIN",
+          "severity": "WARNING",
+          "message": "Full table scan on 'employee' in a transactional query. This query path is expected to run frequently \u2014 a missing index here means this scan repeats on every call. Add an index on the lookup column(s) immediately."
+        }
+      ]
+    }
+  ]
+}

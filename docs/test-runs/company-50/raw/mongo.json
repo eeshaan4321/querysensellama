@@ -1,0 +1,1259 @@
+[
+  {
+    "id": "M1",
+    "question": "Show all customers",
+    "generate": {
+      "status": 200,
+      "ms": 44.6,
+      "response": {
+        "generatedQuery": "db.customers.find({})",
+        "targetDb": "MongoDB",
+        "handledBy": "RULE_ENGINE",
+        "confidence": 0.95,
+        "ruleTrace": {
+          "outcome": "BUILT",
+          "shape": "SELECT",
+          "bindings": [
+            {
+              "phrase": "customers",
+              "kind": "TABLE",
+              "resolvedTo": "customers"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [
+            "Every field named in the question matched a column in the active schema"
+          ],
+          "declineReason": null,
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      }
+    },
+    "analyze": {
+      "status": 200,
+      "ms": 127.4,
+      "response": {
+        "analysis": {
+          "tableName": "customers",
+          "queryType": "FIND",
+          "databaseType": "MongoDB",
+          "estimatedRows": 12000,
+          "filtered": 100.0,
+          "estimatedRowsReturned": 12000,
+          "accessType": "COLLSCAN",
+          "usesIndex": false,
+          "hasFullTableScan": true,
+          "usesFilesort": false,
+          "usesTemporaryTable": false,
+          "keyUsed": null,
+          "tables": [
+            {
+              "tableName": "customers",
+              "accessType": "COLLSCAN",
+              "possibleKeys": null,
+              "keyUsed": null,
+              "keyLength": null,
+              "ref": null,
+              "estimatedRows": 12000,
+              "filtered": 100.0,
+              "extra": null,
+              "fullTableScan": true,
+              "usesIndex": false,
+              "usesFilesort": false,
+              "usesTemporaryTable": false,
+              "readAmplification": 1.0,
+              "estimatedRowsReturned": 12000
+            }
+          ],
+          "hasUnindexedFilter": false,
+          "hasUnanchoredRegex": false,
+          "filteredColumn": null,
+          "orderByColumn": null,
+          "warnings": [
+            "Collection scan detected on 'customers'. MongoDB read every document in this collection. If the query is slow, check whether an index on the filtered fields could reduce the documents examined."
+          ],
+          "explainFailed": false,
+          "planTree": {
+            "kind": "COLLSCAN",
+            "label": "customers",
+            "accessType": "COLLSCAN",
+            "keyUsed": null,
+            "estimatedRows": 12000,
+            "cost": null,
+            "usesFilesort": false,
+            "usesTemporaryTable": false,
+            "children": []
+          },
+          "queryCost": null,
+          "executionMillis": 73,
+          "verdict": {
+            "severity": "INFO",
+            "label": "Looks reasonable",
+            "headline": "Reads the whole customers collection \u2014 about 12,000 documents \u2014 and returns most of them.",
+            "detail": "A collection scan is the efficient plan when a query genuinely needs this much of the collection, so there is little an index could save here."
+          },
+          "readAmplification": 1.0,
+          "fullScanTables": [
+            "customers"
+          ]
+        },
+        "suggestions": [
+          {
+            "message": "Collection scan on 'customers' in a transactional query. This query path is expected to run frequently \u2014 a missing index here means this scan repeats on every call. Add an index on the filtered field(s) immediately.",
+            "severity": "CRITICAL",
+            "source": "DOMAIN",
+            "suggestedChange": null
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "M2",
+    "question": "Show customers in Mumbai",
+    "generate": {
+      "status": 200,
+      "ms": 292.6,
+      "response": {
+        "generatedQuery": "db.customers.find({\"city\": \"Mumbai\"})",
+        "targetDb": "MongoDB",
+        "handledBy": "RULE_ENGINE",
+        "confidence": 0.95,
+        "ruleTrace": {
+          "outcome": "BUILT",
+          "shape": "SELECT",
+          "bindings": [
+            {
+              "phrase": "customers",
+              "kind": "TABLE",
+              "resolvedTo": "customers"
+            },
+            {
+              "phrase": "mumbai",
+              "kind": "FILTER",
+              "resolvedTo": "customers.city"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [
+            "Every field named in the question matched a column in the active schema"
+          ],
+          "declineReason": null,
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      }
+    },
+    "analyze": {
+      "status": 200,
+      "ms": 38.4,
+      "response": {
+        "analysis": {
+          "tableName": "customers",
+          "queryType": "FIND",
+          "databaseType": "MongoDB",
+          "estimatedRows": 12000,
+          "filtered": 9.416666666666666,
+          "estimatedRowsReturned": 1130,
+          "accessType": "COLLSCAN",
+          "usesIndex": false,
+          "hasFullTableScan": true,
+          "usesFilesort": false,
+          "usesTemporaryTable": false,
+          "keyUsed": null,
+          "tables": [
+            {
+              "tableName": "customers",
+              "accessType": "COLLSCAN",
+              "possibleKeys": null,
+              "keyUsed": null,
+              "keyLength": null,
+              "ref": null,
+              "estimatedRows": 12000,
+              "filtered": 9.416666666666666,
+              "extra": null,
+              "fullTableScan": true,
+              "usesIndex": false,
+              "usesFilesort": false,
+              "usesTemporaryTable": false,
+              "readAmplification": 10.619469026548673,
+              "estimatedRowsReturned": 1130
+            }
+          ],
+          "hasUnindexedFilter": true,
+          "hasUnanchoredRegex": false,
+          "filteredColumn": "city",
+          "orderByColumn": null,
+          "warnings": [
+            "Collection scan detected on 'customers'. MongoDB read every document in this collection. If the query is slow, check whether an index on the filtered fields could reduce the documents examined."
+          ],
+          "explainFailed": false,
+          "planTree": {
+            "kind": "COLLSCAN",
+            "label": "customers",
+            "accessType": "COLLSCAN",
+            "keyUsed": null,
+            "estimatedRows": 12000,
+            "cost": null,
+            "usesFilesort": false,
+            "usesTemporaryTable": false,
+            "children": []
+          },
+          "queryCost": null,
+          "executionMillis": 7,
+          "verdict": {
+            "severity": "CRITICAL",
+            "label": "Needs attention",
+            "headline": "Reads the whole customers collection \u2014 about 12,000 documents \u2014 then discards 90.6% of what it read.",
+            "detail": "MongoDB reported no index it could have used for this collection."
+          },
+          "readAmplification": 10.619469026548673,
+          "fullScanTables": [
+            "customers"
+          ]
+        },
+        "suggestions": [
+          {
+            "message": "Collection scan on 'customers' in a transactional query. This query path is expected to run frequently \u2014 a missing index here means this scan repeats on every call. Add an index on the filtered field(s) immediately.",
+            "severity": "CRITICAL",
+            "source": "DOMAIN",
+            "suggestedChange": "db.customers.createIndex({ \"city\": 1 });"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "M3",
+    "question": "How many orders are there",
+    "generate": {
+      "status": 200,
+      "ms": 25.2,
+      "response": {
+        "generatedQuery": "db.orders.countDocuments({})",
+        "targetDb": "MongoDB",
+        "handledBy": "RULE_ENGINE",
+        "confidence": 0.95,
+        "ruleTrace": {
+          "outcome": "BUILT",
+          "shape": "SELECT",
+          "bindings": [
+            {
+              "phrase": "orders",
+              "kind": "TABLE",
+              "resolvedTo": "orders"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [
+            "Every field named in the question matched a column in the active schema"
+          ],
+          "declineReason": null,
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      }
+    },
+    "analyze": {
+      "status": 200,
+      "ms": 30.3,
+      "response": {
+        "analysis": {
+          "tableName": "orders",
+          "queryType": "COUNT",
+          "databaseType": "MongoDB",
+          "estimatedRows": 0,
+          "filtered": null,
+          "estimatedRowsReturned": null,
+          "accessType": "RECORD_STORE_FAST_COUNT",
+          "usesIndex": false,
+          "hasFullTableScan": false,
+          "usesFilesort": false,
+          "usesTemporaryTable": false,
+          "keyUsed": null,
+          "tables": [],
+          "hasUnindexedFilter": false,
+          "hasUnanchoredRegex": false,
+          "filteredColumn": null,
+          "orderByColumn": null,
+          "warnings": [
+            "MongoDB's plan includes a stage QuerySense does not read (RECORD_STORE_FAST_COUNT). Figures that depend on it are left out rather than guessed."
+          ],
+          "explainFailed": false,
+          "planTree": {
+            "kind": "RECORD_STORE_FAST_COUNT",
+            "label": "orders",
+            "accessType": "RECORD_STORE_FAST_COUNT",
+            "keyUsed": null,
+            "estimatedRows": null,
+            "cost": null,
+            "usesFilesort": false,
+            "usesTemporaryTable": false,
+            "children": []
+          },
+          "queryCost": null,
+          "executionMillis": 2,
+          "verdict": {
+            "severity": "INFO",
+            "label": "Nothing to read",
+            "headline": "MongoDB can answer this query without reading any collection.",
+            "detail": "The optimiser resolved it from the query itself, so there is no work to reduce."
+          },
+          "readAmplification": null,
+          "fullScanTables": []
+        },
+        "suggestions": [
+          {
+            "message": "No index used for this lookup on 'orders'. Transactional queries should resolve via an index (ideally _id or a unique index) for consistent, low latency.",
+            "severity": "WARNING",
+            "source": "DOMAIN",
+            "suggestedChange": null
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "M4",
+    "question": "Average price of products",
+    "generate": {
+      "status": 200,
+      "ms": 28.4,
+      "response": {
+        "generatedQuery": "db.products.aggregate([{\"$group\": {\"_id\": null, \"avg_price\": {\"$avg\": \"$price\"}}}])",
+        "targetDb": "MongoDB",
+        "handledBy": "RULE_ENGINE",
+        "confidence": 0.95,
+        "ruleTrace": {
+          "outcome": "BUILT",
+          "shape": "SELECT",
+          "bindings": [
+            {
+              "phrase": "products",
+              "kind": "TABLE",
+              "resolvedTo": "products"
+            },
+            {
+              "phrase": "price",
+              "kind": "AGGREGATE",
+              "resolvedTo": "AVG(products.price)"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [
+            "Every field named in the question matched a column in the active schema"
+          ],
+          "declineReason": null,
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      }
+    },
+    "analyze": {
+      "status": 200,
+      "ms": 105.0,
+      "response": {
+        "analysis": {
+          "tableName": "products",
+          "queryType": "AGGREGATE",
+          "databaseType": "MongoDB",
+          "estimatedRows": 12000,
+          "filtered": null,
+          "estimatedRowsReturned": 1,
+          "accessType": "COLLSCAN",
+          "usesIndex": false,
+          "hasFullTableScan": true,
+          "usesFilesort": false,
+          "usesTemporaryTable": false,
+          "keyUsed": null,
+          "tables": [
+            {
+              "tableName": "products",
+              "accessType": "COLLSCAN",
+              "possibleKeys": null,
+              "keyUsed": null,
+              "keyLength": null,
+              "ref": null,
+              "estimatedRows": 12000,
+              "filtered": null,
+              "extra": null,
+              "fullTableScan": true,
+              "usesIndex": false,
+              "usesFilesort": false,
+              "usesTemporaryTable": false,
+              "readAmplification": null,
+              "estimatedRowsReturned": null
+            }
+          ],
+          "hasUnindexedFilter": false,
+          "hasUnanchoredRegex": false,
+          "filteredColumn": null,
+          "orderByColumn": null,
+          "warnings": [
+            "Collection scan detected on 'products'. MongoDB read every document in this collection. If the query is slow, check whether an index on the filtered fields could reduce the documents examined."
+          ],
+          "explainFailed": false,
+          "planTree": {
+            "kind": "GROUP",
+            "label": "products",
+            "accessType": "GROUP",
+            "keyUsed": null,
+            "estimatedRows": null,
+            "cost": null,
+            "usesFilesort": false,
+            "usesTemporaryTable": false,
+            "children": [
+              {
+                "kind": "COLLSCAN",
+                "label": "products",
+                "accessType": "COLLSCAN",
+                "keyUsed": null,
+                "estimatedRows": null,
+                "cost": null,
+                "usesFilesort": false,
+                "usesTemporaryTable": false,
+                "children": []
+              }
+            ]
+          },
+          "queryCost": null,
+          "executionMillis": 74,
+          "verdict": {
+            "severity": "WARNING",
+            "label": "Could be better",
+            "headline": "Reads the whole products collection \u2014 about 12,000 documents.",
+            "detail": "MongoDB reported no index it could have used for this collection."
+          },
+          "readAmplification": 12000.0,
+          "fullScanTables": [
+            "products"
+          ]
+        },
+        "suggestions": [
+          {
+            "message": "Collection scan on 'products' in a transactional query. This query path is expected to run frequently \u2014 a missing index here means this scan repeats on every call. Add an index on the filtered field(s) immediately.",
+            "severity": "CRITICAL",
+            "source": "DOMAIN",
+            "suggestedChange": null
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "M5",
+    "question": "Top 5 products by price",
+    "generate": {
+      "status": 200,
+      "ms": 271.2,
+      "response": {
+        "generatedQuery": "db.products.find({}).sort({\"price\": -1}).limit(5)",
+        "targetDb": "MongoDB",
+        "handledBy": "RULE_ENGINE",
+        "confidence": 0.95,
+        "ruleTrace": {
+          "outcome": "BUILT",
+          "shape": "SELECT",
+          "bindings": [
+            {
+              "phrase": "products",
+              "kind": "TABLE",
+              "resolvedTo": "products"
+            },
+            {
+              "phrase": "ranking",
+              "kind": "RANKING",
+              "resolvedTo": "price DESC"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [
+            "Every field named in the question matched a column in the active schema"
+          ],
+          "declineReason": null,
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      }
+    },
+    "analyze": {
+      "status": 200,
+      "ms": 24.1,
+      "response": {
+        "analysis": {
+          "tableName": "products",
+          "queryType": "FIND",
+          "databaseType": "MongoDB",
+          "estimatedRows": 12000,
+          "filtered": 100.0,
+          "estimatedRowsReturned": 5,
+          "accessType": "COLLSCAN",
+          "usesIndex": false,
+          "hasFullTableScan": true,
+          "usesFilesort": true,
+          "usesTemporaryTable": false,
+          "keyUsed": null,
+          "tables": [
+            {
+              "tableName": "products",
+              "accessType": "COLLSCAN",
+              "possibleKeys": null,
+              "keyUsed": null,
+              "keyLength": null,
+              "ref": null,
+              "estimatedRows": 12000,
+              "filtered": 100.0,
+              "extra": null,
+              "fullTableScan": true,
+              "usesIndex": false,
+              "usesFilesort": false,
+              "usesTemporaryTable": false,
+              "readAmplification": 1.0,
+              "estimatedRowsReturned": 12000
+            }
+          ],
+          "hasUnindexedFilter": false,
+          "hasUnanchoredRegex": false,
+          "filteredColumn": null,
+          "orderByColumn": "price",
+          "warnings": [
+            "Collection scan detected on 'products'. MongoDB read every document in this collection. If the query is slow, check whether an index on the filtered fields could reduce the documents examined.",
+            "In-memory sort used for 'products'. If the query is slow, check whether an index matching the sort fields could let MongoDB return documents already in order."
+          ],
+          "explainFailed": false,
+          "planTree": {
+            "kind": "SORT",
+            "label": "products",
+            "accessType": "SORT",
+            "keyUsed": null,
+            "estimatedRows": null,
+            "cost": null,
+            "usesFilesort": true,
+            "usesTemporaryTable": false,
+            "children": [
+              {
+                "kind": "COLLSCAN",
+                "label": "products",
+                "accessType": "COLLSCAN",
+                "keyUsed": null,
+                "estimatedRows": 12000,
+                "cost": null,
+                "usesFilesort": false,
+                "usesTemporaryTable": false,
+                "children": []
+              }
+            ]
+          },
+          "queryCost": null,
+          "executionMillis": 14,
+          "verdict": {
+            "severity": "WARNING",
+            "label": "Could be better",
+            "headline": "MongoDB has to sort roughly 12,000 documents in memory after reading them.",
+            "detail": "No index supplied the documents in the order this query needs, so the sorting or grouping work happens as a separate step."
+          },
+          "readAmplification": 2400.0,
+          "fullScanTables": [
+            "products"
+          ]
+        },
+        "suggestions": [
+          {
+            "message": "Collection scan on 'products' in a transactional query. This query path is expected to run frequently \u2014 a missing index here means this scan repeats on every call. Add an index on the filtered field(s) immediately.",
+            "severity": "CRITICAL",
+            "source": "DOMAIN",
+            "suggestedChange": "db.products.createIndex({ \"price\": -1 });"
+          },
+          {
+            "message": "Query sorts documents in memory. Transactional queries should be simple key lookups \u2014 an in-memory sort here suggests this query is doing more than it should on a hot path. Consider an index covering the sort order, or reconsider whether this belongs in the transactional path at all.",
+            "severity": "CRITICAL",
+            "source": "DOMAIN",
+            "suggestedChange": "db.products.createIndex({ \"price\": -1 });"
+          },
+          {
+            "message": "In-memory sort over a significant number of documents. At medium available memory this is usually fine, but worth monitoring if memory pressure increases.",
+            "severity": "WARNING",
+            "source": "RESOURCE",
+            "suggestedChange": "db.products.createIndex({ \"price\": -1 });"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "M6",
+    "question": "How many customers per city",
+    "generate": {
+      "status": 200,
+      "ms": 29.4,
+      "response": {
+        "generatedQuery": "db.customers.aggregate([{\"$group\": {\"_id\": \"$city\", \"count\": {\"$sum\": 1}}}])",
+        "targetDb": "MongoDB",
+        "handledBy": "RULE_ENGINE",
+        "confidence": 0.95,
+        "ruleTrace": {
+          "outcome": "BUILT",
+          "shape": "SELECT + GROUP BY",
+          "bindings": [
+            {
+              "phrase": "customers",
+              "kind": "TABLE",
+              "resolvedTo": "customers"
+            },
+            {
+              "phrase": "city",
+              "kind": "GROUPING",
+              "resolvedTo": "customers.city"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [
+            "Every field named in the question matched a column in the active schema"
+          ],
+          "declineReason": null,
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      }
+    },
+    "analyze": {
+      "status": 200,
+      "ms": 37.6,
+      "response": {
+        "analysis": {
+          "tableName": "customers",
+          "queryType": "AGGREGATE",
+          "databaseType": "MongoDB",
+          "estimatedRows": 12000,
+          "filtered": null,
+          "estimatedRowsReturned": 11,
+          "accessType": "COLLSCAN",
+          "usesIndex": false,
+          "hasFullTableScan": true,
+          "usesFilesort": false,
+          "usesTemporaryTable": false,
+          "keyUsed": null,
+          "tables": [
+            {
+              "tableName": "customers",
+              "accessType": "COLLSCAN",
+              "possibleKeys": null,
+              "keyUsed": null,
+              "keyLength": null,
+              "ref": null,
+              "estimatedRows": 12000,
+              "filtered": null,
+              "extra": null,
+              "fullTableScan": true,
+              "usesIndex": false,
+              "usesFilesort": false,
+              "usesTemporaryTable": false,
+              "readAmplification": null,
+              "estimatedRowsReturned": null
+            }
+          ],
+          "hasUnindexedFilter": false,
+          "hasUnanchoredRegex": false,
+          "filteredColumn": null,
+          "orderByColumn": null,
+          "warnings": [
+            "Collection scan detected on 'customers'. MongoDB read every document in this collection. If the query is slow, check whether an index on the filtered fields could reduce the documents examined."
+          ],
+          "explainFailed": false,
+          "planTree": {
+            "kind": "GROUP",
+            "label": "customers",
+            "accessType": "GROUP",
+            "keyUsed": null,
+            "estimatedRows": null,
+            "cost": null,
+            "usesFilesort": false,
+            "usesTemporaryTable": false,
+            "children": [
+              {
+                "kind": "COLLSCAN",
+                "label": "customers",
+                "accessType": "COLLSCAN",
+                "keyUsed": null,
+                "estimatedRows": null,
+                "cost": null,
+                "usesFilesort": false,
+                "usesTemporaryTable": false,
+                "children": []
+              }
+            ]
+          },
+          "queryCost": null,
+          "executionMillis": 7,
+          "verdict": {
+            "severity": "WARNING",
+            "label": "Could be better",
+            "headline": "Reads the whole customers collection \u2014 about 12,000 documents.",
+            "detail": "MongoDB reported no index it could have used for this collection."
+          },
+          "readAmplification": 1090.909090909091,
+          "fullScanTables": [
+            "customers"
+          ]
+        },
+        "suggestions": [
+          {
+            "message": "Collection scan on 'customers' in a transactional query. This query path is expected to run frequently \u2014 a missing index here means this scan repeats on every call. Add an index on the filtered field(s) immediately.",
+            "severity": "CRITICAL",
+            "source": "DOMAIN",
+            "suggestedChange": null
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "M7",
+    "question": "Show orders with their customers",
+    "generate": {
+      "status": 200,
+      "ms": 10.5,
+      "response": {
+        "generatedQuery": "db.orders.aggregate([{\"$lookup\": {\"from\": \"customers\", \"localField\": \"customer_id\", \"foreignField\": \"_id\", \"as\": \"customers\"}}, {\"$unwind\": \"$customers\"}])",
+        "targetDb": "MongoDB",
+        "handledBy": "RULE_ENGINE",
+        "confidence": 0.95,
+        "ruleTrace": {
+          "outcome": "BUILT",
+          "shape": "SELECT + JOIN",
+          "bindings": [
+            {
+              "phrase": "orders",
+              "kind": "TABLE",
+              "resolvedTo": "orders"
+            },
+            {
+              "phrase": "customers",
+              "kind": "TABLE",
+              "resolvedTo": "customers"
+            }
+          ],
+          "joinEdge": {
+            "fromTable": "orders",
+            "fromColumn": "customer_id",
+            "toTable": "customers",
+            "toColumn": "_id",
+            "origin": "declared foreign key"
+          },
+          "checksPassed": [
+            "Every field named in the question matched a column in the active schema",
+            "Exactly one declared foreign key relates these tables"
+          ],
+          "declineReason": null,
+          "joinEdges": [
+            {
+              "fromTable": "orders",
+              "fromColumn": "customer_id",
+              "toTable": "customers",
+              "toColumn": "_id",
+              "origin": "declared foreign key"
+            }
+          ]
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      }
+    },
+    "analyze": {
+      "status": 200,
+      "ms": 649.5,
+      "response": {
+        "analysis": {
+          "tableName": "orders",
+          "queryType": "AGGREGATE",
+          "databaseType": "MongoDB",
+          "estimatedRows": 12000,
+          "filtered": 100.0,
+          "estimatedRowsReturned": 12000,
+          "accessType": "COLLSCAN",
+          "usesIndex": false,
+          "hasFullTableScan": true,
+          "usesFilesort": false,
+          "usesTemporaryTable": false,
+          "keyUsed": null,
+          "tables": [
+            {
+              "tableName": "orders",
+              "accessType": "COLLSCAN",
+              "possibleKeys": null,
+              "keyUsed": null,
+              "keyLength": null,
+              "ref": null,
+              "estimatedRows": 12000,
+              "filtered": 100.0,
+              "extra": null,
+              "fullTableScan": true,
+              "usesIndex": false,
+              "usesFilesort": false,
+              "usesTemporaryTable": false,
+              "readAmplification": 1.0,
+              "estimatedRowsReturned": 12000
+            }
+          ],
+          "hasUnindexedFilter": false,
+          "hasUnanchoredRegex": false,
+          "filteredColumn": null,
+          "orderByColumn": null,
+          "warnings": [
+            "Collection scan detected on 'orders'. MongoDB read every document in this collection. If the query is slow, check whether an index on the filtered fields could reduce the documents examined."
+          ],
+          "explainFailed": false,
+          "planTree": {
+            "kind": "$lookup",
+            "label": null,
+            "accessType": null,
+            "keyUsed": null,
+            "estimatedRows": null,
+            "cost": null,
+            "usesFilesort": false,
+            "usesTemporaryTable": false,
+            "children": [
+              {
+                "kind": "COLLSCAN",
+                "label": "orders",
+                "accessType": "COLLSCAN",
+                "keyUsed": null,
+                "estimatedRows": 12000,
+                "cost": null,
+                "usesFilesort": false,
+                "usesTemporaryTable": false,
+                "children": []
+              }
+            ]
+          },
+          "queryCost": null,
+          "executionMillis": 617,
+          "verdict": {
+            "severity": "INFO",
+            "label": "Looks reasonable",
+            "headline": "Reads the whole orders collection \u2014 about 12,000 documents \u2014 and returns most of them.",
+            "detail": "A collection scan is the efficient plan when a query genuinely needs this much of the collection, so there is little an index could save here."
+          },
+          "readAmplification": 1.0,
+          "fullScanTables": [
+            "orders"
+          ]
+        },
+        "suggestions": [
+          {
+            "message": "Collection scan on 'orders' in a transactional query. This query path is expected to run frequently \u2014 a missing index here means this scan repeats on every call. Add an index on the filtered field(s) immediately.",
+            "severity": "CRITICAL",
+            "source": "DOMAIN",
+            "suggestedChange": null
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "M8",
+    "question": "Customers without orders",
+    "generate": {
+      "status": 200,
+      "ms": 31.8,
+      "response": {
+        "generatedQuery": "db.customers.aggregate([{\"$lookup\": {\"from\": \"orders\", \"localField\": \"_id\", \"foreignField\": \"customer_id\", \"as\": \"orders\"}}, {\"$match\": {\"orders\": {\"$size\": 0}}}, {\"$project\": {\"orders\": 0}}])",
+        "targetDb": "MongoDB",
+        "handledBy": "RULE_ENGINE",
+        "confidence": 0.95,
+        "ruleTrace": {
+          "outcome": "BUILT",
+          "shape": "SELECT + JOIN (without)",
+          "bindings": [
+            {
+              "phrase": "customers",
+              "kind": "TABLE",
+              "resolvedTo": "customers"
+            },
+            {
+              "phrase": "orders",
+              "kind": "TABLE",
+              "resolvedTo": "orders"
+            }
+          ],
+          "joinEdge": {
+            "fromTable": "orders",
+            "fromColumn": "customer_id",
+            "toTable": "customers",
+            "toColumn": "_id",
+            "origin": "declared foreign key"
+          },
+          "checksPassed": [
+            "Every field named in the question matched a column in the active schema",
+            "Exactly one declared foreign key relates these tables"
+          ],
+          "declineReason": null,
+          "joinEdges": [
+            {
+              "fromTable": "orders",
+              "fromColumn": "customer_id",
+              "toTable": "customers",
+              "toColumn": "_id",
+              "origin": "declared foreign key"
+            }
+          ]
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      }
+    },
+    "analyze": {
+      "status": 200,
+      "ms": 310.1,
+      "response": {
+        "analysis": {
+          "tableName": "customers",
+          "queryType": "AGGREGATE",
+          "databaseType": "MongoDB",
+          "estimatedRows": 24000,
+          "filtered": null,
+          "estimatedRowsReturned": 12000,
+          "accessType": "COLLSCAN",
+          "usesIndex": true,
+          "hasFullTableScan": true,
+          "usesFilesort": false,
+          "usesTemporaryTable": false,
+          "keyUsed": "customer_id_1",
+          "tables": [
+            {
+              "tableName": "customers",
+              "accessType": "COLLSCAN",
+              "possibleKeys": null,
+              "keyUsed": null,
+              "keyLength": null,
+              "ref": null,
+              "estimatedRows": null,
+              "filtered": null,
+              "extra": null,
+              "fullTableScan": true,
+              "usesIndex": false,
+              "usesFilesort": false,
+              "usesTemporaryTable": false,
+              "readAmplification": null,
+              "estimatedRowsReturned": null
+            },
+            {
+              "tableName": "orders",
+              "accessType": "EQ_LOOKUP",
+              "possibleKeys": null,
+              "keyUsed": "customer_id_1",
+              "keyLength": null,
+              "ref": null,
+              "estimatedRows": null,
+              "filtered": null,
+              "extra": null,
+              "fullTableScan": false,
+              "usesIndex": true,
+              "usesFilesort": false,
+              "usesTemporaryTable": false,
+              "readAmplification": null,
+              "estimatedRowsReturned": null
+            }
+          ],
+          "hasUnindexedFilter": false,
+          "hasUnanchoredRegex": false,
+          "filteredColumn": null,
+          "orderByColumn": null,
+          "warnings": [
+            "Collection scan detected on 'customers'. MongoDB read every document in this collection. If the query is slow, check whether an index on the filtered fields could reduce the documents examined."
+          ],
+          "explainFailed": false,
+          "planTree": {
+            "kind": "$project",
+            "label": null,
+            "accessType": null,
+            "keyUsed": null,
+            "estimatedRows": null,
+            "cost": null,
+            "usesFilesort": false,
+            "usesTemporaryTable": false,
+            "children": [
+              {
+                "kind": "$match",
+                "label": null,
+                "accessType": null,
+                "keyUsed": null,
+                "estimatedRows": null,
+                "cost": null,
+                "usesFilesort": false,
+                "usesTemporaryTable": false,
+                "children": [
+                  {
+                    "kind": "EQ_LOOKUP",
+                    "label": "customer_id_1",
+                    "accessType": "EQ_LOOKUP",
+                    "keyUsed": "customer_id_1",
+                    "estimatedRows": null,
+                    "cost": null,
+                    "usesFilesort": false,
+                    "usesTemporaryTable": false,
+                    "children": [
+                      {
+                        "kind": "COLLSCAN",
+                        "label": "customers",
+                        "accessType": "COLLSCAN",
+                        "keyUsed": null,
+                        "estimatedRows": null,
+                        "cost": null,
+                        "usesFilesort": false,
+                        "usesTemporaryTable": false,
+                        "children": []
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "queryCost": null,
+          "executionMillis": 278,
+          "verdict": {
+            "severity": "INFO",
+            "label": "Looks efficient",
+            "headline": "Reads all an unreported number of documents of customers, which is normal at this size.",
+            "detail": null
+          },
+          "readAmplification": 2.0,
+          "fullScanTables": [
+            "customers"
+          ]
+        },
+        "suggestions": [
+          {
+            "message": "Collection scan on 'customers' in a transactional query. This query path is expected to run frequently \u2014 a missing index here means this scan repeats on every call. Add an index on the filtered field(s) immediately.",
+            "severity": "CRITICAL",
+            "source": "DOMAIN",
+            "suggestedChange": null
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "M9",
+    "question": "Which customers have placed more than 3 orders",
+    "generate": {
+      "status": 200,
+      "ms": 516.4,
+      "response": {
+        "generatedQuery": "db.customers.aggregate([{\"$lookup\": {\"from\": \"orders\", \"localField\": \"_id\", \"foreignField\": \"customer_id\", \"as\": \"orders\"}}, {\"$unwind\": \"$orders\"}, {\"$group\": {\"_id\": {\"email\": \"$email\", \"_id\": \"$_id\"}, \"count_orders__id\": {\"$sum\": 1}}}, {\"$match\": {\"count_orders__id\": {\"$gt\": 3}}}])",
+        "targetDb": "MongoDB",
+        "handledBy": "RULE_ENGINE",
+        "confidence": 0.95,
+        "ruleTrace": {
+          "outcome": "BUILT",
+          "shape": "SELECT + JOIN + GROUP BY + HAVING",
+          "bindings": [
+            {
+              "phrase": "customers",
+              "kind": "TABLE",
+              "resolvedTo": "customers"
+            },
+            {
+              "phrase": "orders",
+              "kind": "TABLE",
+              "resolvedTo": "orders"
+            },
+            {
+              "phrase": "more than 3 orders",
+              "kind": "COMPARISON",
+              "resolvedTo": "COUNT(orders._id) > 3"
+            }
+          ],
+          "joinEdge": {
+            "fromTable": "orders",
+            "fromColumn": "customer_id",
+            "toTable": "customers",
+            "toColumn": "_id",
+            "origin": "declared foreign key"
+          },
+          "checksPassed": [
+            "Every field named in the question matched a column in the active schema",
+            "Exactly one declared foreign key relates these tables"
+          ],
+          "declineReason": null,
+          "joinEdges": [
+            {
+              "fromTable": "orders",
+              "fromColumn": "customer_id",
+              "toTable": "customers",
+              "toColumn": "_id",
+              "origin": "declared foreign key"
+            }
+          ]
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      }
+    },
+    "analyze": {
+      "status": 200,
+      "ms": 1754.7,
+      "response": {
+        "analysis": {
+          "tableName": "customers",
+          "queryType": "AGGREGATE",
+          "databaseType": "MongoDB",
+          "estimatedRows": 12000,
+          "filtered": 100.0,
+          "estimatedRowsReturned": 12000,
+          "accessType": "COLLSCAN",
+          "usesIndex": false,
+          "hasFullTableScan": true,
+          "usesFilesort": false,
+          "usesTemporaryTable": false,
+          "keyUsed": null,
+          "tables": [
+            {
+              "tableName": "customers",
+              "accessType": "COLLSCAN",
+              "possibleKeys": null,
+              "keyUsed": null,
+              "keyLength": null,
+              "ref": null,
+              "estimatedRows": 12000,
+              "filtered": 100.0,
+              "extra": null,
+              "fullTableScan": true,
+              "usesIndex": false,
+              "usesFilesort": false,
+              "usesTemporaryTable": false,
+              "readAmplification": 1.0,
+              "estimatedRowsReturned": 12000
+            }
+          ],
+          "hasUnindexedFilter": false,
+          "hasUnanchoredRegex": false,
+          "filteredColumn": null,
+          "orderByColumn": null,
+          "warnings": [
+            "Collection scan detected on 'customers'. MongoDB read every document in this collection. If the query is slow, check whether an index on the filtered fields could reduce the documents examined."
+          ],
+          "explainFailed": false,
+          "planTree": {
+            "kind": "$match",
+            "label": null,
+            "accessType": null,
+            "keyUsed": null,
+            "estimatedRows": null,
+            "cost": null,
+            "usesFilesort": false,
+            "usesTemporaryTable": false,
+            "children": [
+              {
+                "kind": "$group",
+                "label": null,
+                "accessType": null,
+                "keyUsed": null,
+                "estimatedRows": null,
+                "cost": null,
+                "usesFilesort": false,
+                "usesTemporaryTable": false,
+                "children": [
+                  {
+                    "kind": "$lookup",
+                    "label": null,
+                    "accessType": null,
+                    "keyUsed": null,
+                    "estimatedRows": null,
+                    "cost": null,
+                    "usesFilesort": false,
+                    "usesTemporaryTable": false,
+                    "children": [
+                      {
+                        "kind": "PROJECTION_SIMPLE",
+                        "label": "customers",
+                        "accessType": "PROJECTION_SIMPLE",
+                        "keyUsed": null,
+                        "estimatedRows": null,
+                        "cost": null,
+                        "usesFilesort": false,
+                        "usesTemporaryTable": false,
+                        "children": [
+                          {
+                            "kind": "COLLSCAN",
+                            "label": "customers",
+                            "accessType": "COLLSCAN",
+                            "keyUsed": null,
+                            "estimatedRows": 12000,
+                            "cost": null,
+                            "usesFilesort": false,
+                            "usesTemporaryTable": false,
+                            "children": []
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "queryCost": null,
+          "executionMillis": 1743,
+          "verdict": {
+            "severity": "INFO",
+            "label": "Looks reasonable",
+            "headline": "Reads the whole customers collection \u2014 about 12,000 documents \u2014 and returns most of them.",
+            "detail": "A collection scan is the efficient plan when a query genuinely needs this much of the collection, so there is little an index could save here."
+          },
+          "readAmplification": 1.0,
+          "fullScanTables": [
+            "customers"
+          ]
+        },
+        "suggestions": [
+          {
+            "message": "Collection scan on 'customers' in a transactional query. This query path is expected to run frequently \u2014 a missing index here means this scan repeats on every call. Add an index on the filtered field(s) immediately.",
+            "severity": "CRITICAL",
+            "source": "DOMAIN",
+            "suggestedChange": null
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "M10",
+    "question": "Delete all orders",
+    "generate": {
+      "status": 200,
+      "ms": 352.4,
+      "response": {
+        "generatedQuery": "db.orders.deleteMany({})",
+        "targetDb": "MongoDB",
+        "handledBy": "OLLAMA",
+        "confidence": 0.2,
+        "ruleTrace": {
+          "outcome": "DECLINED",
+          "shape": null,
+          "bindings": [
+            {
+              "phrase": "orders",
+              "kind": "TABLE",
+              "resolvedTo": "orders"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [],
+          "declineReason": "The question asks to delete rows without saying which ones.",
+          "joinEdges": []
+        },
+        "schemaWarning": "This query would change every document of 'orders'. QuerySense does not suggest that; say which documents you mean.",
+        "interpretations": []
+      }
+    }
+  }
+]

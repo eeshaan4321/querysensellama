@@ -1,0 +1,1353 @@
+[
+  {
+    "id": "A1",
+    "source": "Q2 (rule engine)",
+    "kind": "full scan, filter",
+    "sql": "SELECT * FROM employee WHERE salary > 100000;",
+    "advisorBefore": [
+      {
+        "type": "INDEX",
+        "targetTable": "employee",
+        "targetColumn": "salary",
+        "summary": "To answer this, the database is reading all 12,398 rows of employee and checking each one, because nothing indexes salary. An index works like the index at the back of a book: it lets the database jump straight to the matching rows instead of reading everything.",
+        "reason": "Full table scan detected (accessType=ALL) with no index in use on 'salary' \u2014 the same signal reported by EXPLAIN.",
+        "suggestedAction": "CREATE INDEX idx_employee_salary ON employee(salary);"
+      }
+    ],
+    "indexDdl": [
+      "CREATE INDEX idx_employee_salary ON employee(salary)"
+    ],
+    "indexesBefore": "employee\t0\tPRIMARY\t1\temp_id\tA\t14217\tNULL\tNULL\t\tBTREE\t\t\tYES\tNULL\nemployee\t1\tfk_employee_0\t1\tmanager_id\tA\t6000\tNULL\tNULL\tYES\tBTREE\t\t\tYES\tNULL\nemployee\t1\tfk_employee_1\t1\tdept_no\tA\t7583\tNULL\tNULL\t\tBTREE\t\t\tYES\tNULL\n",
+    "before": {
+      "accessType": "ALL",
+      "keyUsed": null,
+      "estimatedRows": 12398,
+      "queryCost": 1280.05,
+      "rawCost": 1280.05,
+      "verdict": "CRITICAL",
+      "headline": "Reads the whole employee table \u2014 about 12,398 rows \u2014 then discards 66.7% of what it read.",
+      "advisor": [
+        {
+          "type": "INDEX",
+          "targetTable": "employee",
+          "targetColumn": "salary",
+          "summary": "To answer this, the database is reading all 12,398 rows of employee and checking each one, because nothing indexes salary. An index works like the index at the back of a book: it lets the database jump straight to the matching rows instead of reading everything.",
+          "reason": "Full table scan detected (accessType=ALL) with no index in use on 'salary' \u2014 the same signal reported by EXPLAIN.",
+          "suggestedAction": "CREATE INDEX idx_employee_salary ON employee(salary);"
+        }
+      ],
+      "advisorCount": 1,
+      "rawExplain": [
+        {
+          "id": "1",
+          "select_type": "SIMPLE",
+          "table": "employee",
+          "partitions": "NULL",
+          "type": "ALL",
+          "possible_keys": "NULL",
+          "key": "NULL",
+          "key_len": "NULL",
+          "ref": "NULL",
+          "rows": "12398",
+          "filtered": "33.33",
+          "Extra": "Using where"
+        }
+      ],
+      "explainAnalyze": "-> Filter: (employee.salary > 100000)  (cost=1280 rows=4132) (actual time=1.72..9.14 rows=2 loops=1)\n    -> Table scan on employee  (cost=1280 rows=12398) (actual time=0.172..8 rows=12000 loops=1)\n\n",
+      "timing": {
+        "method": "3 warm-up + 10 timed runs in one mysql client session; each = SYSDATE(6) difference around the statement, including result transfer to the client",
+        "times_ms": [
+          5.499,
+          6.76,
+          4.479,
+          4.396,
+          5.169,
+          4.205,
+          4.838,
+          4.936,
+          7.418,
+          4.492
+        ],
+        "median_ms": 4.8870000000000005,
+        "min_ms": 4.205,
+        "max_ms": 7.418,
+        "error": null
+      }
+    },
+    "createError": null,
+    "after": {
+      "accessType": "range",
+      "keyUsed": "idx_employee_salary",
+      "estimatedRows": 2,
+      "queryCost": 1.16,
+      "rawCost": 1.16,
+      "verdict": "INFO",
+      "headline": "Uses the idx_employee_salary index to find rows instead of reading the whole table.",
+      "advisor": [],
+      "advisorCount": 0,
+      "rawExplain": [
+        {
+          "id": "1",
+          "select_type": "SIMPLE",
+          "table": "employee",
+          "partitions": "NULL",
+          "type": "range",
+          "possible_keys": "idx_employee_salary",
+          "key": "idx_employee_salary",
+          "key_len": "5",
+          "ref": "NULL",
+          "rows": "2",
+          "filtered": "100.00",
+          "Extra": "Using index condition"
+        }
+      ],
+      "explainAnalyze": "-> Index range scan on employee using idx_employee_salary over (100000 < salary), with index condition: (employee.salary > 100000)  (cost=1.16 rows=2) (actual time=0.0338..0.0355 rows=2 loops=1)\n\n",
+      "timing": {
+        "method": "3 warm-up + 10 timed runs in one mysql client session; each = SYSDATE(6) difference around the statement, including result transfer to the client",
+        "times_ms": [
+          0.18,
+          0.176,
+          0.179,
+          0.158,
+          0.233,
+          0.181,
+          0.292,
+          0.17,
+          0.379,
+          0.442
+        ],
+        "median_ms": 0.1805,
+        "min_ms": 0.158,
+        "max_ms": 0.442,
+        "error": null
+      }
+    },
+    "dropError": null,
+    "indexesAfterDrop": "employee\t0\tPRIMARY\t1\temp_id\tA\t11097\tNULL\tNULL\t\tBTREE\t\t\tYES\tNULL\nemployee\t1\tfk_employee_0\t1\tmanager_id\tA\t6000\tNULL\tNULL\tYES\tBTREE\t\t\tYES\tNULL\nemployee\t1\tfk_employee_1\t1\tdept_no\tA\t7583\tNULL\tNULL\t\tBTREE\t\t\tYES\tNULL\n",
+    "restored": false
+  },
+  {
+    "id": "A2",
+    "source": "Q4 (rule engine)",
+    "kind": "full scan, BETWEEN",
+    "sql": "SELECT * FROM employee WHERE salary BETWEEN 100000 AND 200000;",
+    "advisorBefore": [
+      {
+        "type": "INDEX",
+        "targetTable": "employee",
+        "targetColumn": "salary",
+        "summary": "To answer this, the database is reading all 11,097 rows of employee and checking each one, because nothing indexes salary. An index works like the index at the back of a book: it lets the database jump straight to the matching rows instead of reading everything.",
+        "reason": "Full table scan detected (accessType=ALL) with no index in use on 'salary' \u2014 the same signal reported by EXPLAIN.",
+        "suggestedAction": "CREATE INDEX idx_employee_salary ON employee(salary);"
+      }
+    ],
+    "indexDdl": [
+      "CREATE INDEX idx_employee_salary ON employee(salary)"
+    ],
+    "indexesBefore": "employee\t0\tPRIMARY\t1\temp_id\tA\t11097\tNULL\tNULL\t\tBTREE\t\t\tYES\tNULL\nemployee\t1\tfk_employee_0\t1\tmanager_id\tA\t6000\tNULL\tNULL\tYES\tBTREE\t\t\tYES\tNULL\nemployee\t1\tfk_employee_1\t1\tdept_no\tA\t7583\tNULL\tNULL\t\tBTREE\t\t\tYES\tNULL\n",
+    "before": {
+      "accessType": "ALL",
+      "keyUsed": null,
+      "estimatedRows": 11097,
+      "queryCost": 1149.95,
+      "rawCost": 1149.95,
+      "verdict": "CRITICAL",
+      "headline": "Reads the whole employee table \u2014 about 11,097 rows \u2014 then discards 88.9% of what it read.",
+      "advisor": [
+        {
+          "type": "INDEX",
+          "targetTable": "employee",
+          "targetColumn": "salary",
+          "summary": "To answer this, the database is reading all 11,097 rows of employee and checking each one, because nothing indexes salary. An index works like the index at the back of a book: it lets the database jump straight to the matching rows instead of reading everything.",
+          "reason": "Full table scan detected (accessType=ALL) with no index in use on 'salary' \u2014 the same signal reported by EXPLAIN.",
+          "suggestedAction": "CREATE INDEX idx_employee_salary ON employee(salary);"
+        }
+      ],
+      "advisorCount": 1,
+      "rawExplain": [
+        {
+          "id": "1",
+          "select_type": "SIMPLE",
+          "table": "employee",
+          "partitions": "NULL",
+          "type": "ALL",
+          "possible_keys": "NULL",
+          "key": "NULL",
+          "key_len": "NULL",
+          "ref": "NULL",
+          "rows": "11097",
+          "filtered": "11.11",
+          "Extra": "Using where"
+        }
+      ],
+      "explainAnalyze": "-> Filter: (employee.salary between 100000 and 200000)  (cost=1150 rows=1233) (actual time=0.811..4.21 rows=2 loops=1)\n    -> Table scan on employee  (cost=1150 rows=11097) (actual time=0.0985..3.52 rows=12000 loops=1)\n\n",
+      "timing": {
+        "method": "3 warm-up + 10 timed runs in one mysql client session; each = SYSDATE(6) difference around the statement, including result transfer to the client",
+        "times_ms": [
+          8.301,
+          5.049,
+          5.913,
+          4.901,
+          6.873,
+          5.476,
+          3.727,
+          3.609,
+          6.382,
+          5.328
+        ],
+        "median_ms": 5.402,
+        "min_ms": 3.609,
+        "max_ms": 8.301,
+        "error": null
+      }
+    },
+    "createError": null,
+    "after": {
+      "accessType": "range",
+      "keyUsed": "idx_employee_salary",
+      "estimatedRows": 2,
+      "queryCost": 1.16,
+      "rawCost": 1.16,
+      "verdict": "INFO",
+      "headline": "Uses the idx_employee_salary index to find rows instead of reading the whole table.",
+      "advisor": [],
+      "advisorCount": 0,
+      "rawExplain": [
+        {
+          "id": "1",
+          "select_type": "SIMPLE",
+          "table": "employee",
+          "partitions": "NULL",
+          "type": "range",
+          "possible_keys": "idx_employee_salary",
+          "key": "idx_employee_salary",
+          "key_len": "5",
+          "ref": "NULL",
+          "rows": "2",
+          "filtered": "100.00",
+          "Extra": "Using index condition"
+        }
+      ],
+      "explainAnalyze": "-> Index range scan on employee using idx_employee_salary over (100000 <= salary <= 200000), with index condition: (employee.salary between 100000 and 200000)  (cost=1.16 rows=2) (actual time=0.0217..0.023 rows=2 loops=1)\n\n",
+      "timing": {
+        "method": "3 warm-up + 10 timed runs in one mysql client session; each = SYSDATE(6) difference around the statement, including result transfer to the client",
+        "times_ms": [
+          0.224,
+          0.264,
+          0.251,
+          0.265,
+          0.36,
+          0.301,
+          0.326,
+          0.618,
+          0.719,
+          0.615
+        ],
+        "median_ms": 0.3135,
+        "min_ms": 0.224,
+        "max_ms": 0.719,
+        "error": null
+      }
+    },
+    "dropError": null,
+    "indexesAfterDrop": "employee\t0\tPRIMARY\t1\temp_id\tA\t11006\tNULL\tNULL\t\tBTREE\t\t\tYES\tNULL\nemployee\t1\tfk_employee_0\t1\tmanager_id\tA\t6000\tNULL\tNULL\tYES\tBTREE\t\t\tYES\tNULL\nemployee\t1\tfk_employee_1\t1\tdept_no\tA\t7583\tNULL\tNULL\t\tBTREE\t\t\tYES\tNULL\n",
+    "restored": false
+  },
+  {
+    "id": "A3",
+    "source": "Q5 (rule engine)",
+    "kind": "full scan, text filter",
+    "sql": "SELECT * FROM project WHERE site = 'pune';",
+    "advisorBefore": [
+      {
+        "type": "INDEX",
+        "targetTable": "project",
+        "targetColumn": "site",
+        "summary": "To answer this, the database is reading all 11,704 rows of project and checking each one, because nothing indexes site. An index works like the index at the back of a book: it lets the database jump straight to the matching rows instead of reading everything.",
+        "reason": "Full table scan detected (accessType=ALL) with no index in use on 'site' \u2014 the same signal reported by EXPLAIN.",
+        "suggestedAction": "CREATE INDEX idx_project_site ON project(site);"
+      }
+    ],
+    "indexDdl": [
+      "CREATE INDEX idx_project_site ON project(site)"
+    ],
+    "indexesBefore": "project\t0\tPRIMARY\t1\tproject_no\tA\t11704\tNULL\tNULL\t\tBTREE\t\t\tYES\tNULL\nproject\t0\tproject_name\t1\tproject_name\tA\t11704\tNULL\tNULL\t\tBTREE\t\t\tYES\tNULL\nproject\t1\tfk_project_4\t1\tdept_no\tA\t7565\tNULL\tNULL\t\tBTREE\t\t\tYES\tNULL\n",
+    "before": {
+      "accessType": "ALL",
+      "keyUsed": null,
+      "estimatedRows": 11704,
+      "queryCost": 1194.65,
+      "rawCost": 1194.65,
+      "verdict": "CRITICAL",
+      "headline": "Reads the whole project table \u2014 about 11,704 rows \u2014 then discards 90% of what it read.",
+      "advisor": [
+        {
+          "type": "INDEX",
+          "targetTable": "project",
+          "targetColumn": "site",
+          "summary": "To answer this, the database is reading all 11,704 rows of project and checking each one, because nothing indexes site. An index works like the index at the back of a book: it lets the database jump straight to the matching rows instead of reading everything.",
+          "reason": "Full table scan detected (accessType=ALL) with no index in use on 'site' \u2014 the same signal reported by EXPLAIN.",
+          "suggestedAction": "CREATE INDEX idx_project_site ON project(site);"
+        }
+      ],
+      "advisorCount": 1,
+      "rawExplain": [
+        {
+          "id": "1",
+          "select_type": "SIMPLE",
+          "table": "project",
+          "partitions": "NULL",
+          "type": "ALL",
+          "possible_keys": "NULL",
+          "key": "NULL",
+          "key_len": "NULL",
+          "ref": "NULL",
+          "rows": "11704",
+          "filtered": "10.00",
+          "Extra": "Using where"
+        }
+      ],
+      "explainAnalyze": "-> Filter: (project.site = 'pune')  (cost=1195 rows=1170) (actual time=0.138..2.78 rows=2 loops=1)\n    -> Table scan on project  (cost=1195 rows=11704) (actual time=0.134..2.19 rows=12000 loops=1)\n\n",
+      "timing": {
+        "method": "3 warm-up + 10 timed runs in one mysql client session; each = SYSDATE(6) difference around the statement, including result transfer to the client",
+        "times_ms": [
+          2.223,
+          2.08,
+          3.381,
+          2.498,
+          2.041,
+          2.611,
+          2.124,
+          3.386,
+          2.32,
+          2.934
+        ],
+        "median_ms": 2.409,
+        "min_ms": 2.041,
+        "max_ms": 3.386,
+        "error": null
+      }
+    },
+    "createError": null,
+    "after": {
+      "accessType": "ref",
+      "keyUsed": "idx_project_site",
+      "estimatedRows": 2,
+      "queryCost": 0.7,
+      "rawCost": 0.7,
+      "verdict": "INFO",
+      "headline": "Uses the idx_project_site index to find rows instead of reading the whole table.",
+      "advisor": [],
+      "advisorCount": 0,
+      "rawExplain": [
+        {
+          "id": "1",
+          "select_type": "SIMPLE",
+          "table": "project",
+          "partitions": "NULL",
+          "type": "ref",
+          "possible_keys": "idx_project_site",
+          "key": "idx_project_site",
+          "key_len": "83",
+          "ref": "const",
+          "rows": "2",
+          "filtered": "100.00",
+          "Extra": "NULL"
+        }
+      ],
+      "explainAnalyze": "-> Index lookup on project using idx_project_site (site = 'pune')  (cost=0.7 rows=2) (actual time=0.0187..0.0204 rows=2 loops=1)\n\n",
+      "timing": {
+        "method": "3 warm-up + 10 timed runs in one mysql client session; each = SYSDATE(6) difference around the statement, including result transfer to the client",
+        "times_ms": [
+          0.195,
+          0.174,
+          0.253,
+          0.31,
+          0.234,
+          0.218,
+          0.277,
+          0.245,
+          0.338,
+          0.284
+        ],
+        "median_ms": 0.249,
+        "min_ms": 0.174,
+        "max_ms": 0.338,
+        "error": null
+      }
+    },
+    "dropError": null,
+    "indexesAfterDrop": "project\t0\tPRIMARY\t1\tproject_no\tA\t11874\tNULL\tNULL\t\tBTREE\t\t\tYES\tNULL\nproject\t0\tproject_name\t1\tproject_name\tA\t11611\tNULL\tNULL\t\tBTREE\t\t\tYES\tNULL\nproject\t1\tfk_project_4\t1\tdept_no\tA\t7565\tNULL\tNULL\t\tBTREE\t\t\tYES\tNULL\n",
+    "restored": false
+  },
+  {
+    "id": "A4",
+    "source": "Q7 (rule engine)",
+    "kind": "ref lookup on FK index",
+    "sql": "SELECT * FROM employee WHERE dept_no = 5;",
+    "advisorBefore": [],
+    "indexDdl": [],
+    "skipped": "advisor recommended no runnable CREATE INDEX"
+  },
+  {
+    "id": "A5",
+    "source": "Q8 (rule engine)",
+    "kind": "full scan, text filter",
+    "sql": "SELECT * FROM dependent WHERE relationship = 'spouse';",
+    "advisorBefore": [
+      {
+        "type": "INDEX",
+        "targetTable": "dependent",
+        "targetColumn": "relationship",
+        "summary": "To answer this, the database is reading all 11,642 rows of dependent and checking each one, because nothing indexes relationship. An index works like the index at the back of a book: it lets the database jump straight to the matching rows instead of reading everything.",
+        "reason": "Full table scan detected (accessType=ALL) with no index in use on 'relationship' \u2014 the same signal reported by EXPLAIN.",
+        "suggestedAction": "CREATE INDEX idx_dependent_relationship ON dependent(relationship);"
+      }
+    ],
+    "indexDdl": [
+      "CREATE INDEX idx_dependent_relationship ON dependent(relationship)"
+    ],
+    "indexesBefore": "dependent\t0\tPRIMARY\t1\temp_id\tA\t7134\tNULL\tNULL\t\tBTREE\t\t\tYES\tNULL\ndependent\t0\tPRIMARY\t2\tdependent_name\tA\t12084\tNULL\tNULL\t\tBTREE\t\t\tYES\tNULL\n",
+    "before": {
+      "accessType": "ALL",
+      "keyUsed": null,
+      "estimatedRows": 11642,
+      "queryCost": 1188.45,
+      "rawCost": 1188.45,
+      "verdict": "CRITICAL",
+      "headline": "Reads the whole dependent table \u2014 about 11,642 rows \u2014 then discards 90% of what it read.",
+      "advisor": [
+        {
+          "type": "INDEX",
+          "targetTable": "dependent",
+          "targetColumn": "relationship",
+          "summary": "To answer this, the database is reading all 11,642 rows of dependent and checking each one, because nothing indexes relationship. An index works like the index at the back of a book: it lets the database jump straight to the matching rows instead of reading everything.",
+          "reason": "Full table scan detected (accessType=ALL) with no index in use on 'relationship' \u2014 the same signal reported by EXPLAIN.",
+          "suggestedAction": "CREATE INDEX idx_dependent_relationship ON dependent(relationship);"
+        }
+      ],
+      "advisorCount": 1,
+      "rawExplain": [
+        {
+          "id": "1",
+          "select_type": "SIMPLE",
+          "table": "dependent",
+          "partitions": "NULL",
+          "type": "ALL",
+          "possible_keys": "NULL",
+          "key": "NULL",
+          "key_len": "NULL",
+          "ref": "NULL",
+          "rows": "11642",
+          "filtered": "10.00",
+          "Extra": "Using where"
+        }
+      ],
+      "explainAnalyze": "-> Filter: (dependent.relationship = 'spouse')  (cost=1188 rows=1164) (actual time=0.765..3.7 rows=3 loops=1)\n    -> Table scan on dependent  (cost=1188 rows=11642) (actual time=0.142..3.01 rows=12000 loops=1)\n\n",
+      "timing": {
+        "method": "3 warm-up + 10 timed runs in one mysql client session; each = SYSDATE(6) difference around the statement, including result transfer to the client",
+        "times_ms": [
+          3.495,
+          3.42,
+          2.745,
+          3.586,
+          3.127,
+          2.932,
+          3.13,
+          4.352,
+          2.658,
+          3.642
+        ],
+        "median_ms": 3.275,
+        "min_ms": 2.658,
+        "max_ms": 4.352,
+        "error": null
+      }
+    },
+    "createError": null,
+    "after": {
+      "accessType": "ref",
+      "keyUsed": "idx_dependent_relationship",
+      "estimatedRows": 3,
+      "queryCost": 1.05,
+      "rawCost": 1.05,
+      "verdict": "INFO",
+      "headline": "Uses the idx_dependent_relationship index to find rows instead of reading the whole table.",
+      "advisor": [],
+      "advisorCount": 0,
+      "rawExplain": [
+        {
+          "id": "1",
+          "select_type": "SIMPLE",
+          "table": "dependent",
+          "partitions": "NULL",
+          "type": "ref",
+          "possible_keys": "idx_dependent_relationship",
+          "key": "idx_dependent_relationship",
+          "key_len": "43",
+          "ref": "const",
+          "rows": "3",
+          "filtered": "100.00",
+          "Extra": "NULL"
+        }
+      ],
+      "explainAnalyze": "-> Index lookup on dependent using idx_dependent_relationship (relationship = 'spouse')  (cost=1.05 rows=3) (actual time=0.0491..0.0507 rows=3 loops=1)\n\n",
+      "timing": {
+        "method": "3 warm-up + 10 timed runs in one mysql client session; each = SYSDATE(6) difference around the statement, including result transfer to the client",
+        "times_ms": [
+          0.225,
+          0.212,
+          0.2,
+          0.2,
+          0.202,
+          0.199,
+          0.261,
+          0.209,
+          0.191,
+          0.182
+        ],
+        "median_ms": 0.201,
+        "min_ms": 0.182,
+        "max_ms": 0.261,
+        "error": null
+      }
+    },
+    "dropError": null,
+    "indexesAfterDrop": "dependent\t0\tPRIMARY\t1\temp_id\tA\t7223\tNULL\tNULL\t\tBTREE\t\t\tYES\tNULL\ndependent\t0\tPRIMARY\t2\tdependent_name\tA\t11622\tNULL\tNULL\t\tBTREE\t\t\tYES\tNULL\n",
+    "restored": false
+  },
+  {
+    "id": "A6",
+    "source": "Q9 (rule engine)",
+    "kind": "COUNT(*)",
+    "sql": "SELECT COUNT(*) FROM employee;",
+    "advisorBefore": [],
+    "indexDdl": [],
+    "skipped": "advisor recommended no runnable CREATE INDEX"
+  },
+  {
+    "id": "A7",
+    "source": "Q11 (rule engine)",
+    "kind": "aggregate, full scan",
+    "sql": "SELECT AVG(salary) FROM employee;",
+    "advisorBefore": [],
+    "indexDdl": [],
+    "skipped": "advisor recommended no runnable CREATE INDEX"
+  },
+  {
+    "id": "A8",
+    "source": "Q15 (rule engine)",
+    "kind": "aggregate, full scan",
+    "sql": "SELECT SUM(hours) FROM assignment;",
+    "advisorBefore": [],
+    "indexDdl": [],
+    "skipped": "advisor recommended no runnable CREATE INDEX"
+  },
+  {
+    "id": "A9",
+    "source": "Q16 (rule engine)",
+    "kind": "GROUP BY on indexed column",
+    "sql": "SELECT dept_no, COUNT(*) FROM employee GROUP BY dept_no;",
+    "advisorBefore": [],
+    "indexDdl": [],
+    "skipped": "advisor recommended no runnable CREATE INDEX"
+  },
+  {
+    "id": "A10",
+    "source": "Q17 (rule engine)",
+    "kind": "GROUP BY on indexed column",
+    "sql": "SELECT dept_no, COUNT(*) FROM project GROUP BY dept_no;",
+    "advisorBefore": [],
+    "indexDdl": [],
+    "skipped": "advisor recommended no runnable CREATE INDEX"
+  },
+  {
+    "id": "A11",
+    "source": "Q19 (rule engine)",
+    "kind": "GROUP BY unindexed (temporary table)",
+    "sql": "SELECT relationship, COUNT(*) FROM dependent GROUP BY relationship;",
+    "advisorBefore": [
+      {
+        "type": "STRUCTURAL",
+        "targetTable": "dependent",
+        "targetColumn": null,
+        "summary": "The database is building a scratch working table behind the scenes to combine these rows, which usually means the columns being combined on are not indexed. There is no single statement that reliably fixes this, so it is flagged for a person to look at rather than given a ready command.",
+        "reason": "Query requires a temporary table (Extra: 'Using temporary'), typically caused by GROUP BY or DISTINCT without a supporting index \u2014 this isn't always fixable with a single-column index, so it's flagged for review rather than an automatic CREATE INDEX suggestion.",
+        "suggestedAction": "Review the GROUP BY/DISTINCT clause on 'dependent'; consider a composite index covering the grouped column(s) if one column is consistently responsible."
+      }
+    ],
+    "indexDdl": [],
+    "skipped": "advisor recommended no runnable CREATE INDEX"
+  },
+  {
+    "id": "A12",
+    "source": "Q20 (LLM)",
+    "kind": "GROUP BY + SUM",
+    "sql": "SELECT project_no, SUM(hours) AS total_hours FROM assignment GROUP BY project_no;",
+    "advisorBefore": [],
+    "indexDdl": [],
+    "skipped": "advisor recommended no runnable CREATE INDEX"
+  },
+  {
+    "id": "A13",
+    "source": "Q21 (rule engine)",
+    "kind": "sort + LIMIT (filesort)",
+    "sql": "SELECT * FROM employee ORDER BY salary DESC LIMIT 5;",
+    "advisorBefore": [
+      {
+        "type": "INDEX",
+        "targetTable": "employee",
+        "targetColumn": "salary",
+        "summary": "The database can find the rows, but then has to put them in order in a second pass, because nothing keeps salary already sorted. On a big table that ordering step is usually the slow part. Adding an index on the sort column often removes it, though not always. Re-check after applying rather than assuming it worked.",
+        "reason": "Query requires an extra sorting pass (Extra: 'Using filesort') for ORDER BY 'salary' \u2014 an index matching the sort column can often (not always) avoid this. This is a heuristic based on the ORDER BY column alone; MySQL's optimizer may still choose a full scan for small tables or non-covering queries even after the index exists \u2014 verify with EXPLAIN after applying rather than assuming it's fixed.",
+        "suggestedAction": "CREATE INDEX idx_employee_salary ON employee(salary);"
+      }
+    ],
+    "indexDdl": [
+      "CREATE INDEX idx_employee_salary ON employee(salary)"
+    ],
+    "indexesBefore": "employee\t0\tPRIMARY\t1\temp_id\tA\t11006\tNULL\tNULL\t\tBTREE\t\t\tYES\tNULL\nemployee\t1\tfk_employee_0\t1\tmanager_id\tA\t6000\tNULL\tNULL\tYES\tBTREE\t\t\tYES\tNULL\nemployee\t1\tfk_employee_1\t1\tdept_no\tA\t7583\tNULL\tNULL\t\tBTREE\t\t\tYES\tNULL\n",
+    "before": {
+      "accessType": "ALL",
+      "keyUsed": null,
+      "estimatedRows": 11006,
+      "queryCost": 1140.85,
+      "rawCost": 1140.85,
+      "verdict": "WARNING",
+      "headline": "MySQL has to sort roughly 11,006 rows after reading them.",
+      "advisor": [
+        {
+          "type": "INDEX",
+          "targetTable": "employee",
+          "targetColumn": "salary",
+          "summary": "The database can find the rows, but then has to put them in order in a second pass, because nothing keeps salary already sorted. On a big table that ordering step is usually the slow part. Adding an index on the sort column often removes it, though not always. Re-check after applying rather than assuming it worked.",
+          "reason": "Query requires an extra sorting pass (Extra: 'Using filesort') for ORDER BY 'salary' \u2014 an index matching the sort column can often (not always) avoid this. This is a heuristic based on the ORDER BY column alone; MySQL's optimizer may still choose a full scan for small tables or non-covering queries even after the index exists \u2014 verify with EXPLAIN after applying rather than assuming it's fixed.",
+          "suggestedAction": "CREATE INDEX idx_employee_salary ON employee(salary);"
+        }
+      ],
+      "advisorCount": 1,
+      "rawExplain": [
+        {
+          "id": "1",
+          "select_type": "SIMPLE",
+          "table": "employee",
+          "partitions": "NULL",
+          "type": "ALL",
+          "possible_keys": "NULL",
+          "key": "NULL",
+          "key_len": "NULL",
+          "ref": "NULL",
+          "rows": "11006",
+          "filtered": "100.00",
+          "Extra": "Using filesort"
+        }
+      ],
+      "explainAnalyze": "-> Limit: 5 row(s)  (cost=1141 rows=5) (actual time=7.04..7.05 rows=5 loops=1)\n    -> Sort: employee.salary DESC, limit input to 5 row(s) per chunk  (cost=1141 rows=11006) (actual time=7.04..7.04 rows=5 loops=1)\n        -> Table scan on employee  (cost=1141 rows=11006) (actual time=0.0645..4.62 rows=12000 loops=1)\n\n",
+      "timing": {
+        "method": "3 warm-up + 10 timed runs in one mysql client session; each = SYSDATE(6) difference around the statement, including result transfer to the client",
+        "times_ms": [
+          6.86,
+          6.4,
+          6.712,
+          7.771,
+          7.368,
+          7.667,
+          11.805,
+          7.741,
+          7.274,
+          7.134
+        ],
+        "median_ms": 7.321,
+        "min_ms": 6.4,
+        "max_ms": 11.805,
+        "error": null
+      }
+    },
+    "createError": null,
+    "after": {
+      "accessType": "index",
+      "keyUsed": "idx_employee_salary",
+      "estimatedRows": 5,
+      "queryCost": 1372.25,
+      "rawCost": 1372.25,
+      "verdict": "INFO",
+      "headline": "Uses the idx_employee_salary index to find rows instead of reading the whole table.",
+      "advisor": [],
+      "advisorCount": 0,
+      "rawExplain": [
+        {
+          "id": "1",
+          "select_type": "SIMPLE",
+          "table": "employee",
+          "partitions": "NULL",
+          "type": "index",
+          "possible_keys": "NULL",
+          "key": "idx_employee_salary",
+          "key_len": "5",
+          "ref": "NULL",
+          "rows": "5",
+          "filtered": "100.00",
+          "Extra": "Backward index scan"
+        }
+      ],
+      "explainAnalyze": "-> Limit: 5 row(s)  (cost=0.0153 rows=5) (actual time=0.0401..0.0412 rows=5 loops=1)\n    -> Index scan on employee using idx_employee_salary (reverse)  (cost=0.0153 rows=5) (actual time=0.0396..0.0405 rows=5 loops=1)\n\n",
+      "timing": {
+        "method": "3 warm-up + 10 timed runs in one mysql client session; each = SYSDATE(6) difference around the statement, including result transfer to the client",
+        "times_ms": [
+          0.241,
+          0.374,
+          0.261,
+          0.189,
+          0.218,
+          0.217,
+          0.273,
+          0.171,
+          0.237,
+          0.202
+        ],
+        "median_ms": 0.22749999999999998,
+        "min_ms": 0.171,
+        "max_ms": 0.374,
+        "error": null
+      }
+    },
+    "dropError": null,
+    "indexesAfterDrop": "employee\t0\tPRIMARY\t1\temp_id\tA\t13699\tNULL\tNULL\t\tBTREE\t\t\tYES\tNULL\nemployee\t1\tfk_employee_0\t1\tmanager_id\tA\t6000\tNULL\tNULL\tYES\tBTREE\t\t\tYES\tNULL\nemployee\t1\tfk_employee_1\t1\tdept_no\tA\t7583\tNULL\tNULL\t\tBTREE\t\t\tYES\tNULL\n",
+    "restored": false
+  },
+  {
+    "id": "A14",
+    "source": "Q23 (rule engine)",
+    "kind": "sort on unique column",
+    "sql": "SELECT * FROM department ORDER BY dept_name ASC;",
+    "advisorBefore": [
+      {
+        "type": "INDEX",
+        "targetTable": "department",
+        "targetColumn": "dept_name",
+        "summary": "The database can find the rows, but then has to put them in order in a second pass, because nothing keeps dept_name already sorted. On a big table that ordering step is usually the slow part. Adding an index on the sort column often removes it, though not always. Re-check after applying rather than assuming it worked.",
+        "reason": "Query requires an extra sorting pass (Extra: 'Using filesort') for ORDER BY 'dept_name' \u2014 an index matching the sort column can often (not always) avoid this. This is a heuristic based on the ORDER BY column alone; MySQL's optimizer may still choose a full scan for small tables or non-covering queries even after the index exists \u2014 verify with EXPLAIN after applying rather than assuming it's fixed.",
+        "suggestedAction": "CREATE INDEX idx_department_dept_name ON department(dept_name);"
+      }
+    ],
+    "indexDdl": [
+      "CREATE INDEX idx_department_dept_name ON department(dept_name)"
+    ],
+    "indexesBefore": "department\t0\tPRIMARY\t1\tdept_no\tA\t12343\tNULL\tNULL\t\tBTREE\t\t\tYES\tNULL\ndepartment\t0\tdept_name\t1\tdept_name\tA\t12343\tNULL\tNULL\t\tBTREE\t\t\tYES\tNULL\ndepartment\t1\tfk_department_2\t1\thead_emp_id\tA\t7664\tNULL\tNULL\t\tBTREE\t\t\tYES\tNULL\n",
+    "before": {
+      "accessType": "ALL",
+      "keyUsed": null,
+      "estimatedRows": 12343,
+      "queryCost": 13601.55,
+      "rawCost": 13601.55,
+      "verdict": "WARNING",
+      "headline": "MySQL has to sort roughly 12,343 rows after reading them.",
+      "advisor": [
+        {
+          "type": "INDEX",
+          "targetTable": "department",
+          "targetColumn": "dept_name",
+          "summary": "The database can find the rows, but then has to put them in order in a second pass, because nothing keeps dept_name already sorted. On a big table that ordering step is usually the slow part. Adding an index on the sort column often removes it, though not always. Re-check after applying rather than assuming it worked.",
+          "reason": "Query requires an extra sorting pass (Extra: 'Using filesort') for ORDER BY 'dept_name' \u2014 an index matching the sort column can often (not always) avoid this. This is a heuristic based on the ORDER BY column alone; MySQL's optimizer may still choose a full scan for small tables or non-covering queries even after the index exists \u2014 verify with EXPLAIN after applying rather than assuming it's fixed.",
+          "suggestedAction": "CREATE INDEX idx_department_dept_name ON department(dept_name);"
+        }
+      ],
+      "advisorCount": 1,
+      "rawExplain": [
+        {
+          "id": "1",
+          "select_type": "SIMPLE",
+          "table": "department",
+          "partitions": "NULL",
+          "type": "ALL",
+          "possible_keys": "NULL",
+          "key": "NULL",
+          "key_len": "NULL",
+          "ref": "NULL",
+          "rows": "12343",
+          "filtered": "100.00",
+          "Extra": "Using filesort"
+        }
+      ],
+      "explainAnalyze": "-> Sort: department.dept_name  (cost=1259 rows=12343) (actual time=11.7..13 rows=12000 loops=1)\n    -> Table scan on department  (cost=1259 rows=12343) (actual time=0.373..2.71 rows=12000 loops=1)\n\n",
+      "timing": {
+        "method": "3 warm-up + 10 timed runs in one mysql client session; each = SYSDATE(6) difference around the statement, including result transfer to the client",
+        "times_ms": [
+          24.752,
+          24.437,
+          31.371,
+          28.184,
+          23.633,
+          29.024,
+          22.7,
+          24.893,
+          26.76,
+          24.907
+        ],
+        "median_ms": 24.9,
+        "min_ms": 22.7,
+        "max_ms": 31.371,
+        "error": null
+      }
+    },
+    "createError": null,
+    "after": {
+      "accessType": "ALL",
+      "keyUsed": null,
+      "estimatedRows": 12028,
+      "queryCost": 13255.05,
+      "rawCost": 13255.05,
+      "verdict": "WARNING",
+      "headline": "MySQL has to sort roughly 12,028 rows after reading them.",
+      "advisor": [
+        {
+          "type": "INDEX",
+          "targetTable": "department",
+          "targetColumn": "dept_name",
+          "summary": "The database can find the rows, but then has to put them in order in a second pass, because nothing keeps dept_name already sorted. On a big table that ordering step is usually the slow part. Adding an index on the sort column often removes it, though not always. Re-check after applying rather than assuming it worked.",
+          "reason": "Query requires an extra sorting pass (Extra: 'Using filesort') for ORDER BY 'dept_name' \u2014 an index matching the sort column can often (not always) avoid this. This is a heuristic based on the ORDER BY column alone; MySQL's optimizer may still choose a full scan for small tables or non-covering queries even after the index exists \u2014 verify with EXPLAIN after applying rather than assuming it's fixed.",
+          "suggestedAction": "CREATE INDEX idx_department_dept_name ON department(dept_name);"
+        }
+      ],
+      "advisorCount": 1,
+      "rawExplain": [
+        {
+          "id": "1",
+          "select_type": "SIMPLE",
+          "table": "department",
+          "partitions": "NULL",
+          "type": "ALL",
+          "possible_keys": "NULL",
+          "key": "NULL",
+          "key_len": "NULL",
+          "ref": "NULL",
+          "rows": "12028",
+          "filtered": "100.00",
+          "Extra": "Using filesort"
+        }
+      ],
+      "explainAnalyze": "-> Sort: department.dept_name  (cost=1227 rows=12028) (actual time=14..14.7 rows=12000 loops=1)\n    -> Table scan on department  (cost=1227 rows=12028) (actual time=0.113..3.77 rows=12000 loops=1)\n\n",
+      "timing": {
+        "method": "3 warm-up + 10 timed runs in one mysql client session; each = SYSDATE(6) difference around the statement, including result transfer to the client",
+        "times_ms": [
+          24.431,
+          25.508,
+          24.791,
+          24.631,
+          21.966,
+          25.402,
+          27.565,
+          24.946,
+          23.57,
+          21.704
+        ],
+        "median_ms": 24.711,
+        "min_ms": 21.704,
+        "max_ms": 27.565,
+        "error": null
+      }
+    },
+    "dropError": null,
+    "indexesAfterDrop": "department\t0\tPRIMARY\t1\tdept_no\tA\t11533\tNULL\tNULL\t\tBTREE\t\t\tYES\tNULL\ndepartment\t0\tdept_name\t1\tdept_name\tA\t11533\tNULL\tNULL\t\tBTREE\t\t\tYES\tNULL\ndepartment\t1\tfk_department_2\t1\thead_emp_id\tA\t7664\tNULL\tNULL\t\tBTREE\t\t\tYES\tNULL\n",
+    "restored": false
+  },
+  {
+    "id": "A15",
+    "source": "Q25 (rule engine)",
+    "kind": "sort + LIMIT 1 on date",
+    "sql": "SELECT * FROM employee ORDER BY birth_date ASC LIMIT 1;",
+    "advisorBefore": [
+      {
+        "type": "INDEX",
+        "targetTable": "employee",
+        "targetColumn": "birth_date",
+        "summary": "The database can find the rows, but then has to put them in order in a second pass, because nothing keeps birth_date already sorted. On a big table that ordering step is usually the slow part. Adding an index on the sort column often removes it, though not always. Re-check after applying rather than assuming it worked.",
+        "reason": "Query requires an extra sorting pass (Extra: 'Using filesort') for ORDER BY 'birth_date' \u2014 an index matching the sort column can often (not always) avoid this. This is a heuristic based on the ORDER BY column alone; MySQL's optimizer may still choose a full scan for small tables or non-covering queries even after the index exists \u2014 verify with EXPLAIN after applying rather than assuming it's fixed.",
+        "suggestedAction": "CREATE INDEX idx_employee_birth_date ON employee(birth_date);"
+      }
+    ],
+    "indexDdl": [
+      "CREATE INDEX idx_employee_birth_date ON employee(birth_date)"
+    ],
+    "indexesBefore": "employee\t0\tPRIMARY\t1\temp_id\tA\t13699\tNULL\tNULL\t\tBTREE\t\t\tYES\tNULL\nemployee\t1\tfk_employee_0\t1\tmanager_id\tA\t6000\tNULL\tNULL\tYES\tBTREE\t\t\tYES\tNULL\nemployee\t1\tfk_employee_1\t1\tdept_no\tA\t7583\tNULL\tNULL\t\tBTREE\t\t\tYES\tNULL\n",
+    "before": {
+      "accessType": "ALL",
+      "keyUsed": null,
+      "estimatedRows": 13699,
+      "queryCost": 1410.15,
+      "rawCost": 1410.15,
+      "verdict": "WARNING",
+      "headline": "MySQL has to sort roughly 13,699 rows after reading them.",
+      "advisor": [
+        {
+          "type": "INDEX",
+          "targetTable": "employee",
+          "targetColumn": "birth_date",
+          "summary": "The database can find the rows, but then has to put them in order in a second pass, because nothing keeps birth_date already sorted. On a big table that ordering step is usually the slow part. Adding an index on the sort column often removes it, though not always. Re-check after applying rather than assuming it worked.",
+          "reason": "Query requires an extra sorting pass (Extra: 'Using filesort') for ORDER BY 'birth_date' \u2014 an index matching the sort column can often (not always) avoid this. This is a heuristic based on the ORDER BY column alone; MySQL's optimizer may still choose a full scan for small tables or non-covering queries even after the index exists \u2014 verify with EXPLAIN after applying rather than assuming it's fixed.",
+          "suggestedAction": "CREATE INDEX idx_employee_birth_date ON employee(birth_date);"
+        }
+      ],
+      "advisorCount": 1,
+      "rawExplain": [
+        {
+          "id": "1",
+          "select_type": "SIMPLE",
+          "table": "employee",
+          "partitions": "NULL",
+          "type": "ALL",
+          "possible_keys": "NULL",
+          "key": "NULL",
+          "key_len": "NULL",
+          "ref": "NULL",
+          "rows": "13699",
+          "filtered": "100.00",
+          "Extra": "Using filesort"
+        }
+      ],
+      "explainAnalyze": "-> Limit: 1 row(s)  (cost=1410 rows=1) (actual time=6.15..6.15 rows=1 loops=1)\n    -> Sort: employee.birth_date, limit input to 1 row(s) per chunk  (cost=1410 rows=13699) (actual time=6.15..6.15 rows=1 loops=1)\n        -> Table scan on employee  (cost=1410 rows=13699) (actual time=0.0897..4.74 rows=12000 loops=1)\n\n",
+      "timing": {
+        "method": "3 warm-up + 10 timed runs in one mysql client session; each = SYSDATE(6) difference around the statement, including result transfer to the client",
+        "times_ms": [
+          5.69,
+          5.738,
+          5.76,
+          6.729,
+          5.601,
+          4.565,
+          5.174,
+          5.282,
+          4.834,
+          5.185
+        ],
+        "median_ms": 5.4415,
+        "min_ms": 4.565,
+        "max_ms": 6.729,
+        "error": null
+      }
+    },
+    "createError": null,
+    "after": {
+      "accessType": "index",
+      "keyUsed": "idx_employee_birth_date",
+      "estimatedRows": 1,
+      "queryCost": 1435.55,
+      "rawCost": 1435.55,
+      "verdict": "INFO",
+      "headline": "Uses the idx_employee_birth_date index to find rows instead of reading the whole table.",
+      "advisor": [],
+      "advisorCount": 0,
+      "rawExplain": [
+        {
+          "id": "1",
+          "select_type": "SIMPLE",
+          "table": "employee",
+          "partitions": "NULL",
+          "type": "index",
+          "possible_keys": "NULL",
+          "key": "idx_employee_birth_date",
+          "key_len": "4",
+          "ref": "NULL",
+          "rows": "1",
+          "filtered": "100.00",
+          "Extra": "NULL"
+        }
+      ],
+      "explainAnalyze": "-> Limit: 1 row(s)  (cost=0.00289 rows=1) (actual time=0.028..0.028 rows=1 loops=1)\n    -> Index scan on employee using idx_employee_birth_date  (cost=0.00289 rows=1) (actual time=0.0273..0.0273 rows=1 loops=1)\n\n",
+      "timing": {
+        "method": "3 warm-up + 10 timed runs in one mysql client session; each = SYSDATE(6) difference around the statement, including result transfer to the client",
+        "times_ms": [
+          0.193,
+          0.207,
+          0.218,
+          0.148,
+          0.197,
+          0.195,
+          0.154,
+          0.241,
+          0.204,
+          0.303
+        ],
+        "median_ms": 0.2005,
+        "min_ms": 0.148,
+        "max_ms": 0.303,
+        "error": null
+      }
+    },
+    "dropError": null,
+    "indexesAfterDrop": "employee\t0\tPRIMARY\t1\temp_id\tA\t12076\tNULL\tNULL\t\tBTREE\t\t\tYES\tNULL\nemployee\t1\tfk_employee_0\t1\tmanager_id\tA\t6000\tNULL\tNULL\tYES\tBTREE\t\t\tYES\tNULL\nemployee\t1\tfk_employee_1\t1\tdept_no\tA\t7583\tNULL\tNULL\t\tBTREE\t\t\tYES\tNULL\n",
+    "restored": false
+  },
+  {
+    "id": "A16",
+    "source": "Q27 (rule engine)",
+    "kind": "2-table join",
+    "sql": "SELECT * FROM dependent JOIN employee ON dependent.emp_id = employee.emp_id;",
+    "advisorBefore": [],
+    "indexDdl": [],
+    "skipped": "advisor recommended no runnable CREATE INDEX"
+  },
+  {
+    "id": "A17",
+    "source": "Q29 (rule engine)",
+    "kind": "2-table join",
+    "sql": "SELECT * FROM employee JOIN department ON employee.dept_no = department.dept_no;",
+    "advisorBefore": [],
+    "indexDdl": [],
+    "skipped": "advisor recommended no runnable CREATE INDEX"
+  },
+  {
+    "id": "A18",
+    "source": "Q32 (LLM)",
+    "kind": "3-table join with const lookup",
+    "sql": "SELECT e.first_name, e.middle_initial, e.last_name FROM employee e JOIN assignment a ON e.emp_id = a.emp_id JOIN project p ON a.project_no = p.project_no WHERE p.project_name = 'Atlas';",
+    "advisorBefore": [],
+    "indexDdl": [],
+    "skipped": "advisor recommended no runnable CREATE INDEX"
+  },
+  {
+    "id": "A19",
+    "source": "Q33 (LLM)",
+    "kind": "3-table join",
+    "sql": "SELECT e.emp_id, e.first_name, e.last_name, p.project_name FROM employee e JOIN assignment a ON e.emp_id = a.emp_id JOIN project p ON a.project_no = p.project_no;",
+    "advisorBefore": [],
+    "indexDdl": [],
+    "skipped": "advisor recommended no runnable CREATE INDEX"
+  },
+  {
+    "id": "A20",
+    "source": "Q34 (LLM)",
+    "kind": "4-table join",
+    "sql": "SELECT d.dependent_name, d.gender, d.birth_date, d.relationship FROM dependent d JOIN employee e ON d.emp_id = e.emp_id JOIN assignment a ON e.emp_id = a.emp_id JOIN project p ON a.project_no = p.project_no WHERE p.project_name = 'Atlas';",
+    "advisorBefore": [],
+    "indexDdl": [],
+    "skipped": "advisor recommended no runnable CREATE INDEX"
+  },
+  {
+    "id": "A21",
+    "source": "Q36 (LLM)",
+    "kind": "self-join with filter",
+    "sql": "SELECT e.emp_id, e.first_name, e.middle_initial, e.last_name FROM employee e JOIN employee m ON e.manager_id = m.emp_id WHERE m.first_name = 'Kavita' AND m.last_name = 'Rao';",
+    "advisorBefore": [
+      {
+        "type": "INDEX",
+        "targetTable": "employee",
+        "targetColumn": "first_name",
+        "summary": "To answer this, the database is reading all 12,076 rows of employee and checking each one, because nothing indexes first_name. An index works like the index at the back of a book: it lets the database jump straight to the matching rows instead of reading everything.",
+        "reason": "Full table scan detected (accessType=ALL) with no index in use on 'first_name' \u2014 the same signal reported by EXPLAIN.",
+        "suggestedAction": "CREATE INDEX idx_employee_first_name ON employee(first_name);"
+      }
+    ],
+    "indexDdl": [
+      "CREATE INDEX idx_employee_first_name ON employee(first_name)"
+    ],
+    "indexesBefore": "employee\t0\tPRIMARY\t1\temp_id\tA\t12076\tNULL\tNULL\t\tBTREE\t\t\tYES\tNULL\nemployee\t1\tfk_employee_0\t1\tmanager_id\tA\t6000\tNULL\tNULL\tYES\tBTREE\t\t\tYES\tNULL\nemployee\t1\tfk_employee_1\t1\tdept_no\tA\t7583\tNULL\tNULL\t\tBTREE\t\t\tYES\tNULL\n",
+    "before": {
+      "accessType": "ALL",
+      "keyUsed": "fk_employee_0",
+      "estimatedRows": 12076,
+      "queryCost": 1332.92,
+      "rawCost": 1332.92,
+      "verdict": "CRITICAL",
+      "headline": "Reads the whole employee table \u2014 about 12,076 rows \u2014 then discards 99% of what it read.",
+      "advisor": [
+        {
+          "type": "INDEX",
+          "targetTable": "employee",
+          "targetColumn": "first_name",
+          "summary": "To answer this, the database is reading all 12,076 rows of employee and checking each one, because nothing indexes first_name. An index works like the index at the back of a book: it lets the database jump straight to the matching rows instead of reading everything.",
+          "reason": "Full table scan detected (accessType=ALL) with no index in use on 'first_name' \u2014 the same signal reported by EXPLAIN.",
+          "suggestedAction": "CREATE INDEX idx_employee_first_name ON employee(first_name);"
+        }
+      ],
+      "advisorCount": 1,
+      "rawExplain": [
+        {
+          "id": "1",
+          "select_type": "SIMPLE",
+          "table": "m",
+          "partitions": "NULL",
+          "type": "ALL",
+          "possible_keys": "PRIMARY",
+          "key": "NULL",
+          "key_len": "NULL",
+          "ref": "NULL",
+          "rows": "12076",
+          "filtered": "1.00",
+          "Extra": "Using where"
+        },
+        {
+          "id": "1",
+          "select_type": "SIMPLE",
+          "table": "e",
+          "partitions": "NULL",
+          "type": "ref",
+          "possible_keys": "fk_employee_0",
+          "key": "fk_employee_0",
+          "key_len": "35",
+          "ref": "querysense_uploads.m.emp_id",
+          "rows": "2",
+          "filtered": "100.00",
+          "Extra": "NULL"
+        }
+      ],
+      "explainAnalyze": "-> Nested loop inner join  (cost=1333 rows=243) (actual time=0.519..3.23 rows=3 loops=1)\n    -> Filter: ((m.last_name = 'Rao') and (m.first_name = 'Kavita'))  (cost=1248 rows=121) (actual time=0.504..3.21 rows=1 loops=1)\n        -> Table scan on m  (cost=1248 rows=12076) (actual time=0.0712..2.54 rows=12000 loops=1)\n    -> Index lookup on e using fk_employee_0 (manager_id = m.emp_id)  (cost=0.505 rows=2.01) (actual time=0.0139..0.0147 rows=3 loops=1)\n\n",
+      "timing": {
+        "method": "3 warm-up + 10 timed runs in one mysql client session; each = SYSDATE(6) difference around the statement, including result transfer to the client",
+        "times_ms": [
+          5.213,
+          2.691,
+          2.452,
+          3.416,
+          3.432,
+          3.123,
+          3.757,
+          3.562,
+          3.269,
+          4.055
+        ],
+        "median_ms": 3.424,
+        "min_ms": 2.452,
+        "max_ms": 5.213,
+        "error": null
+      }
+    },
+    "createError": null,
+    "after": {
+      "accessType": "ref",
+      "keyUsed": "idx_employee_first_name",
+      "estimatedRows": 2,
+      "queryCost": 0.43,
+      "rawCost": 0.43,
+      "verdict": "INFO",
+      "headline": "Uses the idx_employee_first_name index to find rows instead of reading the whole table.",
+      "advisor": [],
+      "advisorCount": 0,
+      "rawExplain": [
+        {
+          "id": "1",
+          "select_type": "SIMPLE",
+          "table": "m",
+          "partitions": "NULL",
+          "type": "ref",
+          "possible_keys": "PRIMARY,idx_employee_first_name",
+          "key": "idx_employee_first_name",
+          "key_len": "82",
+          "ref": "const",
+          "rows": "1",
+          "filtered": "10.00",
+          "Extra": "Using where"
+        },
+        {
+          "id": "1",
+          "select_type": "SIMPLE",
+          "table": "e",
+          "partitions": "NULL",
+          "type": "ref",
+          "possible_keys": "fk_employee_0",
+          "key": "fk_employee_0",
+          "key_len": "35",
+          "ref": "querysense_uploads.m.emp_id",
+          "rows": "2",
+          "filtered": "100.00",
+          "Extra": "NULL"
+        }
+      ],
+      "explainAnalyze": "-> Nested loop inner join  (cost=0.337 rows=0.22) (actual time=0.0602..0.0635 rows=3 loops=1)\n    -> Filter: (m.last_name = 'Rao')  (cost=0.26 rows=0.1) (actual time=0.0387..0.0391 rows=1 loops=1)\n        -> Index lookup on m using idx_employee_first_name (first_name = 'Kavita')  (cost=0.26 rows=1) (actual time=0.0357..0.0361 rows=1 loops=1)\n    -> Index lookup on e using fk_employee_0 (manager_id = m.emp_id)  (cost=2.76 rows=2.2) (actual time=0.0185..0.0211 rows=3 loops=1)\n\n",
+      "timing": {
+        "method": "3 warm-up + 10 timed runs in one mysql client session; each = SYSDATE(6) difference around the statement, including result transfer to the client",
+        "times_ms": [
+          0.221,
+          0.187,
+          0.172,
+          0.173,
+          0.183,
+          0.183,
+          0.233,
+          0.19,
+          0.235,
+          0.176
+        ],
+        "median_ms": 0.185,
+        "min_ms": 0.172,
+        "max_ms": 0.235,
+        "error": null
+      }
+    },
+    "dropError": null,
+    "indexesAfterDrop": "employee\t0\tPRIMARY\t1\temp_id\tA\t13320\tNULL\tNULL\t\tBTREE\t\t\tYES\tNULL\nemployee\t1\tfk_employee_0\t1\tmanager_id\tA\t6000\tNULL\tNULL\tYES\tBTREE\t\t\tYES\tNULL\nemployee\t1\tfk_employee_1\t1\tdept_no\tA\t7583\tNULL\tNULL\t\tBTREE\t\t\tYES\tNULL\n",
+    "restored": false
+  },
+  {
+    "id": "A22",
+    "source": "Q37 (LLM)",
+    "kind": "GROUP BY on self-FK",
+    "sql": "SELECT manager_id, COUNT(emp_id) AS num_employees FROM employee GROUP BY manager_id;",
+    "advisorBefore": [],
+    "indexDdl": [],
+    "skipped": "advisor recommended no runnable CREATE INDEX"
+  },
+  {
+    "id": "A23",
+    "source": "Q38 (rule engine)",
+    "kind": "anti-join",
+    "sql": "SELECT employee.* FROM employee LEFT JOIN dependent ON employee.emp_id = dependent.emp_id WHERE dependent.emp_id IS NULL;",
+    "advisorBefore": [],
+    "indexDdl": [],
+    "skipped": "advisor recommended no runnable CREATE INDEX"
+  },
+  {
+    "id": "A24",
+    "source": "added by tester (not generated)",
+    "kind": "const lookup on primary key",
+    "sql": "SELECT * FROM employee WHERE emp_id = 'E1001';",
+    "advisorBefore": [],
+    "indexDdl": [],
+    "skipped": "advisor recommended no runnable CREATE INDEX"
+  },
+  {
+    "id": "A25",
+    "source": "added by tester (non-sargable shape)",
+    "kind": "non-sargable filter",
+    "sql": "SELECT * FROM employee WHERE YEAR(birth_date) > 1965;",
+    "advisorBefore": [],
+    "indexDdl": [],
+    "skipped": "advisor recommended no runnable CREATE INDEX"
+  },
+  {
+    "id": "A26",
+    "source": "Q46 (rule engine)",
+    "kind": "sargable date range, no index",
+    "sql": "SELECT * FROM employee WHERE birth_date >= '1966-01-01';",
+    "advisorBefore": [
+      {
+        "type": "INDEX",
+        "targetTable": "employee",
+        "targetColumn": "birth_date",
+        "summary": "To answer this, the database is reading all 13,320 rows of employee and checking each one, because nothing indexes birth_date. An index works like the index at the back of a book: it lets the database jump straight to the matching rows instead of reading everything.",
+        "reason": "Full table scan detected (accessType=ALL) with no index in use on 'birth_date' \u2014 the same signal reported by EXPLAIN.",
+        "suggestedAction": "CREATE INDEX idx_employee_birth_date ON employee(birth_date);"
+      }
+    ],
+    "indexDdl": [
+      "CREATE INDEX idx_employee_birth_date ON employee(birth_date)"
+    ],
+    "indexesBefore": "employee\t0\tPRIMARY\t1\temp_id\tA\t13320\tNULL\tNULL\t\tBTREE\t\t\tYES\tNULL\nemployee\t1\tfk_employee_0\t1\tmanager_id\tA\t6000\tNULL\tNULL\tYES\tBTREE\t\t\tYES\tNULL\nemployee\t1\tfk_employee_1\t1\tdept_no\tA\t7583\tNULL\tNULL\t\tBTREE\t\t\tYES\tNULL\n",
+    "before": {
+      "accessType": "ALL",
+      "keyUsed": null,
+      "estimatedRows": 13320,
+      "queryCost": 1372.25,
+      "rawCost": 1372.25,
+      "verdict": "CRITICAL",
+      "headline": "Reads the whole employee table \u2014 about 13,320 rows \u2014 then discards 66.7% of what it read.",
+      "advisor": [
+        {
+          "type": "INDEX",
+          "targetTable": "employee",
+          "targetColumn": "birth_date",
+          "summary": "To answer this, the database is reading all 13,320 rows of employee and checking each one, because nothing indexes birth_date. An index works like the index at the back of a book: it lets the database jump straight to the matching rows instead of reading everything.",
+          "reason": "Full table scan detected (accessType=ALL) with no index in use on 'birth_date' \u2014 the same signal reported by EXPLAIN.",
+          "suggestedAction": "CREATE INDEX idx_employee_birth_date ON employee(birth_date);"
+        }
+      ],
+      "advisorCount": 1,
+      "rawExplain": [
+        {
+          "id": "1",
+          "select_type": "SIMPLE",
+          "table": "employee",
+          "partitions": "NULL",
+          "type": "ALL",
+          "possible_keys": "NULL",
+          "key": "NULL",
+          "key_len": "NULL",
+          "ref": "NULL",
+          "rows": "13320",
+          "filtered": "33.33",
+          "Extra": "Using where"
+        }
+      ],
+      "explainAnalyze": "-> Filter: (employee.birth_date >= DATE'1966-01-01')  (cost=1372 rows=4440) (actual time=0.0957..7.42 rows=10768 loops=1)\n    -> Table scan on employee  (cost=1372 rows=13320) (actual time=0.0943..6.49 rows=12000 loops=1)\n\n",
+      "timing": {
+        "method": "3 warm-up + 10 timed runs in one mysql client session; each = SYSDATE(6) difference around the statement, including result transfer to the client",
+        "times_ms": [
+          31.411,
+          28.393,
+          27.098,
+          27.34,
+          31.41,
+          31.442,
+          26.79,
+          25.144,
+          27.457,
+          26.013
+        ],
+        "median_ms": 27.3985,
+        "min_ms": 25.144,
+        "max_ms": 31.442,
+        "error": null
+      }
+    },
+    "createError": null,
+    "after": {
+      "accessType": "ALL",
+      "keyUsed": null,
+      "estimatedRows": 13022,
+      "queryCost": 1342.45,
+      "rawCost": 1342.45,
+      "verdict": "WARNING",
+      "headline": "An index on employee was available, but MySQL chose not to use it.",
+      "advisor": [
+        {
+          "type": "INDEX",
+          "targetTable": "employee",
+          "targetColumn": "birth_date",
+          "summary": "To answer this, the database is reading all 13,022 rows of employee and checking each one, because nothing indexes birth_date. An index works like the index at the back of a book: it lets the database jump straight to the matching rows instead of reading everything.",
+          "reason": "Full table scan detected (accessType=ALL) with no index in use on 'birth_date' \u2014 the same signal reported by EXPLAIN.",
+          "suggestedAction": "CREATE INDEX idx_employee_birth_date ON employee(birth_date);"
+        }
+      ],
+      "advisorCount": 1,
+      "rawExplain": [
+        {
+          "id": "1",
+          "select_type": "SIMPLE",
+          "table": "employee",
+          "partitions": "NULL",
+          "type": "ALL",
+          "possible_keys": "idx_employee_birth_date",
+          "key": "NULL",
+          "key_len": "NULL",
+          "ref": "NULL",
+          "rows": "13022",
+          "filtered": "50.00",
+          "Extra": "Using where"
+        }
+      ],
+      "explainAnalyze": "-> Filter: (employee.birth_date >= DATE'1966-01-01')  (cost=1342 rows=6511) (actual time=0.0953..5.2 rows=10768 loops=1)\n    -> Table scan on employee  (cost=1342 rows=13022) (actual time=0.0943..4.42 rows=12000 loops=1)\n\n",
+      "timing": {
+        "method": "3 warm-up + 10 timed runs in one mysql client session; each = SYSDATE(6) difference around the statement, including result transfer to the client",
+        "times_ms": [
+          28.38,
+          24.742,
+          26.703,
+          27.617,
+          25.218,
+          28.87,
+          21.198,
+          20.406,
+          31.702,
+          27.172
+        ],
+        "median_ms": 26.9375,
+        "min_ms": 20.406,
+        "max_ms": 31.702,
+        "error": null
+      }
+    },
+    "dropError": null,
+    "indexesAfterDrop": "employee\t0\tPRIMARY\t1\temp_id\tA\t14976\tNULL\tNULL\t\tBTREE\t\t\tYES\tNULL\nemployee\t1\tfk_employee_0\t1\tmanager_id\tA\t6000\tNULL\tNULL\tYES\tBTREE\t\t\tYES\tNULL\nemployee\t1\tfk_employee_1\t1\tdept_no\tA\t7583\tNULL\tNULL\t\tBTREE\t\t\tYES\tNULL\n",
+    "restored": false
+  }
+]

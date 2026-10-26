@@ -77,6 +77,36 @@ class SchemaAdvisorServiceImplTest {
     }
 
     @Test
+    @DisplayName("an aliased table gets its index on the real table, not on the alias")
+    void aliasResolvesToRealTable() {
+        QueryAnalysisResult result = base();
+        result.setTableName("e");
+        result.setTableAliases(java.util.Map.of("e", "EMPLOYEE"));
+        result.setHasFullTableScan(true);
+        result.setFilteredColumn("e.Salary");
+
+        assertThat(advisor.recommend(result)).singleElement().satisfies(r -> {
+            assertThat(r.getTargetTable()).isEqualTo("EMPLOYEE");
+            assertThat(r.getSuggestedAction()).isEqualTo("CREATE INDEX idx_EMPLOYEE_Salary ON EMPLOYEE(Salary);");
+        });
+    }
+
+    @Test
+    @DisplayName("an aliased GROUP BY is flagged for review on the real table")
+    void aliasedTemporaryTableNamesRealTable() {
+        QueryAnalysisResult result = base();
+        result.setTableName("w");
+        result.setTableAliases(java.util.Map.of("w", "WORKS_ON"));
+        result.setUsesIndex(true);
+        result.setUsesTemporaryTable(true);
+
+        assertThat(advisor.recommend(result)).singleElement().satisfies(r -> {
+            assertThat(r.getTargetTable()).isEqualTo("WORKS_ON");
+            assertThat(r.getSuggestedAction()).contains("'WORKS_ON'");
+        });
+    }
+
+    @Test
     @DisplayName("unfilteredScanGetsNoIndex: a full scan that keeps every row has nothing an index could skip")
     void unfilteredScanGetsNoIndex() {
         QueryAnalysisResult result = fullScan();

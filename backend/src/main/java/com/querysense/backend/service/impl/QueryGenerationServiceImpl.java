@@ -64,6 +64,10 @@ public class QueryGenerationServiceImpl implements QueryGenerationService {
 
         RuleTrace trace = ruleResult.trace();
 
+        if (ruleResult.refused()) {
+            return new QueryResponse(null, databaseType, SOURCE_RULE_ENGINE, 0.0, trace, null, List.of());
+        }
+
         if (ruleResult.built()) {
             generatedSql = ruleResult.sql();
             source = SOURCE_RULE_ENGINE;
@@ -80,8 +84,8 @@ public class QueryGenerationServiceImpl implements QueryGenerationService {
             } else {
                 generatedSql = llmFallbackService.generateQuery(input, databaseType);
                 source = SOURCE_LLM;
-                schemaWarning = generatedQueryValidator
-                        .namesUnknownIdentifiers(generatedSql, databaseType)
+                schemaWarning = generatedQueryValidator.unsafeStatement(generatedSql, databaseType)
+                        .or(() -> generatedQueryValidator.namesUnknownIdentifiers(generatedSql, databaseType))
                         .orElse(null);
 
                 if (schemaWarning != null) {
@@ -109,9 +113,8 @@ public class QueryGenerationServiceImpl implements QueryGenerationService {
         return queryHistoryRepository
                 .findFirstByUserInputIgnoreCaseAndDatabaseTypeIgnoreCaseAndSchemaLabelAndSourceOrderByCreatedAtDescIdDesc(
                         input, databaseType, activeSchema.active(Dialect.from(databaseType)).label(), SOURCE_LLM)
-                .filter(row -> generatedQueryValidator
-                        .namesUnknownIdentifiers(row.getGeneratedQuery(), databaseType)
-                        .isEmpty());
+                .filter(row -> generatedQueryValidator.unsafeStatement(row.getGeneratedQuery(), databaseType).isEmpty()
+                        && generatedQueryValidator.namesUnknownIdentifiers(row.getGeneratedQuery(), databaseType).isEmpty());
     }
 
     private void saveToHistory(String input, String generatedSql, String databaseType,

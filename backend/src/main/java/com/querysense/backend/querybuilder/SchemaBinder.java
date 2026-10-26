@@ -7,6 +7,7 @@ import com.querysense.backend.schema.SchemaAliases;
 import com.querysense.backend.schema.SchemaSnapshot;
 import org.springframework.stereotype.Component;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -22,7 +23,7 @@ public class SchemaBinder {
 
     public SchemaBinder(ActiveSchemaProvider activeSchema) {
         this.activeSchema = activeSchema;
-        this.lexicon = new SchemaLexicon(activeSchema, Synonyms.builtIn());
+        this.lexicon = new SchemaLexicon(activeSchema, Synonyms.builtIn(), Thesaurus.builtIn());
     }
 
     public List<KnownSchema.Table> bindTables(String normalizedText, Dialect dialect) {
@@ -106,6 +107,13 @@ public class SchemaBinder {
 
     public static boolean isDateType(String type) {
         return type != null && Set.of("DATE", "DATETIME", "TIMESTAMP").contains(type.toUpperCase(Locale.ROOT));
+    }
+
+    public static boolean isYearColumn(String column, String type) {
+        return type != null && column != null
+                && Set.of("INT", "INTEGER", "SMALLINT", "TINYINT", "MEDIUMINT", "BIGINT", "YEAR", "LONG")
+                        .contains(type.toUpperCase(Locale.ROOT))
+                && Arrays.asList(normalize(column).split(" ")).getLast().equals("year");
     }
 
     public static String normalize(String s) {

@@ -90,6 +90,19 @@ class SchemaUploadServiceTest {
         var order = inOrder(provisioner, seeder);
         order.verify(provisioner).provision(any());
         order.verify(seeder).seed(any());
+        order.verify(provisioner).finish(any());
+    }
+
+    @Test
+    @DisplayName("a foreign key that could not be added after seeding is reported with the upload")
+    void finishWarningsAreKept() {
+        when(provisioner.finish(any())).thenReturn(List.of("The foreign key orders.customer_id -> customers.id could not be added"));
+
+        SchemaUploadService service = service();
+        service.upload(DDL, "shop.sql");
+
+        assertThat(service.lastWarnings(Dialect.MYSQL))
+                .containsExactly("The foreign key orders.customer_id -> customers.id could not be added");
     }
 
     @Test

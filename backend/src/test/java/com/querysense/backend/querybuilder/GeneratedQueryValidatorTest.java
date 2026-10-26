@@ -112,4 +112,44 @@ class GeneratedQueryValidatorTest {
 
         assertThat(reason).isEmpty();
     }
+
+    @Test
+    @DisplayName("a DELETE or UPDATE with no WHERE, a DROP or a TRUNCATE is flagged as unsafe")
+    void statementsThatTouchEveryRowAreUnsafe() {
+        assertThat(validator.unsafeStatement("DELETE FROM DEPENDENT;", "MySQL"))
+                .get().asString().contains("DEPENDENT").contains("every row");
+        assertThat(validator.unsafeStatement("UPDATE orders SET status = 'PAID';", "MySQL"))
+                .get().asString().contains("orders").contains("every row");
+        assertThat(validator.unsafeStatement("DROP TABLE orders;", "MySQL")).isPresent();
+        assertThat(validator.unsafeStatement("TRUNCATE TABLE orders;", "MySQL")).isPresent();
+    }
+
+    @Test
+    @DisplayName("a DELETE with a WHERE, and any SELECT, are not unsafe")
+    void qualifiedStatementsAreSafe() {
+        assertThat(validator.unsafeStatement("DELETE FROM orders WHERE status = 'CANCELLED';", "MySQL")).isEmpty();
+        assertThat(validator.unsafeStatement("SELECT * FROM orders;", "MySQL")).isEmpty();
+        assertThat(validator.unsafeStatement("not sql at all", "MySQL")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("MongoDB: deleteMany({}), remove({}) and drop() are flagged; a filtered delete is not")
+    void mongoStatementsThatTouchEveryDocumentAreUnsafe() {
+        assertThat(validator.unsafeStatement("db.dependents.deleteMany({})", "MongoDB"))
+                .get().asString().contains("dependents");
+        assertThat(validator.unsafeStatement("db.dependents.remove({ })", "MongoDB")).isPresent();
+        assertThat(validator.unsafeStatement("db.dependents.drop()", "MongoDB")).isPresent();
+        assertThat(validator.unsafeStatement("db.dependents.updateMany({}, {\"$set\": {\"a\": 1}})", "MongoDB")).isPresent();
+        assertThat(validator.unsafeStatement("db.dependents.deleteMany({\"relationship\": \"son\"})", "MongoDB")).isEmpty();
+        assertThat(validator.unsafeStatement("db.dependents.find({})", "MongoDB")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("MongoDB: a bare deleteMany({}) with no db.<collection> prefix is still flagged")
+    void bareMongoDeleteManyIsUnsafe() {
+        assertThat(validator.unsafeStatement("deleteMany({})", "MongoDB"))
+                .get().asString().doesNotContain("null");
+        assertThat(validator.unsafeStatement("drop()", "MongoDB")).isPresent();
+        assertThat(validator.unsafeStatement("deleteMany({\"status\": \"PENDING\"})", "MongoDB")).isEmpty();
+    }
 }

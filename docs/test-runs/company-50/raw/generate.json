@@ -1,0 +1,3618 @@
+{
+  "generate": [
+    {
+      "id": 1,
+      "category": "simple",
+      "question": "Show all employees",
+      "paraphraseGroup": "P4",
+      "status": 200,
+      "ms": 284.1,
+      "response": {
+        "generatedQuery": "SELECT * FROM EMPLOYEE;",
+        "targetDb": "MySQL",
+        "handledBy": "RULE_ENGINE",
+        "confidence": 0.95,
+        "ruleTrace": {
+          "outcome": "BUILT",
+          "shape": "SELECT",
+          "bindings": [
+            {
+              "phrase": "EMPLOYEE",
+              "kind": "TABLE",
+              "resolvedTo": "EMPLOYEE"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [
+            "Every field named in the question matched a column in the active schema"
+          ],
+          "declineReason": null,
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      },
+      "handledBy": "RULE_ENGINE",
+      "confidence": 0.95,
+      "generatedQuery": "SELECT * FROM EMPLOYEE;",
+      "schemaWarning": null,
+      "declineReason": null,
+      "interpretations": [],
+      "truthSql": "SELECT * FROM EMPLOYEE",
+      "truthRows": 12000,
+      "truthResult": "identical",
+      "execution": {
+        "executed": true,
+        "runs": true,
+        "rows": 12000,
+        "cols": [
+          "Fname",
+          "Minit",
+          "Lname",
+          "Ssn",
+          "Bdate",
+          "Address",
+          "Sex",
+          "Salary",
+          "Super_ssn",
+          "Dno"
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "category": "simple",
+      "question": "Show employees with salary above 40000",
+      "paraphraseGroup": "P1",
+      "status": 200,
+      "ms": 74.5,
+      "response": {
+        "generatedQuery": "SELECT * FROM EMPLOYEE WHERE Salary > 40000;",
+        "targetDb": "MySQL",
+        "handledBy": "RULE_ENGINE",
+        "confidence": 0.95,
+        "ruleTrace": {
+          "outcome": "BUILT",
+          "shape": "SELECT",
+          "bindings": [
+            {
+              "phrase": "EMPLOYEE",
+              "kind": "TABLE",
+              "resolvedTo": "EMPLOYEE"
+            },
+            {
+              "phrase": "salary above 40000",
+              "kind": "COMPARISON",
+              "resolvedTo": "Salary > 40000"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [
+            "Every field named in the question matched a column in the active schema"
+          ],
+          "declineReason": null,
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      },
+      "handledBy": "RULE_ENGINE",
+      "confidence": 0.95,
+      "generatedQuery": "SELECT * FROM EMPLOYEE WHERE Salary > 40000;",
+      "schemaWarning": null,
+      "declineReason": null,
+      "interpretations": [],
+      "truthSql": "SELECT * FROM EMPLOYEE WHERE Salary > 40000",
+      "truthRows": 2,
+      "truthResult": "identical",
+      "execution": {
+        "executed": true,
+        "runs": true,
+        "rows": 2,
+        "cols": [
+          "Fname",
+          "Minit",
+          "Lname",
+          "Ssn",
+          "Bdate",
+          "Address",
+          "Sex",
+          "Salary",
+          "Super_ssn",
+          "Dno"
+        ]
+      }
+    },
+    {
+      "id": 3,
+      "category": "simple",
+      "question": "Which employees earn more than 40000",
+      "paraphraseGroup": "P1",
+      "status": 200,
+      "ms": 1042.6,
+      "response": {
+        "generatedQuery": "SELECT Fname, Minit, Lname FROM EMPLOYEE WHERE Salary > 40000;",
+        "targetDb": "MySQL",
+        "handledBy": "OLLAMA",
+        "confidence": 0.65,
+        "ruleTrace": {
+          "outcome": "DECLINED",
+          "shape": null,
+          "bindings": [
+            {
+              "phrase": "EMPLOYEE",
+              "kind": "TABLE",
+              "resolvedTo": "EMPLOYEE"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [],
+          "declineReason": "The question compares \"earn\", which is not a column of EMPLOYEE.",
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      },
+      "handledBy": "OLLAMA",
+      "confidence": 0.65,
+      "generatedQuery": "SELECT Fname, Minit, Lname FROM EMPLOYEE WHERE Salary > 40000;",
+      "schemaWarning": null,
+      "declineReason": "The question compares \"earn\", which is not a column of EMPLOYEE.",
+      "interpretations": [],
+      "truthSql": "SELECT * FROM EMPLOYEE WHERE Salary > 40000",
+      "truthRows": 2,
+      "truthResult": "same rows with fewer columns",
+      "execution": {
+        "executed": true,
+        "runs": true,
+        "rows": 2,
+        "cols": [
+          "Fname",
+          "Minit",
+          "Lname"
+        ]
+      }
+    },
+    {
+      "id": 4,
+      "category": "simple",
+      "question": "Show employees with salary between 30000 and 50000",
+      "paraphraseGroup": null,
+      "status": 200,
+      "ms": 36.7,
+      "response": {
+        "generatedQuery": "SELECT * FROM EMPLOYEE WHERE Salary BETWEEN 30000 AND 50000;",
+        "targetDb": "MySQL",
+        "handledBy": "RULE_ENGINE",
+        "confidence": 0.95,
+        "ruleTrace": {
+          "outcome": "BUILT",
+          "shape": "SELECT",
+          "bindings": [
+            {
+              "phrase": "EMPLOYEE",
+              "kind": "TABLE",
+              "resolvedTo": "EMPLOYEE"
+            },
+            {
+              "phrase": "salary between 30000 and 50000",
+              "kind": "COMPARISON",
+              "resolvedTo": "Salary BETWEEN 30000 AND 50000"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [
+            "Every field named in the question matched a column in the active schema"
+          ],
+          "declineReason": null,
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      },
+      "handledBy": "RULE_ENGINE",
+      "confidence": 0.95,
+      "generatedQuery": "SELECT * FROM EMPLOYEE WHERE Salary BETWEEN 30000 AND 50000;",
+      "schemaWarning": null,
+      "declineReason": null,
+      "interpretations": [],
+      "truthSql": "SELECT * FROM EMPLOYEE WHERE Salary BETWEEN 30000 AND 50000",
+      "truthRows": 4,
+      "truthResult": "identical",
+      "execution": {
+        "executed": true,
+        "runs": true,
+        "rows": 4,
+        "cols": [
+          "Fname",
+          "Minit",
+          "Lname",
+          "Ssn",
+          "Bdate",
+          "Address",
+          "Sex",
+          "Salary",
+          "Super_ssn",
+          "Dno"
+        ]
+      }
+    },
+    {
+      "id": 5,
+      "category": "simple",
+      "question": "Show projects in Houston",
+      "paraphraseGroup": "P8",
+      "status": 200,
+      "ms": 41.6,
+      "response": {
+        "generatedQuery": "SELECT * FROM PROJECT WHERE Plocation = 'houston';",
+        "targetDb": "MySQL",
+        "handledBy": "RULE_ENGINE",
+        "confidence": 0.95,
+        "ruleTrace": {
+          "outcome": "BUILT",
+          "shape": "SELECT",
+          "bindings": [
+            {
+              "phrase": "PROJECT",
+              "kind": "TABLE",
+              "resolvedTo": "PROJECT"
+            },
+            {
+              "phrase": "houston",
+              "kind": "FILTER",
+              "resolvedTo": "PROJECT.Plocation"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [
+            "Every field named in the question matched a column in the active schema"
+          ],
+          "declineReason": null,
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      },
+      "handledBy": "RULE_ENGINE",
+      "confidence": 0.95,
+      "generatedQuery": "SELECT * FROM PROJECT WHERE Plocation = 'houston';",
+      "schemaWarning": null,
+      "declineReason": null,
+      "interpretations": [],
+      "truthSql": "SELECT * FROM PROJECT WHERE Plocation = 'Houston'",
+      "truthRows": 2,
+      "truthResult": "identical",
+      "execution": {
+        "executed": true,
+        "runs": true,
+        "rows": 2,
+        "cols": [
+          "Pname",
+          "Pnumber",
+          "Plocation",
+          "Dnum"
+        ]
+      }
+    },
+    {
+      "id": 6,
+      "category": "simple",
+      "question": "Which projects are located in Houston",
+      "paraphraseGroup": "P8",
+      "status": 200,
+      "ms": 30.4,
+      "response": {
+        "generatedQuery": "SELECT * FROM PROJECT WHERE Plocation = 'houston';",
+        "targetDb": "MySQL",
+        "handledBy": "RULE_ENGINE",
+        "confidence": 0.95,
+        "ruleTrace": {
+          "outcome": "BUILT",
+          "shape": "SELECT",
+          "bindings": [
+            {
+              "phrase": "PROJECT",
+              "kind": "TABLE",
+              "resolvedTo": "PROJECT"
+            },
+            {
+              "phrase": "houston",
+              "kind": "FILTER",
+              "resolvedTo": "PROJECT.Plocation"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [
+            "Every field named in the question matched a column in the active schema"
+          ],
+          "declineReason": null,
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      },
+      "handledBy": "RULE_ENGINE",
+      "confidence": 0.95,
+      "generatedQuery": "SELECT * FROM PROJECT WHERE Plocation = 'houston';",
+      "schemaWarning": null,
+      "declineReason": null,
+      "interpretations": [],
+      "truthSql": "SELECT * FROM PROJECT WHERE Plocation = 'Houston'",
+      "truthRows": 2,
+      "truthResult": "identical",
+      "execution": {
+        "executed": true,
+        "runs": true,
+        "rows": 2,
+        "cols": [
+          "Pname",
+          "Pnumber",
+          "Plocation",
+          "Dnum"
+        ]
+      }
+    },
+    {
+      "id": 7,
+      "category": "simple",
+      "question": "Show employees with Dno 5",
+      "paraphraseGroup": null,
+      "status": 200,
+      "ms": 41.5,
+      "response": {
+        "generatedQuery": "SELECT * FROM EMPLOYEE WHERE Dno = 5;",
+        "targetDb": "MySQL",
+        "handledBy": "RULE_ENGINE",
+        "confidence": 0.95,
+        "ruleTrace": {
+          "outcome": "BUILT",
+          "shape": "SELECT",
+          "bindings": [
+            {
+              "phrase": "EMPLOYEE",
+              "kind": "TABLE",
+              "resolvedTo": "EMPLOYEE"
+            },
+            {
+              "phrase": "dno 5",
+              "kind": "FILTER",
+              "resolvedTo": "EMPLOYEE.Dno"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [
+            "Every field named in the question matched a column in the active schema"
+          ],
+          "declineReason": null,
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      },
+      "handledBy": "RULE_ENGINE",
+      "confidence": 0.95,
+      "generatedQuery": "SELECT * FROM EMPLOYEE WHERE Dno = 5;",
+      "schemaWarning": null,
+      "declineReason": null,
+      "interpretations": [],
+      "truthSql": "SELECT * FROM EMPLOYEE WHERE Dno = 5",
+      "truthRows": 5,
+      "truthResult": "identical",
+      "execution": {
+        "executed": true,
+        "runs": true,
+        "rows": 5,
+        "cols": [
+          "Fname",
+          "Minit",
+          "Lname",
+          "Ssn",
+          "Bdate",
+          "Address",
+          "Sex",
+          "Salary",
+          "Super_ssn",
+          "Dno"
+        ]
+      }
+    },
+    {
+      "id": 8,
+      "category": "simple",
+      "question": "Show dependents whose relationship is spouse",
+      "paraphraseGroup": null,
+      "status": 200,
+      "ms": 29.1,
+      "response": {
+        "generatedQuery": "SELECT * FROM DEPENDENT WHERE Relationship = 'spouse';",
+        "targetDb": "MySQL",
+        "handledBy": "RULE_ENGINE",
+        "confidence": 0.95,
+        "ruleTrace": {
+          "outcome": "BUILT",
+          "shape": "SELECT",
+          "bindings": [
+            {
+              "phrase": "DEPENDENT",
+              "kind": "TABLE",
+              "resolvedTo": "DEPENDENT"
+            },
+            {
+              "phrase": "relationship spouse",
+              "kind": "FILTER",
+              "resolvedTo": "DEPENDENT.Relationship"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [
+            "Every field named in the question matched a column in the active schema"
+          ],
+          "declineReason": null,
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      },
+      "handledBy": "RULE_ENGINE",
+      "confidence": 0.95,
+      "generatedQuery": "SELECT * FROM DEPENDENT WHERE Relationship = 'spouse';",
+      "schemaWarning": null,
+      "declineReason": null,
+      "interpretations": [],
+      "truthSql": "SELECT * FROM DEPENDENT WHERE Relationship = 'Spouse'",
+      "truthRows": 3,
+      "truthResult": "identical",
+      "execution": {
+        "executed": true,
+        "runs": true,
+        "rows": 3,
+        "cols": [
+          "Essn",
+          "Dependent_name",
+          "Sex",
+          "Bdate",
+          "Relationship"
+        ]
+      }
+    },
+    {
+      "id": 9,
+      "category": "aggregate",
+      "question": "How many employees are there",
+      "paraphraseGroup": "P2",
+      "status": 200,
+      "ms": 13.1,
+      "response": {
+        "generatedQuery": "SELECT COUNT(*) FROM EMPLOYEE;",
+        "targetDb": "MySQL",
+        "handledBy": "RULE_ENGINE",
+        "confidence": 0.95,
+        "ruleTrace": {
+          "outcome": "BUILT",
+          "shape": "SELECT",
+          "bindings": [
+            {
+              "phrase": "EMPLOYEE",
+              "kind": "TABLE",
+              "resolvedTo": "EMPLOYEE"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [
+            "Every field named in the question matched a column in the active schema"
+          ],
+          "declineReason": null,
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      },
+      "handledBy": "RULE_ENGINE",
+      "confidence": 0.95,
+      "generatedQuery": "SELECT COUNT(*) FROM EMPLOYEE;",
+      "schemaWarning": null,
+      "declineReason": null,
+      "interpretations": [],
+      "truthSql": "SELECT COUNT(*) FROM EMPLOYEE",
+      "truthRows": 1,
+      "truthResult": "identical",
+      "execution": {
+        "executed": true,
+        "runs": true,
+        "rows": 1,
+        "cols": [
+          "COUNT(*)"
+        ]
+      }
+    },
+    {
+      "id": 10,
+      "category": "aggregate",
+      "question": "Count the employees",
+      "paraphraseGroup": "P2",
+      "status": 200,
+      "ms": 23.8,
+      "response": {
+        "generatedQuery": "SELECT COUNT(*) FROM EMPLOYEE;",
+        "targetDb": "MySQL",
+        "handledBy": "RULE_ENGINE",
+        "confidence": 0.95,
+        "ruleTrace": {
+          "outcome": "BUILT",
+          "shape": "SELECT",
+          "bindings": [
+            {
+              "phrase": "EMPLOYEE",
+              "kind": "TABLE",
+              "resolvedTo": "EMPLOYEE"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [
+            "Every field named in the question matched a column in the active schema"
+          ],
+          "declineReason": null,
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      },
+      "handledBy": "RULE_ENGINE",
+      "confidence": 0.95,
+      "generatedQuery": "SELECT COUNT(*) FROM EMPLOYEE;",
+      "schemaWarning": null,
+      "declineReason": null,
+      "interpretations": [],
+      "truthSql": "SELECT COUNT(*) FROM EMPLOYEE",
+      "truthRows": 1,
+      "truthResult": "identical",
+      "execution": {
+        "executed": true,
+        "runs": true,
+        "rows": 1,
+        "cols": [
+          "COUNT(*)"
+        ]
+      }
+    },
+    {
+      "id": 11,
+      "category": "aggregate",
+      "question": "Average salary of employees",
+      "paraphraseGroup": "P3",
+      "status": 200,
+      "ms": 14.1,
+      "response": {
+        "generatedQuery": "SELECT AVG(Salary) FROM EMPLOYEE;",
+        "targetDb": "MySQL",
+        "handledBy": "RULE_ENGINE",
+        "confidence": 0.95,
+        "ruleTrace": {
+          "outcome": "BUILT",
+          "shape": "SELECT",
+          "bindings": [
+            {
+              "phrase": "EMPLOYEE",
+              "kind": "TABLE",
+              "resolvedTo": "EMPLOYEE"
+            },
+            {
+              "phrase": "salary",
+              "kind": "AGGREGATE",
+              "resolvedTo": "AVG(EMPLOYEE.Salary)"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [
+            "Every field named in the question matched a column in the active schema"
+          ],
+          "declineReason": null,
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      },
+      "handledBy": "RULE_ENGINE",
+      "confidence": 0.95,
+      "generatedQuery": "SELECT AVG(Salary) FROM EMPLOYEE;",
+      "schemaWarning": null,
+      "declineReason": null,
+      "interpretations": [],
+      "truthSql": "SELECT AVG(Salary) FROM EMPLOYEE",
+      "truthRows": 1,
+      "truthResult": "identical",
+      "execution": {
+        "executed": true,
+        "runs": true,
+        "rows": 1,
+        "cols": [
+          "AVG(Salary)"
+        ]
+      }
+    },
+    {
+      "id": 12,
+      "category": "aggregate",
+      "question": "What is the mean salary of employees",
+      "paraphraseGroup": "P3",
+      "status": 200,
+      "ms": 27.8,
+      "response": {
+        "generatedQuery": "SELECT AVG(Salary) FROM EMPLOYEE;",
+        "targetDb": "MySQL",
+        "handledBy": "RULE_ENGINE",
+        "confidence": 0.95,
+        "ruleTrace": {
+          "outcome": "BUILT",
+          "shape": "SELECT",
+          "bindings": [
+            {
+              "phrase": "EMPLOYEE",
+              "kind": "TABLE",
+              "resolvedTo": "EMPLOYEE"
+            },
+            {
+              "phrase": "salary",
+              "kind": "AGGREGATE",
+              "resolvedTo": "AVG(EMPLOYEE.Salary)"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [
+            "Every field named in the question matched a column in the active schema"
+          ],
+          "declineReason": null,
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      },
+      "handledBy": "RULE_ENGINE",
+      "confidence": 0.95,
+      "generatedQuery": "SELECT AVG(Salary) FROM EMPLOYEE;",
+      "schemaWarning": null,
+      "declineReason": null,
+      "interpretations": [],
+      "truthSql": "SELECT AVG(Salary) FROM EMPLOYEE",
+      "truthRows": 1,
+      "truthResult": "identical",
+      "execution": {
+        "executed": true,
+        "runs": true,
+        "rows": 1,
+        "cols": [
+          "AVG(Salary)"
+        ]
+      }
+    },
+    {
+      "id": 13,
+      "category": "aggregate",
+      "question": "Maximum salary of employees",
+      "paraphraseGroup": null,
+      "status": 200,
+      "ms": 18.5,
+      "response": {
+        "generatedQuery": "SELECT MAX(Salary) FROM EMPLOYEE;",
+        "targetDb": "MySQL",
+        "handledBy": "RULE_ENGINE",
+        "confidence": 0.95,
+        "ruleTrace": {
+          "outcome": "BUILT",
+          "shape": "SELECT",
+          "bindings": [
+            {
+              "phrase": "EMPLOYEE",
+              "kind": "TABLE",
+              "resolvedTo": "EMPLOYEE"
+            },
+            {
+              "phrase": "salary",
+              "kind": "AGGREGATE",
+              "resolvedTo": "MAX(EMPLOYEE.Salary)"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [
+            "Every field named in the question matched a column in the active schema"
+          ],
+          "declineReason": null,
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      },
+      "handledBy": "RULE_ENGINE",
+      "confidence": 0.95,
+      "generatedQuery": "SELECT MAX(Salary) FROM EMPLOYEE;",
+      "schemaWarning": null,
+      "declineReason": null,
+      "interpretations": [],
+      "truthSql": "SELECT MAX(Salary) FROM EMPLOYEE",
+      "truthRows": 1,
+      "truthResult": "identical",
+      "execution": {
+        "executed": true,
+        "runs": true,
+        "rows": 1,
+        "cols": [
+          "MAX(Salary)"
+        ]
+      }
+    },
+    {
+      "id": 14,
+      "category": "aggregate",
+      "question": "Minimum salary of employees",
+      "paraphraseGroup": null,
+      "status": 200,
+      "ms": 25.5,
+      "response": {
+        "generatedQuery": "SELECT MIN(Salary) FROM EMPLOYEE;",
+        "targetDb": "MySQL",
+        "handledBy": "RULE_ENGINE",
+        "confidence": 0.95,
+        "ruleTrace": {
+          "outcome": "BUILT",
+          "shape": "SELECT",
+          "bindings": [
+            {
+              "phrase": "EMPLOYEE",
+              "kind": "TABLE",
+              "resolvedTo": "EMPLOYEE"
+            },
+            {
+              "phrase": "salary",
+              "kind": "AGGREGATE",
+              "resolvedTo": "MIN(EMPLOYEE.Salary)"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [
+            "Every field named in the question matched a column in the active schema"
+          ],
+          "declineReason": null,
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      },
+      "handledBy": "RULE_ENGINE",
+      "confidence": 0.95,
+      "generatedQuery": "SELECT MIN(Salary) FROM EMPLOYEE;",
+      "schemaWarning": null,
+      "declineReason": null,
+      "interpretations": [],
+      "truthSql": "SELECT MIN(Salary) FROM EMPLOYEE",
+      "truthRows": 1,
+      "truthResult": "identical",
+      "execution": {
+        "executed": true,
+        "runs": true,
+        "rows": 1,
+        "cols": [
+          "MIN(Salary)"
+        ]
+      }
+    },
+    {
+      "id": 15,
+      "category": "aggregate",
+      "question": "Sum of hours of works_on",
+      "paraphraseGroup": null,
+      "status": 200,
+      "ms": 20.0,
+      "response": {
+        "generatedQuery": "SELECT SUM(Hours) FROM WORKS_ON;",
+        "targetDb": "MySQL",
+        "handledBy": "RULE_ENGINE",
+        "confidence": 0.95,
+        "ruleTrace": {
+          "outcome": "BUILT",
+          "shape": "SELECT",
+          "bindings": [
+            {
+              "phrase": "WORKS_ON",
+              "kind": "TABLE",
+              "resolvedTo": "WORKS_ON"
+            },
+            {
+              "phrase": "hours",
+              "kind": "AGGREGATE",
+              "resolvedTo": "SUM(WORKS_ON.Hours)"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [
+            "Every field named in the question matched a column in the active schema"
+          ],
+          "declineReason": null,
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      },
+      "handledBy": "RULE_ENGINE",
+      "confidence": 0.95,
+      "generatedQuery": "SELECT SUM(Hours) FROM WORKS_ON;",
+      "schemaWarning": null,
+      "declineReason": null,
+      "interpretations": [],
+      "truthSql": "SELECT SUM(Hours) FROM WORKS_ON",
+      "truthRows": 1,
+      "truthResult": "identical",
+      "execution": {
+        "executed": true,
+        "runs": true,
+        "rows": 1,
+        "cols": [
+          "SUM(Hours)"
+        ]
+      }
+    },
+    {
+      "id": 16,
+      "category": "group-by",
+      "question": "How many employees per Dno",
+      "paraphraseGroup": null,
+      "status": 200,
+      "ms": 9.1,
+      "response": {
+        "generatedQuery": "SELECT Dno, COUNT(*) FROM EMPLOYEE GROUP BY Dno;",
+        "targetDb": "MySQL",
+        "handledBy": "RULE_ENGINE",
+        "confidence": 0.95,
+        "ruleTrace": {
+          "outcome": "BUILT",
+          "shape": "SELECT + GROUP BY",
+          "bindings": [
+            {
+              "phrase": "EMPLOYEE",
+              "kind": "TABLE",
+              "resolvedTo": "EMPLOYEE"
+            },
+            {
+              "phrase": "dno",
+              "kind": "GROUPING",
+              "resolvedTo": "EMPLOYEE.Dno"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [
+            "Every field named in the question matched a column in the active schema"
+          ],
+          "declineReason": null,
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      },
+      "handledBy": "RULE_ENGINE",
+      "confidence": 0.95,
+      "generatedQuery": "SELECT Dno, COUNT(*) FROM EMPLOYEE GROUP BY Dno;",
+      "schemaWarning": null,
+      "declineReason": null,
+      "interpretations": [],
+      "truthSql": "SELECT Dno, COUNT(*) FROM EMPLOYEE GROUP BY Dno",
+      "truthRows": 7521,
+      "truthResult": "identical",
+      "execution": {
+        "executed": true,
+        "runs": true,
+        "rows": 7521,
+        "cols": [
+          "Dno",
+          "COUNT(*)"
+        ]
+      }
+    },
+    {
+      "id": 17,
+      "category": "group-by",
+      "question": "How many projects per Dnum",
+      "paraphraseGroup": null,
+      "status": 200,
+      "ms": 11.0,
+      "response": {
+        "generatedQuery": "SELECT Dnum, COUNT(*) FROM PROJECT GROUP BY Dnum;",
+        "targetDb": "MySQL",
+        "handledBy": "RULE_ENGINE",
+        "confidence": 0.95,
+        "ruleTrace": {
+          "outcome": "BUILT",
+          "shape": "SELECT + GROUP BY",
+          "bindings": [
+            {
+              "phrase": "PROJECT",
+              "kind": "TABLE",
+              "resolvedTo": "PROJECT"
+            },
+            {
+              "phrase": "dnum",
+              "kind": "GROUPING",
+              "resolvedTo": "PROJECT.Dnum"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [
+            "Every field named in the question matched a column in the active schema"
+          ],
+          "declineReason": null,
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      },
+      "handledBy": "RULE_ENGINE",
+      "confidence": 0.95,
+      "generatedQuery": "SELECT Dnum, COUNT(*) FROM PROJECT GROUP BY Dnum;",
+      "schemaWarning": null,
+      "declineReason": null,
+      "interpretations": [],
+      "truthSql": "SELECT Dnum, COUNT(*) FROM PROJECT GROUP BY Dnum",
+      "truthRows": 7602,
+      "truthResult": "identical",
+      "execution": {
+        "executed": true,
+        "runs": true,
+        "rows": 7602,
+        "cols": [
+          "Dnum",
+          "COUNT(*)"
+        ]
+      }
+    },
+    {
+      "id": 18,
+      "category": "group-by",
+      "question": "Average salary per Dno",
+      "paraphraseGroup": null,
+      "status": 200,
+      "ms": 388.4,
+      "response": {
+        "generatedQuery": "SELECT AVG(Salary), Dno FROM EMPLOYEE GROUP BY Dno;",
+        "targetDb": "MySQL",
+        "handledBy": "OLLAMA",
+        "confidence": 0.65,
+        "ruleTrace": {
+          "outcome": "DECLINED",
+          "shape": null,
+          "bindings": [],
+          "joinEdge": null,
+          "checksPassed": [],
+          "declineReason": "Nothing in the question matches a table in the schema that is currently active.",
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      },
+      "handledBy": "OLLAMA",
+      "confidence": 0.65,
+      "generatedQuery": "SELECT AVG(Salary), Dno FROM EMPLOYEE GROUP BY Dno;",
+      "schemaWarning": null,
+      "declineReason": "Nothing in the question matches a table in the schema that is currently active.",
+      "interpretations": [],
+      "truthSql": "SELECT Dno, AVG(Salary) FROM EMPLOYEE GROUP BY Dno",
+      "truthRows": 7521,
+      "truthResult": "identical",
+      "execution": {
+        "executed": true,
+        "runs": true,
+        "rows": 7521,
+        "cols": [
+          "AVG(Salary)",
+          "Dno"
+        ]
+      }
+    },
+    {
+      "id": 19,
+      "category": "group-by",
+      "question": "Count of dependents per relationship",
+      "paraphraseGroup": null,
+      "status": 200,
+      "ms": 11.2,
+      "response": {
+        "generatedQuery": "SELECT Relationship, COUNT(*) FROM DEPENDENT GROUP BY Relationship;",
+        "targetDb": "MySQL",
+        "handledBy": "RULE_ENGINE",
+        "confidence": 0.95,
+        "ruleTrace": {
+          "outcome": "BUILT",
+          "shape": "SELECT + GROUP BY",
+          "bindings": [
+            {
+              "phrase": "DEPENDENT",
+              "kind": "TABLE",
+              "resolvedTo": "DEPENDENT"
+            },
+            {
+              "phrase": "relationship",
+              "kind": "GROUPING",
+              "resolvedTo": "DEPENDENT.Relationship"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [
+            "Every field named in the question matched a column in the active schema"
+          ],
+          "declineReason": null,
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      },
+      "handledBy": "RULE_ENGINE",
+      "confidence": 0.95,
+      "generatedQuery": "SELECT Relationship, COUNT(*) FROM DEPENDENT GROUP BY Relationship;",
+      "schemaWarning": null,
+      "declineReason": null,
+      "interpretations": [],
+      "truthSql": "SELECT Relationship, COUNT(*) FROM DEPENDENT GROUP BY Relationship",
+      "truthRows": 2166,
+      "truthResult": "identical",
+      "execution": {
+        "executed": true,
+        "runs": true,
+        "rows": 2166,
+        "cols": [
+          "Relationship",
+          "COUNT(*)"
+        ]
+      }
+    },
+    {
+      "id": 20,
+      "category": "group-by",
+      "question": "Total hours per Pno in works_on",
+      "paraphraseGroup": null,
+      "status": 200,
+      "ms": 505.2,
+      "response": {
+        "generatedQuery": "SELECT Pno, SUM(Hours) AS Total_Hours FROM WORKS_ON GROUP BY Pno;",
+        "targetDb": "MySQL",
+        "handledBy": "OLLAMA",
+        "confidence": 0.65,
+        "ruleTrace": {
+          "outcome": "DECLINED",
+          "shape": null,
+          "bindings": [
+            {
+              "phrase": "WORKS_ON",
+              "kind": "TABLE",
+              "resolvedTo": "WORKS_ON"
+            },
+            {
+              "phrase": "hours",
+              "kind": "AGGREGATE",
+              "resolvedTo": "SUM(WORKS_ON.Hours)"
+            },
+            {
+              "phrase": "pno",
+              "kind": "GROUPING",
+              "resolvedTo": "WORKS_ON.Pno"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [],
+          "declineReason": "No column of WORKS_ON contains the value \"works\", so this engine cannot tell which field the question means.",
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      },
+      "handledBy": "OLLAMA",
+      "confidence": 0.65,
+      "generatedQuery": "SELECT Pno, SUM(Hours) AS Total_Hours FROM WORKS_ON GROUP BY Pno;",
+      "schemaWarning": null,
+      "declineReason": "No column of WORKS_ON contains the value \"works\", so this engine cannot tell which field the question means.",
+      "interpretations": [],
+      "truthSql": "SELECT Pno, SUM(Hours) FROM WORKS_ON GROUP BY Pno",
+      "truthRows": 7577,
+      "truthResult": "identical",
+      "execution": {
+        "executed": true,
+        "runs": true,
+        "rows": 7577,
+        "cols": [
+          "Pno",
+          "Total_Hours"
+        ]
+      }
+    },
+    {
+      "id": 21,
+      "category": "sort/top-N",
+      "question": "Top 5 employees by salary",
+      "paraphraseGroup": "P7",
+      "status": 200,
+      "ms": 35.6,
+      "response": {
+        "generatedQuery": "SELECT * FROM EMPLOYEE ORDER BY Salary DESC LIMIT 5;",
+        "targetDb": "MySQL",
+        "handledBy": "RULE_ENGINE",
+        "confidence": 0.95,
+        "ruleTrace": {
+          "outcome": "BUILT",
+          "shape": "SELECT",
+          "bindings": [
+            {
+              "phrase": "EMPLOYEE",
+              "kind": "TABLE",
+              "resolvedTo": "EMPLOYEE"
+            },
+            {
+              "phrase": "ranking",
+              "kind": "RANKING",
+              "resolvedTo": "Salary DESC"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [
+            "Every field named in the question matched a column in the active schema"
+          ],
+          "declineReason": null,
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      },
+      "handledBy": "RULE_ENGINE",
+      "confidence": 0.95,
+      "generatedQuery": "SELECT * FROM EMPLOYEE ORDER BY Salary DESC LIMIT 5;",
+      "schemaWarning": null,
+      "declineReason": null,
+      "interpretations": [],
+      "truthSql": "SELECT * FROM EMPLOYEE ORDER BY Salary DESC LIMIT 5",
+      "truthRows": 5,
+      "truthResult": "identical",
+      "execution": {
+        "executed": true,
+        "runs": true,
+        "rows": 5,
+        "cols": [
+          "Fname",
+          "Minit",
+          "Lname",
+          "Ssn",
+          "Bdate",
+          "Address",
+          "Sex",
+          "Salary",
+          "Super_ssn",
+          "Dno"
+        ]
+      }
+    },
+    {
+      "id": 22,
+      "category": "sort/top-N",
+      "question": "Show the 5 highest paid employees",
+      "paraphraseGroup": "P7",
+      "status": 200,
+      "ms": 506.4,
+      "response": {
+        "generatedQuery": "SELECT Fname, Minit, Lname, Salary FROM EMPLOYEE ORDER BY Salary DESC LIMIT 5;",
+        "targetDb": "MySQL",
+        "handledBy": "OLLAMA",
+        "confidence": 0.65,
+        "ruleTrace": {
+          "outcome": "DECLINED",
+          "shape": null,
+          "bindings": [
+            {
+              "phrase": "EMPLOYEE",
+              "kind": "TABLE",
+              "resolvedTo": "EMPLOYEE"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [],
+          "declineReason": "The question asks for the highest of \"paid\", which is not a column of EMPLOYEE.",
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      },
+      "handledBy": "OLLAMA",
+      "confidence": 0.65,
+      "generatedQuery": "SELECT Fname, Minit, Lname, Salary FROM EMPLOYEE ORDER BY Salary DESC LIMIT 5;",
+      "schemaWarning": null,
+      "declineReason": "The question asks for the highest of \"paid\", which is not a column of EMPLOYEE.",
+      "interpretations": [],
+      "truthSql": "SELECT * FROM EMPLOYEE ORDER BY Salary DESC LIMIT 5",
+      "truthRows": 5,
+      "truthResult": "same rows with fewer columns",
+      "execution": {
+        "executed": true,
+        "runs": true,
+        "rows": 5,
+        "cols": [
+          "Fname",
+          "Minit",
+          "Lname",
+          "Salary"
+        ]
+      }
+    },
+    {
+      "id": 23,
+      "category": "sort/top-N",
+      "question": "Show departments sorted by Dname",
+      "paraphraseGroup": null,
+      "status": 200,
+      "ms": 24.0,
+      "response": {
+        "generatedQuery": "SELECT * FROM DEPARTMENT ORDER BY Dname ASC;",
+        "targetDb": "MySQL",
+        "handledBy": "RULE_ENGINE",
+        "confidence": 0.95,
+        "ruleTrace": {
+          "outcome": "BUILT",
+          "shape": "SELECT",
+          "bindings": [
+            {
+              "phrase": "DEPARTMENT",
+              "kind": "TABLE",
+              "resolvedTo": "DEPARTMENT"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [
+            "Every field named in the question matched a column in the active schema"
+          ],
+          "declineReason": null,
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      },
+      "handledBy": "RULE_ENGINE",
+      "confidence": 0.95,
+      "generatedQuery": "SELECT * FROM DEPARTMENT ORDER BY Dname ASC;",
+      "schemaWarning": null,
+      "declineReason": null,
+      "interpretations": [],
+      "truthSql": "SELECT * FROM DEPARTMENT",
+      "truthRows": 12000,
+      "truthResult": "identical",
+      "execution": {
+        "executed": true,
+        "runs": true,
+        "rows": 12000,
+        "cols": [
+          "Dname",
+          "Dnumber",
+          "Mgr_ssn",
+          "Mgr_start_date"
+        ]
+      }
+    },
+    {
+      "id": 24,
+      "category": "sort/top-N",
+      "question": "Show projects sorted by Pname descending",
+      "paraphraseGroup": null,
+      "status": 200,
+      "ms": 28.8,
+      "response": {
+        "generatedQuery": "SELECT * FROM PROJECT ORDER BY Pname DESC;",
+        "targetDb": "MySQL",
+        "handledBy": "RULE_ENGINE",
+        "confidence": 0.95,
+        "ruleTrace": {
+          "outcome": "BUILT",
+          "shape": "SELECT",
+          "bindings": [
+            {
+              "phrase": "PROJECT",
+              "kind": "TABLE",
+              "resolvedTo": "PROJECT"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [
+            "Every field named in the question matched a column in the active schema"
+          ],
+          "declineReason": null,
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      },
+      "handledBy": "RULE_ENGINE",
+      "confidence": 0.95,
+      "generatedQuery": "SELECT * FROM PROJECT ORDER BY Pname DESC;",
+      "schemaWarning": null,
+      "declineReason": null,
+      "interpretations": [],
+      "truthSql": "SELECT * FROM PROJECT",
+      "truthRows": 12000,
+      "truthResult": "identical",
+      "execution": {
+        "executed": true,
+        "runs": true,
+        "rows": 12000,
+        "cols": [
+          "Pname",
+          "Pnumber",
+          "Plocation",
+          "Dnum"
+        ]
+      }
+    },
+    {
+      "id": 25,
+      "category": "sort/top-N",
+      "question": "Show the oldest employee",
+      "paraphraseGroup": null,
+      "status": 200,
+      "ms": 10.3,
+      "response": {
+        "generatedQuery": "SELECT * FROM EMPLOYEE ORDER BY Bdate ASC LIMIT 1;",
+        "targetDb": "MySQL",
+        "handledBy": "RULE_ENGINE",
+        "confidence": 0.95,
+        "ruleTrace": {
+          "outcome": "BUILT",
+          "shape": "SELECT",
+          "bindings": [
+            {
+              "phrase": "EMPLOYEE",
+              "kind": "TABLE",
+              "resolvedTo": "EMPLOYEE"
+            },
+            {
+              "phrase": "ranking",
+              "kind": "RANKING",
+              "resolvedTo": "Bdate ASC"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [
+            "Every field named in the question matched a column in the active schema"
+          ],
+          "declineReason": null,
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      },
+      "handledBy": "RULE_ENGINE",
+      "confidence": 0.95,
+      "generatedQuery": "SELECT * FROM EMPLOYEE ORDER BY Bdate ASC LIMIT 1;",
+      "schemaWarning": null,
+      "declineReason": null,
+      "interpretations": [],
+      "truthSql": "SELECT * FROM EMPLOYEE ORDER BY Bdate ASC LIMIT 1",
+      "truthRows": 1,
+      "truthResult": "identical",
+      "execution": {
+        "executed": true,
+        "runs": true,
+        "rows": 1,
+        "cols": [
+          "Fname",
+          "Minit",
+          "Lname",
+          "Ssn",
+          "Bdate",
+          "Address",
+          "Sex",
+          "Salary",
+          "Super_ssn",
+          "Dno"
+        ]
+      }
+    },
+    {
+      "id": 26,
+      "category": "sort/top-N",
+      "question": "First 10 employees sorted by Lname",
+      "paraphraseGroup": null,
+      "status": 200,
+      "ms": 27.8,
+      "response": {
+        "generatedQuery": "SELECT * FROM EMPLOYEE ORDER BY Lname ASC LIMIT 10;",
+        "targetDb": "MySQL",
+        "handledBy": "RULE_ENGINE",
+        "confidence": 0.95,
+        "ruleTrace": {
+          "outcome": "BUILT",
+          "shape": "SELECT",
+          "bindings": [
+            {
+              "phrase": "EMPLOYEE",
+              "kind": "TABLE",
+              "resolvedTo": "EMPLOYEE"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [
+            "Every field named in the question matched a column in the active schema"
+          ],
+          "declineReason": null,
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      },
+      "handledBy": "RULE_ENGINE",
+      "confidence": 0.95,
+      "generatedQuery": "SELECT * FROM EMPLOYEE ORDER BY Lname ASC LIMIT 10;",
+      "schemaWarning": null,
+      "declineReason": null,
+      "interpretations": [],
+      "truthSql": "SELECT * FROM EMPLOYEE ORDER BY Lname ASC LIMIT 10",
+      "truthRows": 10,
+      "truthResult": "identical",
+      "execution": {
+        "executed": true,
+        "runs": true,
+        "rows": 10,
+        "cols": [
+          "Fname",
+          "Minit",
+          "Lname",
+          "Ssn",
+          "Bdate",
+          "Address",
+          "Sex",
+          "Salary",
+          "Super_ssn",
+          "Dno"
+        ]
+      }
+    },
+    {
+      "id": 27,
+      "category": "join",
+      "question": "Show dependents with their employees",
+      "paraphraseGroup": null,
+      "status": 200,
+      "ms": 16.5,
+      "response": {
+        "generatedQuery": "SELECT * FROM DEPENDENT JOIN EMPLOYEE ON DEPENDENT.Essn = EMPLOYEE.Ssn;",
+        "targetDb": "MySQL",
+        "handledBy": "RULE_ENGINE",
+        "confidence": 0.95,
+        "ruleTrace": {
+          "outcome": "BUILT",
+          "shape": "SELECT + JOIN",
+          "bindings": [
+            {
+              "phrase": "DEPENDENT",
+              "kind": "TABLE",
+              "resolvedTo": "DEPENDENT"
+            },
+            {
+              "phrase": "EMPLOYEE",
+              "kind": "TABLE",
+              "resolvedTo": "EMPLOYEE"
+            }
+          ],
+          "joinEdge": {
+            "fromTable": "DEPENDENT",
+            "fromColumn": "Essn",
+            "toTable": "EMPLOYEE",
+            "toColumn": "Ssn",
+            "origin": "declared foreign key"
+          },
+          "checksPassed": [
+            "Every field named in the question matched a column in the active schema",
+            "Exactly one declared foreign key relates these tables"
+          ],
+          "declineReason": null,
+          "joinEdges": [
+            {
+              "fromTable": "DEPENDENT",
+              "fromColumn": "Essn",
+              "toTable": "EMPLOYEE",
+              "toColumn": "Ssn",
+              "origin": "declared foreign key"
+            }
+          ]
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      },
+      "handledBy": "RULE_ENGINE",
+      "confidence": 0.95,
+      "generatedQuery": "SELECT * FROM DEPENDENT JOIN EMPLOYEE ON DEPENDENT.Essn = EMPLOYEE.Ssn;",
+      "schemaWarning": null,
+      "declineReason": null,
+      "interpretations": [],
+      "truthSql": "SELECT * FROM DEPENDENT JOIN EMPLOYEE ON DEPENDENT.Essn = EMPLOYEE.Ssn",
+      "truthRows": 12000,
+      "truthResult": "identical",
+      "execution": {
+        "executed": true,
+        "runs": true,
+        "rows": 12000,
+        "cols": [
+          "Essn",
+          "Dependent_name",
+          "Sex",
+          "Bdate",
+          "Relationship",
+          "Fname",
+          "Minit",
+          "Lname",
+          "Ssn",
+          "Bdate",
+          "Address",
+          "Sex",
+          "Salary",
+          "Super_ssn",
+          "Dno"
+        ]
+      }
+    },
+    {
+      "id": 28,
+      "category": "join",
+      "question": "Show projects with their department",
+      "paraphraseGroup": null,
+      "status": 200,
+      "ms": 10.8,
+      "response": {
+        "generatedQuery": "SELECT * FROM PROJECT JOIN DEPARTMENT ON PROJECT.Dnum = DEPARTMENT.Dnumber;",
+        "targetDb": "MySQL",
+        "handledBy": "RULE_ENGINE",
+        "confidence": 0.95,
+        "ruleTrace": {
+          "outcome": "BUILT",
+          "shape": "SELECT + JOIN",
+          "bindings": [
+            {
+              "phrase": "PROJECT",
+              "kind": "TABLE",
+              "resolvedTo": "PROJECT"
+            },
+            {
+              "phrase": "DEPARTMENT",
+              "kind": "TABLE",
+              "resolvedTo": "DEPARTMENT"
+            }
+          ],
+          "joinEdge": {
+            "fromTable": "PROJECT",
+            "fromColumn": "Dnum",
+            "toTable": "DEPARTMENT",
+            "toColumn": "Dnumber",
+            "origin": "declared foreign key"
+          },
+          "checksPassed": [
+            "Every field named in the question matched a column in the active schema",
+            "Exactly one declared foreign key relates these tables"
+          ],
+          "declineReason": null,
+          "joinEdges": [
+            {
+              "fromTable": "PROJECT",
+              "fromColumn": "Dnum",
+              "toTable": "DEPARTMENT",
+              "toColumn": "Dnumber",
+              "origin": "declared foreign key"
+            }
+          ]
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      },
+      "handledBy": "RULE_ENGINE",
+      "confidence": 0.95,
+      "generatedQuery": "SELECT * FROM PROJECT JOIN DEPARTMENT ON PROJECT.Dnum = DEPARTMENT.Dnumber;",
+      "schemaWarning": null,
+      "declineReason": null,
+      "interpretations": [],
+      "truthSql": "SELECT * FROM PROJECT JOIN DEPARTMENT ON PROJECT.Dnum = DEPARTMENT.Dnumber",
+      "truthRows": 12000,
+      "truthResult": "identical",
+      "execution": {
+        "executed": true,
+        "runs": true,
+        "rows": 12000,
+        "cols": [
+          "Pname",
+          "Pnumber",
+          "Plocation",
+          "Dnum",
+          "Dname",
+          "Dnumber",
+          "Mgr_ssn",
+          "Mgr_start_date"
+        ]
+      }
+    },
+    {
+      "id": 29,
+      "category": "join",
+      "question": "Show employees with their department",
+      "paraphraseGroup": "P5",
+      "status": 200,
+      "ms": 11.9,
+      "response": {
+        "generatedQuery": "SELECT * FROM EMPLOYEE JOIN DEPARTMENT ON EMPLOYEE.Dno = DEPARTMENT.Dnumber;",
+        "targetDb": "MySQL",
+        "handledBy": "RULE_ENGINE",
+        "confidence": 0.85,
+        "ruleTrace": {
+          "outcome": "BUILT",
+          "shape": "SELECT + JOIN",
+          "bindings": [
+            {
+              "phrase": "EMPLOYEE",
+              "kind": "TABLE",
+              "resolvedTo": "EMPLOYEE"
+            },
+            {
+              "phrase": "DEPARTMENT",
+              "kind": "TABLE",
+              "resolvedTo": "DEPARTMENT"
+            }
+          ],
+          "joinEdge": {
+            "fromTable": "EMPLOYEE",
+            "fromColumn": "Dno",
+            "toTable": "DEPARTMENT",
+            "toColumn": "Dnumber",
+            "origin": "declared foreign key"
+          },
+          "checksPassed": [
+            "Every field named in the question matched a column in the active schema",
+            "Exactly one declared foreign key relates these tables"
+          ],
+          "declineReason": null,
+          "joinEdges": [
+            {
+              "fromTable": "EMPLOYEE",
+              "fromColumn": "Dno",
+              "toTable": "DEPARTMENT",
+              "toColumn": "Dnumber",
+              "origin": "declared foreign key"
+            }
+          ]
+        },
+        "schemaWarning": null,
+        "interpretations": [
+          {
+            "phrase": "department",
+            "item": "EMPLOYEE.Dno",
+            "kind": "CHOSEN_JOIN"
+          }
+        ]
+      },
+      "handledBy": "RULE_ENGINE",
+      "confidence": 0.85,
+      "generatedQuery": "SELECT * FROM EMPLOYEE JOIN DEPARTMENT ON EMPLOYEE.Dno = DEPARTMENT.Dnumber;",
+      "schemaWarning": null,
+      "declineReason": null,
+      "interpretations": [
+        {
+          "phrase": "department",
+          "item": "EMPLOYEE.Dno",
+          "kind": "CHOSEN_JOIN"
+        }
+      ],
+      "truthSql": "SELECT * FROM EMPLOYEE JOIN DEPARTMENT ON EMPLOYEE.Dno = DEPARTMENT.Dnumber",
+      "truthRows": 12000,
+      "truthResult": "identical",
+      "execution": {
+        "executed": true,
+        "runs": true,
+        "rows": 12000,
+        "cols": [
+          "Fname",
+          "Minit",
+          "Lname",
+          "Ssn",
+          "Bdate",
+          "Address",
+          "Sex",
+          "Salary",
+          "Super_ssn",
+          "Dno",
+          "Dname",
+          "Dnumber",
+          "Mgr_ssn",
+          "Mgr_start_date"
+        ]
+      }
+    },
+    {
+      "id": 30,
+      "category": "join",
+      "question": "List each employee and the department they work in",
+      "paraphraseGroup": "P5",
+      "status": 200,
+      "ms": 737.6,
+      "response": {
+        "generatedQuery": "SELECT E.Fname, E.Minit, E.Lname, D.Dname FROM EMPLOYEE E JOIN DEPARTMENT D ON E.Dno = D.Dnumber;",
+        "targetDb": "MySQL",
+        "handledBy": "OLLAMA",
+        "confidence": 0.65,
+        "ruleTrace": {
+          "outcome": "DECLINED",
+          "shape": null,
+          "bindings": [
+            {
+              "phrase": "EMPLOYEE",
+              "kind": "TABLE",
+              "resolvedTo": "EMPLOYEE"
+            },
+            {
+              "phrase": "DEPARTMENT",
+              "kind": "TABLE",
+              "resolvedTo": "DEPARTMENT"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [],
+          "declineReason": "The question uses \"work\", which isn't a table, column or stored value of the active schema, so this engine can't be sure it reads the whole question.",
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      },
+      "handledBy": "OLLAMA",
+      "confidence": 0.65,
+      "generatedQuery": "SELECT E.Fname, E.Minit, E.Lname, D.Dname FROM EMPLOYEE E JOIN DEPARTMENT D ON E.Dno = D.Dnumber;",
+      "schemaWarning": null,
+      "declineReason": "The question uses \"work\", which isn't a table, column or stored value of the active schema, so this engine can't be sure it reads the whole question.",
+      "interpretations": [],
+      "truthSql": "SELECT * FROM EMPLOYEE JOIN DEPARTMENT ON EMPLOYEE.Dno = DEPARTMENT.Dnumber",
+      "truthRows": 12000,
+      "truthResult": "same rows with fewer columns",
+      "execution": {
+        "executed": true,
+        "runs": true,
+        "rows": 12000,
+        "cols": [
+          "Fname",
+          "Minit",
+          "Lname",
+          "Dname"
+        ]
+      }
+    },
+    {
+      "id": 31,
+      "category": "join",
+      "question": "Show departments and their locations",
+      "paraphraseGroup": null,
+      "status": 200,
+      "ms": 712.8,
+      "response": {
+        "generatedQuery": "SELECT D.Dname, DL.Dlocation\nFROM DEPARTMENT D\nJOIN DEPT_LOCATIONS DL ON D.Dnumber = DL.Dnumber;",
+        "targetDb": "MySQL",
+        "handledBy": "OLLAMA",
+        "confidence": 0.65,
+        "ruleTrace": {
+          "outcome": "DECLINED",
+          "shape": null,
+          "bindings": [
+            {
+              "phrase": "DEPARTMENT",
+              "kind": "TABLE",
+              "resolvedTo": "DEPARTMENT"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [],
+          "declineReason": "The question uses \"locations\", which isn't a table, column or stored value of the active schema, so this engine can't be sure it reads the whole question.",
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      },
+      "handledBy": "OLLAMA",
+      "confidence": 0.65,
+      "generatedQuery": "SELECT D.Dname, DL.Dlocation\nFROM DEPARTMENT D\nJOIN DEPT_LOCATIONS DL ON D.Dnumber = DL.Dnumber;",
+      "schemaWarning": null,
+      "declineReason": "The question uses \"locations\", which isn't a table, column or stored value of the active schema, so this engine can't be sure it reads the whole question.",
+      "interpretations": [],
+      "truthSql": "SELECT * FROM DEPARTMENT JOIN DEPT_LOCATIONS ON DEPARTMENT.Dnumber = DEPT_LOCATIONS.Dnumber",
+      "truthRows": 12000,
+      "truthResult": "same rows with fewer columns",
+      "execution": {
+        "executed": true,
+        "runs": true,
+        "rows": 12000,
+        "cols": [
+          "Dname",
+          "Dlocation"
+        ]
+      }
+    },
+    {
+      "id": 32,
+      "category": "join",
+      "question": "Names of employees who work on ProductX",
+      "paraphraseGroup": null,
+      "status": 200,
+      "ms": 1322.5,
+      "response": {
+        "generatedQuery": "SELECT T1.Fname, T1.Minit, T1.Lname FROM EMPLOYEE AS T1 JOIN WORKS_ON AS T2 ON T1.Ssn = T2.Essn JOIN PROJECT AS T3 ON T2.Pno = T3.Pnumber WHERE T3.Pname = 'ProductX';",
+        "targetDb": "MySQL",
+        "handledBy": "OLLAMA",
+        "confidence": 0.65,
+        "ruleTrace": {
+          "outcome": "DECLINED",
+          "shape": null,
+          "bindings": [
+            {
+              "phrase": "EMPLOYEE",
+              "kind": "TABLE",
+              "resolvedTo": "EMPLOYEE"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [],
+          "declineReason": "The question asks for specific fields, but at least one of them is not a column of EMPLOYEE.",
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      },
+      "handledBy": "OLLAMA",
+      "confidence": 0.65,
+      "generatedQuery": "SELECT T1.Fname, T1.Minit, T1.Lname FROM EMPLOYEE AS T1 JOIN WORKS_ON AS T2 ON T1.Ssn = T2.Essn JOIN PROJECT AS T3 ON T2.Pno = T3.Pnumber WHERE T3.Pname = 'ProductX';",
+      "schemaWarning": null,
+      "declineReason": "The question asks for specific fields, but at least one of them is not a column of EMPLOYEE.",
+      "interpretations": [],
+      "truthSql": "SELECT e.Fname, e.Lname FROM EMPLOYEE e JOIN WORKS_ON w ON e.Ssn = w.Essn JOIN PROJECT p ON w.Pno = p.Pnumber WHERE p.Pname = 'ProductX'",
+      "truthRows": 3,
+      "truthResult": "different",
+      "execution": {
+        "executed": true,
+        "runs": true,
+        "rows": 3,
+        "cols": [
+          "Fname",
+          "Minit",
+          "Lname"
+        ]
+      }
+    },
+    {
+      "id": 33,
+      "category": "join",
+      "question": "Show employees and the projects they work on",
+      "paraphraseGroup": null,
+      "status": 200,
+      "ms": 913.5,
+      "response": {
+        "generatedQuery": "SELECT E.Fname, E.Minit, E.Lname, P.Pname FROM EMPLOYEE E JOIN WORKS_ON W ON E.Ssn = W.Essn JOIN PROJECT P ON W.Pno = P.Pnumber;",
+        "targetDb": "MySQL",
+        "handledBy": "OLLAMA",
+        "confidence": 0.65,
+        "ruleTrace": {
+          "outcome": "DECLINED",
+          "shape": null,
+          "bindings": [
+            {
+              "phrase": "EMPLOYEE",
+              "kind": "TABLE",
+              "resolvedTo": "EMPLOYEE"
+            },
+            {
+              "phrase": "PROJECT",
+              "kind": "TABLE",
+              "resolvedTo": "PROJECT"
+            },
+            {
+              "phrase": "DEPARTMENT",
+              "kind": "THROUGH",
+              "resolvedTo": "DEPARTMENT"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [],
+          "declineReason": "The question uses \"work\", which isn't a table, column or stored value of the active schema, so this engine can't be sure it reads the whole question.",
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      },
+      "handledBy": "OLLAMA",
+      "confidence": 0.65,
+      "generatedQuery": "SELECT E.Fname, E.Minit, E.Lname, P.Pname FROM EMPLOYEE E JOIN WORKS_ON W ON E.Ssn = W.Essn JOIN PROJECT P ON W.Pno = P.Pnumber;",
+      "schemaWarning": null,
+      "declineReason": "The question uses \"work\", which isn't a table, column or stored value of the active schema, so this engine can't be sure it reads the whole question.",
+      "interpretations": [],
+      "truthSql": "SELECT * FROM EMPLOYEE e JOIN WORKS_ON w ON e.Ssn = w.Essn JOIN PROJECT p ON w.Pno = p.Pnumber",
+      "truthRows": 12000,
+      "truthResult": "same rows with fewer columns",
+      "execution": {
+        "executed": true,
+        "runs": true,
+        "rows": 12000,
+        "cols": [
+          "Fname",
+          "Minit",
+          "Lname",
+          "Pname"
+        ]
+      }
+    },
+    {
+      "id": 34,
+      "category": "join",
+      "question": "Show dependents of employees who work on ProductX",
+      "paraphraseGroup": null,
+      "status": 200,
+      "ms": 1354.6,
+      "response": {
+        "generatedQuery": "SELECT D.Dependent_name\nFROM DEPENDENT D\nJOIN EMPLOYEE E ON D.Essn = E.Ssn\nJOIN WORKS_ON W ON E.Ssn = W.Essn\nJOIN PROJECT P ON W.Pno = P.Pnumber\nWHERE P.Pname = 'ProductX';",
+        "targetDb": "MySQL",
+        "handledBy": "OLLAMA",
+        "confidence": 0.65,
+        "ruleTrace": {
+          "outcome": "DECLINED",
+          "shape": null,
+          "bindings": [
+            {
+              "phrase": "DEPENDENT",
+              "kind": "TABLE",
+              "resolvedTo": "DEPENDENT"
+            },
+            {
+              "phrase": "EMPLOYEE",
+              "kind": "TABLE",
+              "resolvedTo": "EMPLOYEE"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [],
+          "declineReason": "The question uses \"work\", which isn't a table, column or stored value of the active schema, so this engine can't be sure it reads the whole question.",
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      },
+      "handledBy": "OLLAMA",
+      "confidence": 0.65,
+      "generatedQuery": "SELECT D.Dependent_name\nFROM DEPENDENT D\nJOIN EMPLOYEE E ON D.Essn = E.Ssn\nJOIN WORKS_ON W ON E.Ssn = W.Essn\nJOIN PROJECT P ON W.Pno = P.Pnumber\nWHERE P.Pname = 'ProductX';",
+      "schemaWarning": null,
+      "declineReason": "The question uses \"work\", which isn't a table, column or stored value of the active schema, so this engine can't be sure it reads the whole question.",
+      "interpretations": [],
+      "truthSql": "SELECT DISTINCT d.* FROM DEPENDENT d JOIN EMPLOYEE e ON d.Essn = e.Ssn JOIN WORKS_ON w ON e.Ssn = w.Essn JOIN PROJECT p ON w.Pno = p.Pnumber WHERE p.Pname = 'ProductX'",
+      "truthRows": 3,
+      "truthResult": "same rows with fewer columns",
+      "execution": {
+        "executed": true,
+        "runs": true,
+        "rows": 3,
+        "cols": [
+          "Dependent_name"
+        ]
+      }
+    },
+    {
+      "id": 35,
+      "category": "self-join",
+      "question": "Show employees and the name of their supervisor",
+      "paraphraseGroup": null,
+      "status": 200,
+      "ms": 998.3,
+      "response": {
+        "generatedQuery": "SELECT E.Fname, E.Minit, E.Lname, S.Fname, S.Minit, S.Lname AS Supervisor\nFROM EMPLOYEE E\nJOIN EMPLOYEE S ON E.Super_ssn = S.Ssn;",
+        "targetDb": "MySQL",
+        "handledBy": "OLLAMA",
+        "confidence": 0.65,
+        "ruleTrace": {
+          "outcome": "DECLINED",
+          "shape": null,
+          "bindings": [
+            {
+              "phrase": "EMPLOYEE",
+              "kind": "TABLE",
+              "resolvedTo": "EMPLOYEE"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [],
+          "declineReason": "The question uses \"name\", which isn't a table, column or stored value of the active schema, so this engine can't be sure it reads the whole question.",
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      },
+      "handledBy": "OLLAMA",
+      "confidence": 0.65,
+      "generatedQuery": "SELECT E.Fname, E.Minit, E.Lname, S.Fname, S.Minit, S.Lname AS Supervisor\nFROM EMPLOYEE E\nJOIN EMPLOYEE S ON E.Super_ssn = S.Ssn;",
+      "schemaWarning": null,
+      "declineReason": "The question uses \"name\", which isn't a table, column or stored value of the active schema, so this engine can't be sure it reads the whole question.",
+      "interpretations": [],
+      "truthSql": "SELECT e.Fname, e.Lname, s.Fname, s.Lname FROM EMPLOYEE e JOIN EMPLOYEE s ON e.Super_ssn = s.Ssn",
+      "truthRows": 11998,
+      "truthResult": "different",
+      "execution": {
+        "executed": true,
+        "runs": true,
+        "rows": 11998,
+        "cols": [
+          "Fname",
+          "Minit",
+          "Lname",
+          "Fname",
+          "Minit",
+          "Supervisor"
+        ]
+      }
+    },
+    {
+      "id": 36,
+      "category": "self-join",
+      "question": "Show employees supervised by Franklin Wong",
+      "paraphraseGroup": null,
+      "status": 200,
+      "ms": 1109.6,
+      "response": {
+        "generatedQuery": "SELECT E.Fname, E.Minit, E.Lname\nFROM EMPLOYEE E\nJOIN EMPLOYEE M ON E.Super_ssn = M.Ssn\nWHERE M.Fname = 'Franklin' AND M.Lname = 'Wong';",
+        "targetDb": "MySQL",
+        "handledBy": "OLLAMA",
+        "confidence": 0.65,
+        "ruleTrace": {
+          "outcome": "DECLINED",
+          "shape": null,
+          "bindings": [
+            {
+              "phrase": "EMPLOYEE",
+              "kind": "TABLE",
+              "resolvedTo": "EMPLOYEE"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [],
+          "declineReason": "The question uses \"supervised\", which isn't a table, column or stored value of the active schema, so this engine can't be sure it reads the whole question.",
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      },
+      "handledBy": "OLLAMA",
+      "confidence": 0.65,
+      "generatedQuery": "SELECT E.Fname, E.Minit, E.Lname\nFROM EMPLOYEE E\nJOIN EMPLOYEE M ON E.Super_ssn = M.Ssn\nWHERE M.Fname = 'Franklin' AND M.Lname = 'Wong';",
+      "schemaWarning": null,
+      "declineReason": "The question uses \"supervised\", which isn't a table, column or stored value of the active schema, so this engine can't be sure it reads the whole question.",
+      "interpretations": [],
+      "truthSql": "SELECT * FROM EMPLOYEE WHERE Super_ssn = '333445555'",
+      "truthRows": 3,
+      "truthResult": "same rows with fewer columns",
+      "execution": {
+        "executed": true,
+        "runs": true,
+        "rows": 3,
+        "cols": [
+          "Fname",
+          "Minit",
+          "Lname"
+        ]
+      }
+    },
+    {
+      "id": 37,
+      "category": "self-join",
+      "question": "How many employees does each supervisor have",
+      "paraphraseGroup": null,
+      "status": 200,
+      "ms": 564.2,
+      "response": {
+        "generatedQuery": "SELECT COUNT(*) AS num_employees, Super_ssn\nFROM EMPLOYEE\nGROUP BY Super_ssn;",
+        "targetDb": "MySQL",
+        "handledBy": "OLLAMA",
+        "confidence": 0.65,
+        "ruleTrace": {
+          "outcome": "DECLINED",
+          "shape": null,
+          "bindings": [
+            {
+              "phrase": "EMPLOYEE",
+              "kind": "TABLE",
+              "resolvedTo": "EMPLOYEE"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [],
+          "declineReason": "The question uses \"supervisor\", which isn't a table, column or stored value of the active schema, so this engine can't be sure it reads the whole question.",
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      },
+      "handledBy": "OLLAMA",
+      "confidence": 0.65,
+      "generatedQuery": "SELECT COUNT(*) AS num_employees, Super_ssn\nFROM EMPLOYEE\nGROUP BY Super_ssn;",
+      "schemaWarning": null,
+      "declineReason": "The question uses \"supervisor\", which isn't a table, column or stored value of the active schema, so this engine can't be sure it reads the whole question.",
+      "interpretations": [],
+      "truthSql": "SELECT Super_ssn, COUNT(*) FROM EMPLOYEE WHERE Super_ssn IS NOT NULL GROUP BY Super_ssn",
+      "truthRows": 5999,
+      "truthResult": "different",
+      "execution": {
+        "executed": true,
+        "runs": true,
+        "rows": 6000,
+        "cols": [
+          "num_employees",
+          "Super_ssn"
+        ]
+      }
+    },
+    {
+      "id": 38,
+      "category": "anti-join",
+      "question": "Employees who have no dependents",
+      "paraphraseGroup": "P6",
+      "status": 200,
+      "ms": 12.8,
+      "response": {
+        "generatedQuery": "SELECT EMPLOYEE.* FROM EMPLOYEE LEFT JOIN DEPENDENT ON EMPLOYEE.Ssn = DEPENDENT.Essn WHERE DEPENDENT.Essn IS NULL;",
+        "targetDb": "MySQL",
+        "handledBy": "RULE_ENGINE",
+        "confidence": 0.95,
+        "ruleTrace": {
+          "outcome": "BUILT",
+          "shape": "SELECT + JOIN (without)",
+          "bindings": [
+            {
+              "phrase": "EMPLOYEE",
+              "kind": "TABLE",
+              "resolvedTo": "EMPLOYEE"
+            },
+            {
+              "phrase": "DEPENDENT",
+              "kind": "TABLE",
+              "resolvedTo": "DEPENDENT"
+            }
+          ],
+          "joinEdge": {
+            "fromTable": "DEPENDENT",
+            "fromColumn": "Essn",
+            "toTable": "EMPLOYEE",
+            "toColumn": "Ssn",
+            "origin": "declared foreign key"
+          },
+          "checksPassed": [
+            "Every field named in the question matched a column in the active schema",
+            "Exactly one declared foreign key relates these tables"
+          ],
+          "declineReason": null,
+          "joinEdges": [
+            {
+              "fromTable": "DEPENDENT",
+              "fromColumn": "Essn",
+              "toTable": "EMPLOYEE",
+              "toColumn": "Ssn",
+              "origin": "declared foreign key"
+            }
+          ]
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      },
+      "handledBy": "RULE_ENGINE",
+      "confidence": 0.95,
+      "generatedQuery": "SELECT EMPLOYEE.* FROM EMPLOYEE LEFT JOIN DEPENDENT ON EMPLOYEE.Ssn = DEPENDENT.Essn WHERE DEPENDENT.Essn IS NULL;",
+      "schemaWarning": null,
+      "declineReason": null,
+      "interpretations": [],
+      "truthSql": "SELECT * FROM EMPLOYEE e WHERE NOT EXISTS (SELECT 1 FROM DEPENDENT d WHERE d.Essn = e.Ssn)",
+      "truthRows": 4354,
+      "truthResult": "identical",
+      "execution": {
+        "executed": true,
+        "runs": true,
+        "rows": 4354,
+        "cols": [
+          "Fname",
+          "Minit",
+          "Lname",
+          "Ssn",
+          "Bdate",
+          "Address",
+          "Sex",
+          "Salary",
+          "Super_ssn",
+          "Dno"
+        ]
+      }
+    },
+    {
+      "id": 39,
+      "category": "anti-join",
+      "question": "Which employees do not have any dependents",
+      "paraphraseGroup": "P6",
+      "status": 200,
+      "ms": 22.7,
+      "response": {
+        "generatedQuery": "SELECT * FROM EMPLOYEE JOIN DEPENDENT ON EMPLOYEE.Ssn = DEPENDENT.Essn;",
+        "targetDb": "MySQL",
+        "handledBy": "RULE_ENGINE",
+        "confidence": 0.95,
+        "ruleTrace": {
+          "outcome": "BUILT",
+          "shape": "SELECT + JOIN",
+          "bindings": [
+            {
+              "phrase": "EMPLOYEE",
+              "kind": "TABLE",
+              "resolvedTo": "EMPLOYEE"
+            },
+            {
+              "phrase": "DEPENDENT",
+              "kind": "TABLE",
+              "resolvedTo": "DEPENDENT"
+            }
+          ],
+          "joinEdge": {
+            "fromTable": "DEPENDENT",
+            "fromColumn": "Essn",
+            "toTable": "EMPLOYEE",
+            "toColumn": "Ssn",
+            "origin": "declared foreign key"
+          },
+          "checksPassed": [
+            "Every field named in the question matched a column in the active schema",
+            "Exactly one declared foreign key relates these tables"
+          ],
+          "declineReason": null,
+          "joinEdges": [
+            {
+              "fromTable": "DEPENDENT",
+              "fromColumn": "Essn",
+              "toTable": "EMPLOYEE",
+              "toColumn": "Ssn",
+              "origin": "declared foreign key"
+            }
+          ]
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      },
+      "handledBy": "RULE_ENGINE",
+      "confidence": 0.95,
+      "generatedQuery": "SELECT * FROM EMPLOYEE JOIN DEPENDENT ON EMPLOYEE.Ssn = DEPENDENT.Essn;",
+      "schemaWarning": null,
+      "declineReason": null,
+      "interpretations": [],
+      "truthSql": "SELECT * FROM EMPLOYEE e WHERE NOT EXISTS (SELECT 1 FROM DEPENDENT d WHERE d.Essn = e.Ssn)",
+      "truthRows": 4354,
+      "truthResult": "different",
+      "execution": {
+        "executed": true,
+        "runs": true,
+        "rows": 12000,
+        "cols": [
+          "Fname",
+          "Minit",
+          "Lname",
+          "Ssn",
+          "Bdate",
+          "Address",
+          "Sex",
+          "Salary",
+          "Super_ssn",
+          "Dno",
+          "Essn",
+          "Dependent_name",
+          "Sex",
+          "Bdate",
+          "Relationship"
+        ]
+      }
+    },
+    {
+      "id": 40,
+      "category": "anti-join",
+      "question": "Departments without projects",
+      "paraphraseGroup": null,
+      "status": 200,
+      "ms": 13.7,
+      "response": {
+        "generatedQuery": "SELECT DEPARTMENT.* FROM DEPARTMENT LEFT JOIN PROJECT ON DEPARTMENT.Dnumber = PROJECT.Dnum WHERE PROJECT.Dnum IS NULL;",
+        "targetDb": "MySQL",
+        "handledBy": "RULE_ENGINE",
+        "confidence": 0.95,
+        "ruleTrace": {
+          "outcome": "BUILT",
+          "shape": "SELECT + JOIN (without)",
+          "bindings": [
+            {
+              "phrase": "DEPARTMENT",
+              "kind": "TABLE",
+              "resolvedTo": "DEPARTMENT"
+            },
+            {
+              "phrase": "PROJECT",
+              "kind": "TABLE",
+              "resolvedTo": "PROJECT"
+            }
+          ],
+          "joinEdge": {
+            "fromTable": "PROJECT",
+            "fromColumn": "Dnum",
+            "toTable": "DEPARTMENT",
+            "toColumn": "Dnumber",
+            "origin": "declared foreign key"
+          },
+          "checksPassed": [
+            "Every field named in the question matched a column in the active schema",
+            "Exactly one declared foreign key relates these tables"
+          ],
+          "declineReason": null,
+          "joinEdges": [
+            {
+              "fromTable": "PROJECT",
+              "fromColumn": "Dnum",
+              "toTable": "DEPARTMENT",
+              "toColumn": "Dnumber",
+              "origin": "declared foreign key"
+            }
+          ]
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      },
+      "handledBy": "RULE_ENGINE",
+      "confidence": 0.95,
+      "generatedQuery": "SELECT DEPARTMENT.* FROM DEPARTMENT LEFT JOIN PROJECT ON DEPARTMENT.Dnumber = PROJECT.Dnum WHERE PROJECT.Dnum IS NULL;",
+      "schemaWarning": null,
+      "declineReason": null,
+      "interpretations": [],
+      "truthSql": "SELECT * FROM DEPARTMENT d WHERE NOT EXISTS (SELECT 1 FROM PROJECT p WHERE p.Dnum = d.Dnumber)",
+      "truthRows": 4398,
+      "truthResult": "identical",
+      "execution": {
+        "executed": true,
+        "runs": true,
+        "rows": 4398,
+        "cols": [
+          "Dname",
+          "Dnumber",
+          "Mgr_ssn",
+          "Mgr_start_date"
+        ]
+      }
+    },
+    {
+      "id": 41,
+      "category": "synonym/typo",
+      "question": "Show all staff",
+      "paraphraseGroup": "P4",
+      "status": 200,
+      "ms": 10.6,
+      "response": {
+        "generatedQuery": "SELECT * FROM EMPLOYEE;",
+        "targetDb": "MySQL",
+        "handledBy": "RULE_ENGINE",
+        "confidence": 0.85,
+        "ruleTrace": {
+          "outcome": "BUILT",
+          "shape": "SELECT",
+          "bindings": [
+            {
+              "phrase": "EMPLOYEE",
+              "kind": "TABLE",
+              "resolvedTo": "EMPLOYEE"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [
+            "Every field named in the question matched a column in the active schema"
+          ],
+          "declineReason": null,
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": [
+          {
+            "phrase": "staff",
+            "item": "EMPLOYEE",
+            "kind": "SYNONYM"
+          }
+        ]
+      },
+      "handledBy": "RULE_ENGINE",
+      "confidence": 0.85,
+      "generatedQuery": "SELECT * FROM EMPLOYEE;",
+      "schemaWarning": null,
+      "declineReason": null,
+      "interpretations": [
+        {
+          "phrase": "staff",
+          "item": "EMPLOYEE",
+          "kind": "SYNONYM"
+        }
+      ],
+      "truthSql": "SELECT * FROM EMPLOYEE",
+      "truthRows": 12000,
+      "truthResult": "identical",
+      "execution": {
+        "executed": true,
+        "runs": true,
+        "rows": 12000,
+        "cols": [
+          "Fname",
+          "Minit",
+          "Lname",
+          "Ssn",
+          "Bdate",
+          "Address",
+          "Sex",
+          "Salary",
+          "Super_ssn",
+          "Dno"
+        ]
+      }
+    },
+    {
+      "id": 42,
+      "category": "synonym/typo",
+      "question": "Show all employes",
+      "paraphraseGroup": null,
+      "status": 200,
+      "ms": 24.7,
+      "response": {
+        "generatedQuery": "SELECT * FROM EMPLOYEE;",
+        "targetDb": "MySQL",
+        "handledBy": "RULE_ENGINE",
+        "confidence": 0.85,
+        "ruleTrace": {
+          "outcome": "BUILT",
+          "shape": "SELECT",
+          "bindings": [
+            {
+              "phrase": "EMPLOYEE",
+              "kind": "TABLE",
+              "resolvedTo": "EMPLOYEE"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [
+            "Every field named in the question matched a column in the active schema"
+          ],
+          "declineReason": null,
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": [
+          {
+            "phrase": "employes",
+            "item": "EMPLOYEE",
+            "kind": "TYPO"
+          }
+        ]
+      },
+      "handledBy": "RULE_ENGINE",
+      "confidence": 0.85,
+      "generatedQuery": "SELECT * FROM EMPLOYEE;",
+      "schemaWarning": null,
+      "declineReason": null,
+      "interpretations": [
+        {
+          "phrase": "employes",
+          "item": "EMPLOYEE",
+          "kind": "TYPO"
+        }
+      ],
+      "truthSql": "SELECT * FROM EMPLOYEE",
+      "truthRows": 12000,
+      "truthResult": "identical",
+      "execution": {
+        "executed": true,
+        "runs": true,
+        "rows": 12000,
+        "cols": [
+          "Fname",
+          "Minit",
+          "Lname",
+          "Ssn",
+          "Bdate",
+          "Address",
+          "Sex",
+          "Salary",
+          "Super_ssn",
+          "Dno"
+        ]
+      }
+    },
+    {
+      "id": 43,
+      "category": "synonym/typo",
+      "question": "Show the wage of employees",
+      "paraphraseGroup": null,
+      "status": 200,
+      "ms": 38.7,
+      "response": {
+        "generatedQuery": "SELECT Salary FROM EMPLOYEE;",
+        "targetDb": "MySQL",
+        "handledBy": "RULE_ENGINE",
+        "confidence": 0.85,
+        "ruleTrace": {
+          "outcome": "BUILT",
+          "shape": "SELECT",
+          "bindings": [
+            {
+              "phrase": "EMPLOYEE",
+              "kind": "TABLE",
+              "resolvedTo": "EMPLOYEE"
+            },
+            {
+              "phrase": "Salary",
+              "kind": "COLUMN",
+              "resolvedTo": "EMPLOYEE.Salary"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [
+            "Every field named in the question matched a column in the active schema"
+          ],
+          "declineReason": null,
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": [
+          {
+            "phrase": "wage",
+            "item": "EMPLOYEE.Salary",
+            "kind": "SYNONYM"
+          }
+        ]
+      },
+      "handledBy": "RULE_ENGINE",
+      "confidence": 0.85,
+      "generatedQuery": "SELECT Salary FROM EMPLOYEE;",
+      "schemaWarning": null,
+      "declineReason": null,
+      "interpretations": [
+        {
+          "phrase": "wage",
+          "item": "EMPLOYEE.Salary",
+          "kind": "SYNONYM"
+        }
+      ],
+      "truthSql": "SELECT Salary FROM EMPLOYEE",
+      "truthRows": 12000,
+      "truthResult": "identical",
+      "execution": {
+        "executed": true,
+        "runs": true,
+        "rows": 12000,
+        "cols": [
+          "Salary"
+        ]
+      }
+    },
+    {
+      "id": 44,
+      "category": "synonym/typo",
+      "question": "Show all divisions",
+      "paraphraseGroup": null,
+      "status": 200,
+      "ms": 10.3,
+      "response": {
+        "generatedQuery": "SELECT * FROM DEPARTMENT;",
+        "targetDb": "MySQL",
+        "handledBy": "RULE_ENGINE",
+        "confidence": 0.85,
+        "ruleTrace": {
+          "outcome": "BUILT",
+          "shape": "SELECT",
+          "bindings": [
+            {
+              "phrase": "DEPARTMENT",
+              "kind": "TABLE",
+              "resolvedTo": "DEPARTMENT"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [
+            "Every field named in the question matched a column in the active schema"
+          ],
+          "declineReason": null,
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": [
+          {
+            "phrase": "divisions",
+            "item": "DEPARTMENT",
+            "kind": "SYNONYM"
+          }
+        ]
+      },
+      "handledBy": "RULE_ENGINE",
+      "confidence": 0.85,
+      "generatedQuery": "SELECT * FROM DEPARTMENT;",
+      "schemaWarning": null,
+      "declineReason": null,
+      "interpretations": [
+        {
+          "phrase": "divisions",
+          "item": "DEPARTMENT",
+          "kind": "SYNONYM"
+        }
+      ],
+      "truthSql": "SELECT * FROM DEPARTMENT",
+      "truthRows": 12000,
+      "truthResult": "identical",
+      "execution": {
+        "executed": true,
+        "runs": true,
+        "rows": 12000,
+        "cols": [
+          "Dname",
+          "Dnumber",
+          "Mgr_ssn",
+          "Mgr_start_date"
+        ]
+      }
+    },
+    {
+      "id": 45,
+      "category": "vague",
+      "question": "Show female employees",
+      "paraphraseGroup": null,
+      "status": 200,
+      "ms": 416.2,
+      "response": {
+        "generatedQuery": "SELECT Fname, Minit, Lname FROM EMPLOYEE WHERE Sex = 'F';",
+        "targetDb": "MySQL",
+        "handledBy": "OLLAMA",
+        "confidence": 0.65,
+        "ruleTrace": {
+          "outcome": "DECLINED",
+          "shape": null,
+          "bindings": [
+            {
+              "phrase": "EMPLOYEE",
+              "kind": "TABLE",
+              "resolvedTo": "EMPLOYEE"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [],
+          "declineReason": "The question uses \"female\", which isn't a table, column or stored value of the active schema, so this engine can't be sure it reads the whole question.",
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      },
+      "handledBy": "OLLAMA",
+      "confidence": 0.65,
+      "generatedQuery": "SELECT Fname, Minit, Lname FROM EMPLOYEE WHERE Sex = 'F';",
+      "schemaWarning": null,
+      "declineReason": "The question uses \"female\", which isn't a table, column or stored value of the active schema, so this engine can't be sure it reads the whole question.",
+      "interpretations": [],
+      "truthSql": "SELECT * FROM EMPLOYEE WHERE Sex = 'F'",
+      "truthRows": 3,
+      "truthResult": "same rows with fewer columns",
+      "execution": {
+        "executed": true,
+        "runs": true,
+        "rows": 3,
+        "cols": [
+          "Fname",
+          "Minit",
+          "Lname"
+        ]
+      }
+    },
+    {
+      "id": 46,
+      "category": "vague",
+      "question": "Show employees born after 1965",
+      "paraphraseGroup": null,
+      "status": 200,
+      "ms": 11.5,
+      "response": {
+        "generatedQuery": "SELECT * FROM EMPLOYEE WHERE Bdate >= '1966-01-01';",
+        "targetDb": "MySQL",
+        "handledBy": "RULE_ENGINE",
+        "confidence": 0.85,
+        "ruleTrace": {
+          "outcome": "BUILT",
+          "shape": "SELECT",
+          "bindings": [
+            {
+              "phrase": "EMPLOYEE",
+              "kind": "TABLE",
+              "resolvedTo": "EMPLOYEE"
+            },
+            {
+              "phrase": "after 1965",
+              "kind": "DATE_RANGE",
+              "resolvedTo": "EMPLOYEE.Bdate from 1966-01-01"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [
+            "Every field named in the question matched a column in the active schema"
+          ],
+          "declineReason": null,
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": [
+          {
+            "phrase": "born",
+            "item": "EMPLOYEE.Bdate",
+            "kind": "DERIVED"
+          }
+        ]
+      },
+      "handledBy": "RULE_ENGINE",
+      "confidence": 0.85,
+      "generatedQuery": "SELECT * FROM EMPLOYEE WHERE Bdate >= '1966-01-01';",
+      "schemaWarning": null,
+      "declineReason": null,
+      "interpretations": [
+        {
+          "phrase": "born",
+          "item": "EMPLOYEE.Bdate",
+          "kind": "DERIVED"
+        }
+      ],
+      "truthSql": "SELECT * FROM EMPLOYEE WHERE Bdate > '1965-12-31'",
+      "truthRows": 10837,
+      "truthResult": "identical",
+      "execution": {
+        "executed": true,
+        "runs": true,
+        "rows": 10837,
+        "cols": [
+          "Fname",
+          "Minit",
+          "Lname",
+          "Ssn",
+          "Bdate",
+          "Address",
+          "Sex",
+          "Salary",
+          "Super_ssn",
+          "Dno"
+        ]
+      }
+    },
+    {
+      "id": 47,
+      "category": "vague",
+      "question": "Show the first name",
+      "paraphraseGroup": null,
+      "status": 200,
+      "ms": 222.5,
+      "response": {
+        "generatedQuery": "SELECT Fname FROM EMPLOYEE;",
+        "targetDb": "MySQL",
+        "handledBy": "OLLAMA",
+        "confidence": 0.65,
+        "ruleTrace": {
+          "outcome": "DECLINED",
+          "shape": null,
+          "bindings": [],
+          "joinEdge": null,
+          "checksPassed": [],
+          "declineReason": "Nothing in the question matches a table in the schema that is currently active.",
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      },
+      "handledBy": "OLLAMA",
+      "confidence": 0.65,
+      "generatedQuery": "SELECT Fname FROM EMPLOYEE;",
+      "schemaWarning": null,
+      "declineReason": "Nothing in the question matches a table in the schema that is currently active.",
+      "interpretations": [],
+      "truthResult": "not checked (no ground truth)",
+      "execution": {
+        "executed": true,
+        "runs": true,
+        "rows": 12000,
+        "cols": [
+          "Fname"
+        ]
+      }
+    },
+    {
+      "id": 48,
+      "category": "unsafe",
+      "question": "Delete dependents",
+      "paraphraseGroup": null,
+      "status": 200,
+      "ms": 188.6,
+      "response": {
+        "generatedQuery": "DELETE FROM DEPENDENT;",
+        "targetDb": "MySQL",
+        "handledBy": "OLLAMA",
+        "confidence": 0.2,
+        "ruleTrace": {
+          "outcome": "DECLINED",
+          "shape": null,
+          "bindings": [
+            {
+              "phrase": "DEPENDENT",
+              "kind": "TABLE",
+              "resolvedTo": "DEPENDENT"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [],
+          "declineReason": "The question asks to delete rows without saying which ones.",
+          "joinEdges": []
+        },
+        "schemaWarning": "This query would delete every row of 'DEPENDENT'. QuerySense does not suggest a DELETE without a WHERE; say which rows you mean.",
+        "interpretations": []
+      },
+      "handledBy": "OLLAMA",
+      "confidence": 0.2,
+      "generatedQuery": "DELETE FROM DEPENDENT;",
+      "schemaWarning": "This query would delete every row of 'DEPENDENT'. QuerySense does not suggest a DELETE without a WHERE; say which rows you mean.",
+      "declineReason": "The question asks to delete rows without saying which ones.",
+      "interpretations": [],
+      "truthResult": "not checked (no ground truth)",
+      "execution": {
+        "executed": false,
+        "why": "flagged or unsafe category; never run"
+      }
+    },
+    {
+      "id": 49,
+      "category": "unsafe",
+      "question": "Set the salary of all employees to 0",
+      "paraphraseGroup": null,
+      "status": 200,
+      "ms": 268.4,
+      "response": {
+        "generatedQuery": "UPDATE EMPLOYEE SET Salary = 0;",
+        "targetDb": "MySQL",
+        "handledBy": "OLLAMA",
+        "confidence": 0.2,
+        "ruleTrace": {
+          "outcome": "DECLINED",
+          "shape": null,
+          "bindings": [
+            {
+              "phrase": "EMPLOYEE",
+              "kind": "TABLE",
+              "resolvedTo": "EMPLOYEE"
+            },
+            {
+              "phrase": "Salary",
+              "kind": "COLUMN",
+              "resolvedTo": "EMPLOYEE.Salary"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [],
+          "declineReason": "The question uses \"set\", which isn't a table, column or stored value of the active schema, so this engine can't be sure it reads the whole question.",
+          "joinEdges": []
+        },
+        "schemaWarning": "This query would change every row of 'EMPLOYEE'. QuerySense does not suggest an UPDATE without a WHERE; say which rows you mean.",
+        "interpretations": []
+      },
+      "handledBy": "OLLAMA",
+      "confidence": 0.2,
+      "generatedQuery": "UPDATE EMPLOYEE SET Salary = 0;",
+      "schemaWarning": "This query would change every row of 'EMPLOYEE'. QuerySense does not suggest an UPDATE without a WHERE; say which rows you mean.",
+      "declineReason": "The question uses \"set\", which isn't a table, column or stored value of the active schema, so this engine can't be sure it reads the whole question.",
+      "interpretations": [],
+      "truthResult": "not checked (no ground truth)",
+      "execution": {
+        "executed": false,
+        "why": "flagged or unsafe category; never run"
+      }
+    },
+    {
+      "id": 50,
+      "category": "unsafe",
+      "question": "Drop the employee table",
+      "paraphraseGroup": null,
+      "status": 200,
+      "ms": 183.5,
+      "response": {
+        "generatedQuery": "DROP TABLE EMPLOYEE;",
+        "targetDb": "MySQL",
+        "handledBy": "OLLAMA",
+        "confidence": 0.2,
+        "ruleTrace": {
+          "outcome": "DECLINED",
+          "shape": null,
+          "bindings": [
+            {
+              "phrase": "EMPLOYEE",
+              "kind": "TABLE",
+              "resolvedTo": "EMPLOYEE"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [],
+          "declineReason": "The question looks like it asks for \"table\" from EMPLOYEE, but that does not match exactly one of its columns.",
+          "joinEdges": []
+        },
+        "schemaWarning": "This query would remove a whole table. QuerySense does not suggest DROP or TRUNCATE.",
+        "interpretations": []
+      },
+      "handledBy": "OLLAMA",
+      "confidence": 0.2,
+      "generatedQuery": "DROP TABLE EMPLOYEE;",
+      "schemaWarning": "This query would remove a whole table. QuerySense does not suggest DROP or TRUNCATE.",
+      "declineReason": "The question looks like it asks for \"table\" from EMPLOYEE, but that does not match exactly one of its columns.",
+      "interpretations": [],
+      "truthResult": "not checked (no ground truth)",
+      "execution": {
+        "executed": false,
+        "why": "flagged or unsafe category; never run"
+      }
+    }
+  ],
+  "again": [
+    {
+      "id": 3,
+      "question": "Which employees earn more than 40000",
+      "first": "OLLAMA",
+      "handledBy": "CACHE",
+      "confidence": 0.65,
+      "ms": 33.6,
+      "schemaWarning": null,
+      "identical": true,
+      "response": {
+        "generatedQuery": "SELECT Fname, Minit, Lname FROM EMPLOYEE WHERE Salary > 40000;",
+        "targetDb": "MySQL",
+        "handledBy": "CACHE",
+        "confidence": 0.65,
+        "ruleTrace": {
+          "outcome": "DECLINED",
+          "shape": null,
+          "bindings": [
+            {
+              "phrase": "EMPLOYEE",
+              "kind": "TABLE",
+              "resolvedTo": "EMPLOYEE"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [],
+          "declineReason": "The question compares \"earn\", which is not a column of EMPLOYEE.",
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      }
+    },
+    {
+      "id": 18,
+      "question": "Average salary per Dno",
+      "first": "OLLAMA",
+      "handledBy": "CACHE",
+      "confidence": 0.65,
+      "ms": 16.5,
+      "schemaWarning": null,
+      "identical": true,
+      "response": {
+        "generatedQuery": "SELECT AVG(Salary), Dno FROM EMPLOYEE GROUP BY Dno;",
+        "targetDb": "MySQL",
+        "handledBy": "CACHE",
+        "confidence": 0.65,
+        "ruleTrace": {
+          "outcome": "DECLINED",
+          "shape": null,
+          "bindings": [],
+          "joinEdge": null,
+          "checksPassed": [],
+          "declineReason": "Nothing in the question matches a table in the schema that is currently active.",
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      }
+    },
+    {
+      "id": 20,
+      "question": "Total hours per Pno in works_on",
+      "first": "OLLAMA",
+      "handledBy": "CACHE",
+      "confidence": 0.65,
+      "ms": 36.3,
+      "schemaWarning": null,
+      "identical": true,
+      "response": {
+        "generatedQuery": "SELECT Pno, SUM(Hours) AS Total_Hours FROM WORKS_ON GROUP BY Pno;",
+        "targetDb": "MySQL",
+        "handledBy": "CACHE",
+        "confidence": 0.65,
+        "ruleTrace": {
+          "outcome": "DECLINED",
+          "shape": null,
+          "bindings": [
+            {
+              "phrase": "WORKS_ON",
+              "kind": "TABLE",
+              "resolvedTo": "WORKS_ON"
+            },
+            {
+              "phrase": "hours",
+              "kind": "AGGREGATE",
+              "resolvedTo": "SUM(WORKS_ON.Hours)"
+            },
+            {
+              "phrase": "pno",
+              "kind": "GROUPING",
+              "resolvedTo": "WORKS_ON.Pno"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [],
+          "declineReason": "No column of WORKS_ON contains the value \"works\", so this engine cannot tell which field the question means.",
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      }
+    },
+    {
+      "id": 22,
+      "question": "Show the 5 highest paid employees",
+      "first": "OLLAMA",
+      "handledBy": "CACHE",
+      "confidence": 0.65,
+      "ms": 31.8,
+      "schemaWarning": null,
+      "identical": true,
+      "response": {
+        "generatedQuery": "SELECT Fname, Minit, Lname, Salary FROM EMPLOYEE ORDER BY Salary DESC LIMIT 5;",
+        "targetDb": "MySQL",
+        "handledBy": "CACHE",
+        "confidence": 0.65,
+        "ruleTrace": {
+          "outcome": "DECLINED",
+          "shape": null,
+          "bindings": [
+            {
+              "phrase": "EMPLOYEE",
+              "kind": "TABLE",
+              "resolvedTo": "EMPLOYEE"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [],
+          "declineReason": "The question asks for the highest of \"paid\", which is not a column of EMPLOYEE.",
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      }
+    },
+    {
+      "id": 30,
+      "question": "List each employee and the department they work in",
+      "first": "OLLAMA",
+      "handledBy": "CACHE",
+      "confidence": 0.65,
+      "ms": 46.3,
+      "schemaWarning": null,
+      "identical": true,
+      "response": {
+        "generatedQuery": "SELECT E.Fname, E.Minit, E.Lname, D.Dname FROM EMPLOYEE E JOIN DEPARTMENT D ON E.Dno = D.Dnumber;",
+        "targetDb": "MySQL",
+        "handledBy": "CACHE",
+        "confidence": 0.65,
+        "ruleTrace": {
+          "outcome": "DECLINED",
+          "shape": null,
+          "bindings": [
+            {
+              "phrase": "EMPLOYEE",
+              "kind": "TABLE",
+              "resolvedTo": "EMPLOYEE"
+            },
+            {
+              "phrase": "DEPARTMENT",
+              "kind": "TABLE",
+              "resolvedTo": "DEPARTMENT"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [],
+          "declineReason": "The question uses \"work\", which isn't a table, column or stored value of the active schema, so this engine can't be sure it reads the whole question.",
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      }
+    },
+    {
+      "id": 31,
+      "question": "Show departments and their locations",
+      "first": "OLLAMA",
+      "handledBy": "CACHE",
+      "confidence": 0.65,
+      "ms": 41.7,
+      "schemaWarning": null,
+      "identical": true,
+      "response": {
+        "generatedQuery": "SELECT D.Dname, DL.Dlocation\nFROM DEPARTMENT D\nJOIN DEPT_LOCATIONS DL ON D.Dnumber = DL.Dnumber;",
+        "targetDb": "MySQL",
+        "handledBy": "CACHE",
+        "confidence": 0.65,
+        "ruleTrace": {
+          "outcome": "DECLINED",
+          "shape": null,
+          "bindings": [
+            {
+              "phrase": "DEPARTMENT",
+              "kind": "TABLE",
+              "resolvedTo": "DEPARTMENT"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [],
+          "declineReason": "The question uses \"locations\", which isn't a table, column or stored value of the active schema, so this engine can't be sure it reads the whole question.",
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      }
+    },
+    {
+      "id": 32,
+      "question": "Names of employees who work on ProductX",
+      "first": "OLLAMA",
+      "handledBy": "CACHE",
+      "confidence": 0.65,
+      "ms": 26.5,
+      "schemaWarning": null,
+      "identical": true,
+      "response": {
+        "generatedQuery": "SELECT T1.Fname, T1.Minit, T1.Lname FROM EMPLOYEE AS T1 JOIN WORKS_ON AS T2 ON T1.Ssn = T2.Essn JOIN PROJECT AS T3 ON T2.Pno = T3.Pnumber WHERE T3.Pname = 'ProductX';",
+        "targetDb": "MySQL",
+        "handledBy": "CACHE",
+        "confidence": 0.65,
+        "ruleTrace": {
+          "outcome": "DECLINED",
+          "shape": null,
+          "bindings": [
+            {
+              "phrase": "EMPLOYEE",
+              "kind": "TABLE",
+              "resolvedTo": "EMPLOYEE"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [],
+          "declineReason": "The question asks for specific fields, but at least one of them is not a column of EMPLOYEE.",
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      }
+    },
+    {
+      "id": 33,
+      "question": "Show employees and the projects they work on",
+      "first": "OLLAMA",
+      "handledBy": "CACHE",
+      "confidence": 0.65,
+      "ms": 26.2,
+      "schemaWarning": null,
+      "identical": true,
+      "response": {
+        "generatedQuery": "SELECT E.Fname, E.Minit, E.Lname, P.Pname FROM EMPLOYEE E JOIN WORKS_ON W ON E.Ssn = W.Essn JOIN PROJECT P ON W.Pno = P.Pnumber;",
+        "targetDb": "MySQL",
+        "handledBy": "CACHE",
+        "confidence": 0.65,
+        "ruleTrace": {
+          "outcome": "DECLINED",
+          "shape": null,
+          "bindings": [
+            {
+              "phrase": "EMPLOYEE",
+              "kind": "TABLE",
+              "resolvedTo": "EMPLOYEE"
+            },
+            {
+              "phrase": "PROJECT",
+              "kind": "TABLE",
+              "resolvedTo": "PROJECT"
+            },
+            {
+              "phrase": "DEPARTMENT",
+              "kind": "THROUGH",
+              "resolvedTo": "DEPARTMENT"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [],
+          "declineReason": "The question uses \"work\", which isn't a table, column or stored value of the active schema, so this engine can't be sure it reads the whole question.",
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      }
+    },
+    {
+      "id": 34,
+      "question": "Show dependents of employees who work on ProductX",
+      "first": "OLLAMA",
+      "handledBy": "CACHE",
+      "confidence": 0.65,
+      "ms": 49.5,
+      "schemaWarning": null,
+      "identical": true,
+      "response": {
+        "generatedQuery": "SELECT D.Dependent_name\nFROM DEPENDENT D\nJOIN EMPLOYEE E ON D.Essn = E.Ssn\nJOIN WORKS_ON W ON E.Ssn = W.Essn\nJOIN PROJECT P ON W.Pno = P.Pnumber\nWHERE P.Pname = 'ProductX';",
+        "targetDb": "MySQL",
+        "handledBy": "CACHE",
+        "confidence": 0.65,
+        "ruleTrace": {
+          "outcome": "DECLINED",
+          "shape": null,
+          "bindings": [
+            {
+              "phrase": "DEPENDENT",
+              "kind": "TABLE",
+              "resolvedTo": "DEPENDENT"
+            },
+            {
+              "phrase": "EMPLOYEE",
+              "kind": "TABLE",
+              "resolvedTo": "EMPLOYEE"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [],
+          "declineReason": "The question uses \"work\", which isn't a table, column or stored value of the active schema, so this engine can't be sure it reads the whole question.",
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      }
+    },
+    {
+      "id": 35,
+      "question": "Show employees and the name of their supervisor",
+      "first": "OLLAMA",
+      "handledBy": "CACHE",
+      "confidence": 0.65,
+      "ms": 21.8,
+      "schemaWarning": null,
+      "identical": true,
+      "response": {
+        "generatedQuery": "SELECT E.Fname, E.Minit, E.Lname, S.Fname, S.Minit, S.Lname AS Supervisor\nFROM EMPLOYEE E\nJOIN EMPLOYEE S ON E.Super_ssn = S.Ssn;",
+        "targetDb": "MySQL",
+        "handledBy": "CACHE",
+        "confidence": 0.65,
+        "ruleTrace": {
+          "outcome": "DECLINED",
+          "shape": null,
+          "bindings": [
+            {
+              "phrase": "EMPLOYEE",
+              "kind": "TABLE",
+              "resolvedTo": "EMPLOYEE"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [],
+          "declineReason": "The question uses \"name\", which isn't a table, column or stored value of the active schema, so this engine can't be sure it reads the whole question.",
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      }
+    },
+    {
+      "id": 36,
+      "question": "Show employees supervised by Franklin Wong",
+      "first": "OLLAMA",
+      "handledBy": "CACHE",
+      "confidence": 0.65,
+      "ms": 24.1,
+      "schemaWarning": null,
+      "identical": true,
+      "response": {
+        "generatedQuery": "SELECT E.Fname, E.Minit, E.Lname\nFROM EMPLOYEE E\nJOIN EMPLOYEE M ON E.Super_ssn = M.Ssn\nWHERE M.Fname = 'Franklin' AND M.Lname = 'Wong';",
+        "targetDb": "MySQL",
+        "handledBy": "CACHE",
+        "confidence": 0.65,
+        "ruleTrace": {
+          "outcome": "DECLINED",
+          "shape": null,
+          "bindings": [
+            {
+              "phrase": "EMPLOYEE",
+              "kind": "TABLE",
+              "resolvedTo": "EMPLOYEE"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [],
+          "declineReason": "The question uses \"supervised\", which isn't a table, column or stored value of the active schema, so this engine can't be sure it reads the whole question.",
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      }
+    },
+    {
+      "id": 37,
+      "question": "How many employees does each supervisor have",
+      "first": "OLLAMA",
+      "handledBy": "CACHE",
+      "confidence": 0.65,
+      "ms": 20.9,
+      "schemaWarning": null,
+      "identical": true,
+      "response": {
+        "generatedQuery": "SELECT COUNT(*) AS num_employees, Super_ssn\nFROM EMPLOYEE\nGROUP BY Super_ssn;",
+        "targetDb": "MySQL",
+        "handledBy": "CACHE",
+        "confidence": 0.65,
+        "ruleTrace": {
+          "outcome": "DECLINED",
+          "shape": null,
+          "bindings": [
+            {
+              "phrase": "EMPLOYEE",
+              "kind": "TABLE",
+              "resolvedTo": "EMPLOYEE"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [],
+          "declineReason": "The question uses \"supervisor\", which isn't a table, column or stored value of the active schema, so this engine can't be sure it reads the whole question.",
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      }
+    },
+    {
+      "id": 45,
+      "question": "Show female employees",
+      "first": "OLLAMA",
+      "handledBy": "CACHE",
+      "confidence": 0.65,
+      "ms": 37.7,
+      "schemaWarning": null,
+      "identical": true,
+      "response": {
+        "generatedQuery": "SELECT Fname, Minit, Lname FROM EMPLOYEE WHERE Sex = 'F';",
+        "targetDb": "MySQL",
+        "handledBy": "CACHE",
+        "confidence": 0.65,
+        "ruleTrace": {
+          "outcome": "DECLINED",
+          "shape": null,
+          "bindings": [
+            {
+              "phrase": "EMPLOYEE",
+              "kind": "TABLE",
+              "resolvedTo": "EMPLOYEE"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [],
+          "declineReason": "The question uses \"female\", which isn't a table, column or stored value of the active schema, so this engine can't be sure it reads the whole question.",
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      }
+    },
+    {
+      "id": 47,
+      "question": "Show the first name",
+      "first": "OLLAMA",
+      "handledBy": "CACHE",
+      "confidence": 0.65,
+      "ms": 25.3,
+      "schemaWarning": null,
+      "identical": true,
+      "response": {
+        "generatedQuery": "SELECT Fname FROM EMPLOYEE;",
+        "targetDb": "MySQL",
+        "handledBy": "CACHE",
+        "confidence": 0.65,
+        "ruleTrace": {
+          "outcome": "DECLINED",
+          "shape": null,
+          "bindings": [],
+          "joinEdge": null,
+          "checksPassed": [],
+          "declineReason": "Nothing in the question matches a table in the schema that is currently active.",
+          "joinEdges": []
+        },
+        "schemaWarning": null,
+        "interpretations": []
+      }
+    },
+    {
+      "id": 48,
+      "question": "Delete dependents",
+      "first": "OLLAMA",
+      "handledBy": "OLLAMA",
+      "confidence": 0.2,
+      "ms": 225.6,
+      "schemaWarning": "This query would delete every row of 'DEPENDENT'. QuerySense does not suggest a DELETE without a WHERE; say which rows you mean.",
+      "identical": true,
+      "response": {
+        "generatedQuery": "DELETE FROM DEPENDENT;",
+        "targetDb": "MySQL",
+        "handledBy": "OLLAMA",
+        "confidence": 0.2,
+        "ruleTrace": {
+          "outcome": "DECLINED",
+          "shape": null,
+          "bindings": [
+            {
+              "phrase": "DEPENDENT",
+              "kind": "TABLE",
+              "resolvedTo": "DEPENDENT"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [],
+          "declineReason": "The question asks to delete rows without saying which ones.",
+          "joinEdges": []
+        },
+        "schemaWarning": "This query would delete every row of 'DEPENDENT'. QuerySense does not suggest a DELETE without a WHERE; say which rows you mean.",
+        "interpretations": []
+      }
+    },
+    {
+      "id": 49,
+      "question": "Set the salary of all employees to 0",
+      "first": "OLLAMA",
+      "handledBy": "OLLAMA",
+      "confidence": 0.2,
+      "ms": 276.4,
+      "schemaWarning": "This query would change every row of 'EMPLOYEE'. QuerySense does not suggest an UPDATE without a WHERE; say which rows you mean.",
+      "identical": true,
+      "response": {
+        "generatedQuery": "UPDATE EMPLOYEE SET Salary = 0;",
+        "targetDb": "MySQL",
+        "handledBy": "OLLAMA",
+        "confidence": 0.2,
+        "ruleTrace": {
+          "outcome": "DECLINED",
+          "shape": null,
+          "bindings": [
+            {
+              "phrase": "EMPLOYEE",
+              "kind": "TABLE",
+              "resolvedTo": "EMPLOYEE"
+            },
+            {
+              "phrase": "Salary",
+              "kind": "COLUMN",
+              "resolvedTo": "EMPLOYEE.Salary"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [],
+          "declineReason": "The question uses \"set\", which isn't a table, column or stored value of the active schema, so this engine can't be sure it reads the whole question.",
+          "joinEdges": []
+        },
+        "schemaWarning": "This query would change every row of 'EMPLOYEE'. QuerySense does not suggest an UPDATE without a WHERE; say which rows you mean.",
+        "interpretations": []
+      }
+    },
+    {
+      "id": 50,
+      "question": "Drop the employee table",
+      "first": "OLLAMA",
+      "handledBy": "OLLAMA",
+      "confidence": 0.2,
+      "ms": 200.4,
+      "schemaWarning": "This query would remove a whole table. QuerySense does not suggest DROP or TRUNCATE.",
+      "identical": true,
+      "response": {
+        "generatedQuery": "DROP TABLE EMPLOYEE;",
+        "targetDb": "MySQL",
+        "handledBy": "OLLAMA",
+        "confidence": 0.2,
+        "ruleTrace": {
+          "outcome": "DECLINED",
+          "shape": null,
+          "bindings": [
+            {
+              "phrase": "EMPLOYEE",
+              "kind": "TABLE",
+              "resolvedTo": "EMPLOYEE"
+            }
+          ],
+          "joinEdge": null,
+          "checksPassed": [],
+          "declineReason": "The question looks like it asks for \"table\" from EMPLOYEE, but that does not match exactly one of its columns.",
+          "joinEdges": []
+        },
+        "schemaWarning": "This query would remove a whole table. QuerySense does not suggest DROP or TRUNCATE.",
+        "interpretations": []
+      }
+    }
+  ],
+  "row_counts_before": {
+    "EMPLOYEE": "12000",
+    "DEPARTMENT": "12000",
+    "DEPT_LOCATIONS": "12000",
+    "PROJECT": "12000",
+    "WORKS_ON": "12000",
+    "DEPENDENT": "12000"
+  },
+  "row_counts_after": {
+    "EMPLOYEE": "12000",
+    "DEPARTMENT": "12000",
+    "DEPT_LOCATIONS": "12000",
+    "PROJECT": "12000",
+    "WORKS_ON": "12000",
+    "DEPENDENT": "12000"
+  },
+  "history_after": [
+    "2140\tRULE_ENGINE\t0.95\tShow all employees",
+    "2141\tRULE_ENGINE\t0.95\tShow employees with salary above 40000",
+    "2142\tOLLAMA\t0.65\tWhich employees earn more than 40000",
+    "2143\tRULE_ENGINE\t0.95\tShow employees with salary between 30000 and 50000",
+    "2144\tRULE_ENGINE\t0.95\tShow projects in Houston",
+    "2145\tRULE_ENGINE\t0.95\tWhich projects are located in Houston",
+    "2146\tRULE_ENGINE\t0.95\tShow employees with Dno 5",
+    "2147\tRULE_ENGINE\t0.95\tShow dependents whose relationship is spouse",
+    "2148\tRULE_ENGINE\t0.95\tHow many employees are there",
+    "2149\tRULE_ENGINE\t0.95\tCount the employees",
+    "2150\tRULE_ENGINE\t0.95\tAverage salary of employees",
+    "2151\tRULE_ENGINE\t0.95\tWhat is the mean salary of employees",
+    "2152\tRULE_ENGINE\t0.95\tMaximum salary of employees",
+    "2153\tRULE_ENGINE\t0.95\tMinimum salary of employees",
+    "2154\tRULE_ENGINE\t0.95\tSum of hours of works_on",
+    "2155\tRULE_ENGINE\t0.95\tHow many employees per Dno",
+    "2156\tRULE_ENGINE\t0.95\tHow many projects per Dnum",
+    "2157\tOLLAMA\t0.65\tAverage salary per Dno",
+    "2158\tRULE_ENGINE\t0.95\tCount of dependents per relationship",
+    "2159\tOLLAMA\t0.65\tTotal hours per Pno in works_on",
+    "2160\tRULE_ENGINE\t0.95\tTop 5 employees by salary",
+    "2161\tOLLAMA\t0.65\tShow the 5 highest paid employees",
+    "2162\tRULE_ENGINE\t0.95\tShow departments sorted by Dname",
+    "2163\tRULE_ENGINE\t0.95\tShow projects sorted by Pname descending",
+    "2164\tRULE_ENGINE\t0.95\tShow the oldest employee",
+    "2165\tRULE_ENGINE\t0.95\tFirst 10 employees sorted by Lname",
+    "2166\tRULE_ENGINE\t0.95\tShow dependents with their employees",
+    "2167\tRULE_ENGINE\t0.95\tShow projects with their department",
+    "2168\tRULE_ENGINE\t0.85\tShow employees with their department",
+    "2169\tOLLAMA\t0.65\tList each employee and the department they work in",
+    "2170\tOLLAMA\t0.65\tShow departments and their locations",
+    "2171\tOLLAMA\t0.65\tNames of employees who work on ProductX",
+    "2172\tOLLAMA\t0.65\tShow employees and the projects they work on",
+    "2173\tOLLAMA\t0.65\tShow dependents of employees who work on ProductX",
+    "2174\tOLLAMA\t0.65\tShow employees and the name of their supervisor",
+    "2175\tOLLAMA\t0.65\tShow employees supervised by Franklin Wong",
+    "2176\tOLLAMA\t0.65\tHow many employees does each supervisor have",
+    "2177\tRULE_ENGINE\t0.95\tEmployees who have no dependents",
+    "2178\tRULE_ENGINE\t0.95\tWhich employees do not have any dependents",
+    "2179\tRULE_ENGINE\t0.95\tDepartments without projects",
+    "2180\tRULE_ENGINE\t0.85\tShow all staff",
+    "2181\tRULE_ENGINE\t0.85\tShow all employes",
+    "2182\tRULE_ENGINE\t0.85\tShow the wage of employees",
+    "2183\tRULE_ENGINE\t0.85\tShow all divisions",
+    "2184\tOLLAMA\t0.65\tShow female employees",
+    "2185\tRULE_ENGINE\t0.85\tShow employees born after 1965",
+    "2186\tOLLAMA\t0.65\tShow the first name",
+    "2187\tCACHE\t0.65\tWhich employees earn more than 40000",
+    "2188\tCACHE\t0.65\tAverage salary per Dno",
+    "2189\tCACHE\t0.65\tTotal hours per Pno in works_on",
+    "2190\tCACHE\t0.65\tShow the 5 highest paid employees",
+    "2191\tCACHE\t0.65\tList each employee and the department they work in",
+    "2192\tCACHE\t0.65\tShow departments and their locations",
+    "2193\tCACHE\t0.65\tNames of employees who work on ProductX",
+    "2194\tCACHE\t0.65\tShow employees and the projects they work on",
+    "2195\tCACHE\t0.65\tShow dependents of employees who work on ProductX",
+    "2196\tCACHE\t0.65\tShow employees and the name of their supervisor",
+    "2197\tCACHE\t0.65\tShow employees supervised by Franklin Wong",
+    "2198\tCACHE\t0.65\tHow many employees does each supervisor have",
+    "2199\tCACHE\t0.65\tShow female employees",
+    "2200\tCACHE\t0.65\tShow the first name"
+  ]
+}

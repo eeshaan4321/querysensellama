@@ -1,0 +1,9 @@
+{"deny": [
+  ["task", "project"],
+  ["undertaking", "project"],
+  ["hour", "hr"],
+  ["sexual activity", "sex"],
+  ["last", "close"],
+  ["title", "statute title"],
+  ["ctc", "counterterrorist center"]
+]}

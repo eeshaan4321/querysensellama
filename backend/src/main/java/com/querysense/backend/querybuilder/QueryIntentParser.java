@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -72,6 +73,11 @@ public class QueryIntentParser {
 
     private static final Pattern NEVER = Pattern.compile("\\bnever\\s+([a-z]+?)(?:ed|d)\\b");
 
+    private static final Pattern NEGATION = Pattern.compile(
+            "\\b(?:not|no|non|never|except|excluding|other\\s+than|without|but"
+                    + "|isnt|arent|wasnt|werent|dont|doesnt|didnt|hasnt|havent|hadnt|cant|wont)\\b"
+                    + "|\\b[a-z]*n['\\u2019]t\\b");
+
     private static final Pattern DISTINCT_PHRASE = Pattern.compile(
             "\\b(?:distinct|unique|different)\\s+([a-z_]+(?:\\s+[a-z_]+)?)(?:\\s+(?:of|in|from|among|for)\\b|$)");
 
@@ -117,6 +123,8 @@ public class QueryIntentParser {
 
     private static final Pattern STANDALONE_DELETE = Pattern.compile(
             "\\b(?:delete|remove)\\b");
+
+    private static final Pattern LEADING_DROP = Pattern.compile("^(?:drop|truncate)\\b");
 
     private static final Pattern LIMIT = Pattern.compile("\\b(?:top|first|limit|bottom)\\s+(.+)$");
 
@@ -202,11 +210,13 @@ public class QueryIntentParser {
     private final DialectRegistry<QueryEmitter> emitters;
     private final RulesClock clock;
     private final ColumnPhrase phrases;
+    private final NarrowerReader narrower;
 
-    public QueryIntentParser(SchemaBinder binder, JoinPathResolver joins,
+    public QueryIntentParser(SchemaBinder binder, JoinPathResolver joins, NarrowerReader narrower,
                              List<SchemaMetadata> metadata, List<QueryEmitter> emitters, RulesClock clock) {
         this.binder = binder;
         this.joins = joins;
+        this.narrower = narrower;
         this.metadataByDialect = new DialectRegistry<>(metadata, "schema metadata");
         this.emitters = new DialectRegistry<>(emitters, "query emitter");
         this.clock = clock;
@@ -242,6 +252,12 @@ public class QueryIntentParser {
                 + normalized.substring(r.end())).orElse(normalized);
         SchemaMetadata metadata = metadataByDialect.get(dialect);
 
+        if (LEADING_DROP.matcher(normalized).find()) {
+            return RuleBuildResult.refused(
+                    "The question asks to remove a whole table. QuerySense does not suggest DROP or TRUNCATE.",
+                    bindings);
+        }
+
         Matcher timeWords = TIME_WORDS.matcher(normalized);
         if (date.isEmpty() && timeWords.find()) {
             return RuleBuildResult.declined(
@@ -257,17 +273,54 @@ public class QueryIntentParser {
         }
         List<KnownSchema.Table> tables = tableMatches.hits().stream().map(SchemaLexicon.TableHit::table).toList();
         tableMatches.hits().forEach(hit -> note(hit.binding().phrase(), hit.table().name(), hit.binding().kind(), interpretations));
+        Optional<NarrowerReader.Narrowing> narrowing = narrower.read(text, binder.tables(dialect), metadata,
+                readWords(text, tables, metadata, dialect));
+        boolean narrowedFirst = false;
+        if (narrowing.isPresent()) {
+            NarrowerReader.Narrowing n = narrowing.get();
+            Matcher negation = NEGATION.matcher(normalized);
+            if (negation.find()) {
+                return RuleBuildResult.declined(
+                        "\"" + n.word() + "\" is read as a kind of " + n.table().name() + ", and the question also "
+                                + "says \"" + negation.group() + "\", so this engine can't tell whether it asks for "
+                                + "them or leaves them out.",
+                        bindings);
+            }
+            if (!tables.contains(n.table())) {
+                int at = wordAt(text, n.word());
+                int position = (int) tableMatches.hits().stream()
+                        .filter(hit -> wordAt(text, hit.binding().phrase()) < at)
+                        .count();
+                List<KnownSchema.Table> reached = new ArrayList<>(tables);
+                reached.add(position, n.table());
+                tables = List.copyOf(reached);
+                narrowedFirst = position == 0;
+                bindings.add(new RuleTrace.Binding(n.word(), "TABLE", n.table().name()));
+            }
+            note(n.word(), n.table().name() + "." + n.column() + " = '" + n.stored() + "'",
+                    SchemaLexicon.MatchKind.NARROWER, interpretations);
+        }
         if (tables.isEmpty()) {
             return RuleBuildResult.declined(
                     "Nothing in the question matches a table in the schema that is currently active.",
                     bindings);
         }
+        tableMatches.hits().forEach(hit -> bindings.add(new RuleTrace.Binding(hit.table().name(), "TABLE", hit.table().name())));
+        List<KnownSchema.Table> widened = new ArrayList<>(tables);
+        for (RoleReach reach : roleReaches(text, tables, dialect)) {
+            binder.tableNamed(reach.key().toTable(), dialect).filter(t -> !widened.contains(t)).ifPresent(t -> {
+                widened.add(t);
+                bindings.add(new RuleTrace.Binding(reach.phrase(), "TABLE", t.name()));
+                note(reach.phrase(), reach.key().fromTable() + "." + reach.key().fromColumn(),
+                        SchemaLexicon.MatchKind.CHOSEN_JOIN, interpretations);
+            });
+        }
+        tables = widened;
         if (tables.size() > JoinPathResolver.MAX_TABLES) {
             return RuleBuildResult.declined(
                     "The question names " + tables.size() + " tables. This engine joins four at most.",
                     bindings);
         }
-        tables.forEach(t -> bindings.add(new RuleTrace.Binding(t.name(), "TABLE", t.name())));
 
         Matcher conjoined = CONJOINED_NOUN.matcher(text);
         while (conjoined.find()) {
@@ -308,8 +361,17 @@ public class QueryIntentParser {
             }
         }
 
+        if (anti && narrowing.isPresent()) {
+            return RuleBuildResult.declined(
+                    "\"" + narrowing.get().word() + "\" is read as a kind of " + narrowing.get().table().name()
+                            + " from its stored data, which this engine won't combine with a check that something "
+                            + "is missing.",
+                    bindings);
+        }
+
         KnownSchema.Table subject = tables.get(0);
-        String subjectPhrase = tableMatches.hits().get(0).binding().phrase();
+        String subjectPhrase = tableMatches.hits().isEmpty() || narrowedFirst ? narrowing.get().word()
+                : tableMatches.hits().get(0).binding().phrase();
         boolean singular = !subjectPhrase.endsWith("s");
         KnownSchema.Table related = tables.size() >= 2 ? tables.get(tables.size() - 1) : null;
 
@@ -318,21 +380,32 @@ public class QueryIntentParser {
         List<RuleTrace.JoinEdge> joinEdges = new ArrayList<>();
         List<KnownSchema.Table> chainTables = new ArrayList<>(List.of(subject));
         if (related != null) {
+            Set<String> questionWords = new HashSet<>();
+            for (String word : text.split("[^a-z0-9]+")) {
+                questionWords.addAll(SchemaLexicon.forms(word));
+            }
             List<KnownSchema.ForeignKey> edges;
+            List<JoinPathResolver.Choice> choices;
             if (anti) {
-                JoinPathResolver.JoinResolution direct = joins.resolve(subject.name(), related.name(), dialect);
-                edges = direct instanceof JoinPathResolver.Resolved resolved ? List.of(resolved.edge()) : null;
-                if (edges == null) {
+                JoinPathResolver.JoinResolution direct = joins.resolve(subject.name(), related.name(), dialect, questionWords);
+                if (!(direct instanceof JoinPathResolver.Resolved resolved)) {
                     return declineFor(direct, subject, related, bindings);
                 }
+                edges = List.of(resolved.edge());
+                choices = resolved.choices();
             } else {
                 JoinPathResolver.ChainResolution chain = joins.resolveChain(subject.name(),
-                        tables.subList(1, tables.size()).stream().map(KnownSchema.Table::name).toList(), dialect);
+                        tables.subList(1, tables.size()).stream().map(KnownSchema.Table::name).toList(), dialect,
+                        questionWords);
                 if (!(chain instanceof JoinPathResolver.Chain found)) {
                     return declineFor(chain, subject, tables, bindings);
                 }
                 edges = found.edges();
+                choices = found.choices();
             }
+            choices.stream()
+                    .filter(c -> interpretations.stream().noneMatch(i -> i.item().equals(c.item())))
+                    .forEach(c -> note(c.phrase(), c.item(), SchemaLexicon.MatchKind.CHOSEN_JOIN, interpretations));
             for (KnownSchema.ForeignKey edge : edges) {
                 boolean fromKnown = chainTables.stream().anyMatch(t -> t.name().equalsIgnoreCase(edge.fromTable()));
                 String knownTable = fromKnown ? edge.fromTable() : edge.toTable();
@@ -370,6 +443,13 @@ public class QueryIntentParser {
                     bindings);
         }
 
+        if (verb == QueryIntent.Verb.DELETE && narrowing.isPresent()) {
+            return RuleBuildResult.declined(
+                    "\"" + narrowing.get().word() + "\" is read as a kind of " + narrowing.get().table().name()
+                            + " from its stored data, which this engine won't use to choose rows to delete.",
+                    bindings);
+        }
+
         if (verb == QueryIntent.Verb.DELETE && joined) {
             return RuleBuildResult.declined(
                     "Deleting across two related tables is beyond what this engine will build.",
@@ -381,6 +461,14 @@ public class QueryIntentParser {
         List<int[]> conditionSpans = new ArrayList<>();
         List<QueryIntent.Predicate> having = new ArrayList<>();
         List<int[]> consumed = new ArrayList<>();
+        QueryIntent.Predicate narrowed = null;
+        if (narrowing.isPresent()) {
+            NarrowerReader.Narrowing n = narrowing.get();
+            narrowed = new QueryIntent.Predicate(new QueryIntent.ColumnRef(joined ? n.table().name() : null, n.column()),
+                    QueryIntent.Op.EQ, List.of(QueryIntent.Literal.text(n.stored(), n.stored())));
+            where.add(narrowed);
+            bindings.add(new RuleTrace.Binding(n.word(), "FILTER", n.table().name() + "." + n.column()));
+        }
 
         if (date.isPresent()) {
             DateReader.DateRange range = date.get();
@@ -388,7 +476,8 @@ public class QueryIntentParser {
                 throw new DeclineException("The date range \"" + range.phrase() + "\" ends before it starts, so this "
                         + "engine won't build a query that can never match.");
             }
-            DateChoice choice = dateColumn(normalized, chainTables, joined, range.phrase());
+            DateChoice choice = dateColumn(normalized, chainTables, joined, range.phrase(), wholeYears(range), true,
+                    metadata, interpretations);
             QueryIntent.ColumnRef dateRef = choice.ref();
             if (choice.namingWord() != null) {
                 Matcher naming = Pattern.compile("\\b" + Pattern.quote(choice.namingWord()) + "\\b").matcher(text);
@@ -396,15 +485,21 @@ public class QueryIntentParser {
                     consumed.add(new int[]{naming.start(), naming.end()});
                 }
             }
+            String owner = dateRef.table() == null ? subject.name() : dateRef.table();
+            if (choice.year() && !wholeYears(range)) {
+                throw new DeclineException("\"" + range.phrase() + "\" is finer than a year, and " + owner
+                        + "." + dateRef.column() + " only holds years.");
+            }
             if (range.from() != null) {
                 where.add(new QueryIntent.Predicate(dateRef, QueryIntent.Op.GTE,
-                        List.of(QueryIntent.Literal.date(range.from(), clock.zone()))));
+                        List.of(choice.year() ? QueryIntent.Literal.number(range.from().getYear())
+                                : QueryIntent.Literal.date(range.from(), clock.zone()))));
             }
             if (range.until() != null) {
                 where.add(new QueryIntent.Predicate(dateRef, QueryIntent.Op.LT,
-                        List.of(QueryIntent.Literal.date(range.until(), clock.zone()))));
+                        List.of(choice.year() ? QueryIntent.Literal.number(range.until().getYear())
+                                : QueryIntent.Literal.date(range.until(), clock.zone()))));
             }
-            String owner = dateRef.table() == null ? subject.name() : dateRef.table();
             bindings.add(new RuleTrace.Binding(range.phrase(), "DATE_RANGE", owner + "." + dateRef.column()
                     + (range.from() == null ? "" : " from " + range.from())
                     + (range.until() == null ? "" : " up to " + range.until())));
@@ -856,6 +951,26 @@ public class QueryIntentParser {
             }
             anyOf = or;
         }
+        if (narrowing.isPresent() && (anyOf || orOutside(text, conditionSpans))) {
+            return RuleBuildResult.declined(
+                    "The question joins conditions with \"or\" and also reads \"" + narrowing.get().word()
+                            + "\" as a kind of " + narrowing.get().table().name() + ", so this engine can't tell "
+                            + "how they group.",
+                    bindings);
+        }
+        if (narrowed != null) {
+            NarrowerReader.Narrowing n = narrowing.get();
+            for (QueryIntent.Predicate p : where) {
+                if (p != narrowed && p.lhs() instanceof QueryIntent.ColumnRef r && r.column().equalsIgnoreCase(n.column())
+                        && n.table().equals(r.table() == null ? subject : binder.tableNamed(r.table(), dialect).orElse(null))) {
+                    return RuleBuildResult.declined(
+                            "\"" + n.word() + "\" is read as " + n.table().name() + "." + n.column() + " = '"
+                                    + n.stored() + "', and the question also filters " + n.table().name() + "."
+                                    + n.column() + " another way, so this engine won't combine the two.",
+                            bindings);
+                }
+            }
+        }
         if (anyOf && joinSpec != null && joinSpec.kind() == QueryIntent.JoinKind.ANTI) {
             return RuleBuildResult.declined(
                     "The question combines \"or\" with \"without\", which this engine won't build.",
@@ -897,8 +1012,9 @@ public class QueryIntentParser {
         if (verb == QueryIntent.Verb.DELETE) {
             selectItems.clear();
             if (where.isEmpty()) {
-                return RuleBuildResult.declined(
-                        "The question asks to delete rows without saying which ones.", bindings);
+                return RuleBuildResult.refused(
+                        "The question asks to delete rows without saying which ones. QuerySense does not "
+                                + "suggest a delete that removes everything; say which rows you mean.", bindings);
             }
         }
 
@@ -1032,17 +1148,70 @@ public class QueryIntentParser {
         return qualify(reading.column(), reading.table(), joined);
     }
 
-    private record DateChoice(QueryIntent.ColumnRef ref, String namingWord) {}
+    private record DateChoice(QueryIntent.ColumnRef ref, String namingWord, boolean year) {}
 
-    private DateChoice dateColumn(String text, List<KnownSchema.Table> chainTables, boolean joined, String phrase) {
+    private static boolean wholeYears(DateReader.DateRange range) {
+        return Stream.of(range.from(), range.until())
+                .allMatch(d -> d == null || (d.getMonthValue() == 1 && d.getDayOfMonth() == 1));
+    }
+
+    private static boolean holdsYears(SchemaMetadata metadata, KnownSchema.Table table, String column) {
+        if (metadata == null) {
+            return false;
+        }
+        List<String> values = metadata.getDistinctValues(table.name(), column);
+        if (values == null || values.isEmpty()) {
+            return false;
+        }
+        for (String value : values) {
+            try {
+                BigDecimal number = new BigDecimal(value == null ? "" : value.trim());
+                if (number.stripTrailingZeros().scale() > 0
+                        || number.compareTo(BigDecimal.valueOf(1000)) < 0 || number.compareTo(BigDecimal.valueOf(2999)) > 0) {
+                    return false;
+                }
+            } catch (NumberFormatException e) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private DateChoice dateColumn(String text, List<KnownSchema.Table> chainTables, boolean joined, String phrase,
+                                  boolean wholeYears, boolean yearsAllowed, SchemaMetadata metadata,
+                                  List<Interpretation> interpretations) {
         List<QueryIntent.ColumnRef> named = new ArrayList<>();
         List<String> namingWords = new ArrayList<>();
         List<QueryIntent.ColumnRef> all = new ArrayList<>();
+        Set<QueryIntent.ColumnRef> yearRefs = new HashSet<>();
+        int at = phrase == null || phrase.isEmpty() ? -1 : text.indexOf(phrase);
+        if (at >= 0) {
+            text = text.substring(0, at) + " " + text.substring(at + phrase.length());
+        }
         Set<String> words = new HashSet<>(Arrays.asList(text.split("[^a-z0-9_]+")));
+        Map<String, Set<String>> nounsByWord = new HashMap<>();
+        if (interpretations != null) {
+            for (String word : words) {
+                Set<String> nouns = Thesaurus.builtIn().nounsOfVerb(word);
+                if (!nouns.isEmpty()) {
+                    nounsByWord.put(word, nouns);
+                }
+            }
+        }
+        List<String[]> derivedNotes = new ArrayList<>();
         for (KnownSchema.Table table : chainTables) {
             for (String column : table.columns()) {
-                if (!SchemaBinder.isDateType(binder.fieldType(table, column))) {
+                String type = binder.fieldType(table, column);
+                boolean yearColumn = SchemaBinder.isYearColumn(column, type);
+                if (yearColumn && !yearsAllowed) {
                     continue;
+                }
+                yearColumn = yearColumn && holdsYears(metadata, table, column);
+                if (!yearColumn && !SchemaBinder.isDateType(type)) {
+                    continue;
+                }
+                if (yearColumn) {
+                    yearRefs.add(new QueryIntent.ColumnRef(joined ? table.name() : null, column));
                 }
                 QueryIntent.ColumnRef ref = new QueryIntent.ColumnRef(joined ? table.name() : null, column);
                 all.add(ref);
@@ -1052,11 +1221,21 @@ public class QueryIntentParser {
                         : !stem.isEmpty() && words.contains(stem + "d") ? stem + "d"
                         : !stem.isEmpty() && words.contains(stem) ? stem
                         : text.contains(spaced) ? spaced : null;
+                if (naming == null) {
+                    String derived = derivedNaming(column, nounsByWord);
+                    if (derived != null) {
+                        naming = derived;
+                        derivedNotes.add(new String[]{derived, table.name() + "." + column});
+                    }
+                }
                 if (naming != null) {
                     named.add(ref);
                     namingWords.add(naming);
                 }
             }
+        }
+        if (!wholeYears && named.isEmpty() && !yearRefs.containsAll(all)) {
+            all.removeAll(yearRefs);
         }
         List<QueryIntent.ColumnRef> pick = !named.isEmpty() ? named
                 : all.stream().filter(r -> r.table() == null || r.table().equals(chainTables.get(0).name())).toList();
@@ -1073,7 +1252,22 @@ public class QueryIntentParser {
                     .map(r -> (r.table() == null ? tableName : r.table()) + "." + r.column()).toList())
                     + "; name one in the question.");
         }
-        return new DateChoice(pick.get(0), named.size() == 1 ? namingWords.get(0) : null);
+        if (named.size() == 1) {
+            String chosen = pick.get(0).column();
+            derivedNotes.stream().filter(n -> n[1].endsWith("." + chosen))
+                    .forEach(n -> note(n[0], n[1], SchemaLexicon.MatchKind.DERIVED, interpretations));
+        }
+        return new DateChoice(pick.get(0), named.size() == 1 ? namingWords.get(0) : null, yearRefs.contains(pick.get(0)));
+    }
+
+    private static String derivedNaming(String column, Map<String, Set<String>> nounsByWord) {
+        String stem = String.join(" ", Abbreviations.builtIn().expand(NameWords.words(column)))
+                .replaceAll(" ?\\b(?:date|at|on|year)$", "");
+        if (stem.isEmpty()) {
+            return null;
+        }
+        return nounsByWord.entrySet().stream().filter(e -> e.getValue().contains(stem))
+                .map(Map.Entry::getKey).sorted().findFirst().orElse(null);
     }
 
     private Optional<String> column(KnownSchema.Table table, String phrase, List<Interpretation> interpretations) {
@@ -1090,8 +1284,7 @@ public class QueryIntentParser {
     }
 
     private static void note(String phrase, String item, SchemaLexicon.MatchKind kind, List<Interpretation> interpretations) {
-        if (kind == SchemaLexicon.MatchKind.SCHEMA_ALIAS || kind == SchemaLexicon.MatchKind.SYNONYM
-                || kind == SchemaLexicon.MatchKind.TYPO) {
+        if (kind != SchemaLexicon.MatchKind.EXACT && kind != SchemaLexicon.MatchKind.INFLECTION) {
             Interpretation interpretation = new Interpretation(phrase, item, kind);
             if (!interpretations.contains(interpretation)) {
                 interpretations.add(interpretation);
@@ -1135,7 +1328,9 @@ public class QueryIntentParser {
             String ways = ambiguous.paths().stream().map(p -> "through " + p.stream()
                             .flatMap(e -> Stream.of(e.fromTable(), e.toTable()))
                             .filter(t -> !t.equalsIgnoreCase(subject.name()) && !t.equalsIgnoreCase(ambiguous.table()))
-                            .distinct().collect(Collectors.joining(" and ")))
+                            .distinct().collect(Collectors.joining(" and "))
+                            + " (" + p.stream().map(e -> e.fromTable() + "." + e.fromColumn())
+                            .collect(Collectors.joining(", ")) + ")")
                     .collect(Collectors.joining(", or "));
             return RuleBuildResult.declined("There are two equally short ways to connect " + subject.name() + " and "
                     + ambiguous.table() + " (" + ways + "), and the question doesn't say which one it means.", bindings);
@@ -1327,6 +1522,9 @@ public class QueryIntentParser {
         Matcher word = Pattern.compile("[a-z0-9_]+").matcher(text);
         while (word.find()) {
             String w = word.group();
+            if (bareMostOrLeast(text, word.start(), word.end()) && !insideAny(word.start(), spans)) {
+                return Optional.of(w);
+            }
             if (insideAny(word.start(), spans) || known.contains(w) || FILLER_WORDS.contains(w) || bound.contains(w)
                     || COMPARISON_OPS.keySet().stream().anyMatch(op -> op.matches("(?:.* )?" + Pattern.quote(w) + "(?: .*)?"))
                     || ADJECTIVES.entries().containsKey(w) || w.matches("\\d+") || NumberReader.leading(w).isPresent()
@@ -1339,6 +1537,73 @@ public class QueryIntentParser {
             return Optional.of(w);
         }
         return Optional.empty();
+    }
+
+    private static boolean bareMostOrLeast(String text, int start, int end) {
+        String w = text.substring(start, end);
+        if (!"most".equals(w) && !"least".equals(w)) {
+            return false;
+        }
+        boolean afterAt = wordBefore(text, start).map(b -> text.substring(b[0], b[1]).equals("at")).orElse(false);
+        return !afterAt && !ADJECTIVES.entries().containsKey(firstWordAt(text, end));
+    }
+
+    private static int wordAt(String text, String phrase) {
+        Matcher m = Pattern.compile("\\b" + Pattern.quote(phrase) + "\\b").matcher(text);
+        return m.find() ? m.start() : Integer.MAX_VALUE;
+    }
+
+    private Set<String> readWords(String text, List<KnownSchema.Table> tables, SchemaMetadata metadata, Dialect dialect) {
+        Set<String> read = new HashSet<>(instructionWords());
+        read.addAll(FILLER_WORDS);
+        for (String w : text.split("[^a-z0-9]+")) {
+            if (w.isEmpty() || read.contains(w)) {
+                continue;
+            }
+            if (!binder.tableMatches(w, dialect).hits().isEmpty() || binder.isTableWord(w, dialect)
+                    || tables.stream().anyMatch(t -> binder.columnMatch(t, w) instanceof SchemaLexicon.Bound)
+                    || tables.stream().anyMatch(t -> !columnsHolding(t, w, metadata).isEmpty())) {
+                read.add(w);
+            }
+        }
+        return read;
+    }
+
+    private static boolean orOutside(String text, List<int[]> spans) {
+        Matcher or = Pattern.compile("\\bor\\b").matcher(text);
+        while (or.find()) {
+            if (!insideAny(or.start(), spans)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private record RoleReach(String phrase, KnownSchema.ForeignKey key) {}
+
+    private List<RoleReach> roleReaches(String text, List<KnownSchema.Table> tables, Dialect dialect) {
+        List<String> words = Arrays.asList(text.split("[^a-z0-9]+"));
+        List<RoleReach> found = new ArrayList<>();
+        for (KnownSchema.Table table : tables) {
+            for (KnownSchema.ForeignKey key : joins.keysFrom(table.name(), dialect)) {
+                List<String> role = JoinPathResolver.role(key);
+                if (role.isEmpty() || tables.stream().anyMatch(t -> t.name().equalsIgnoreCase(key.toTable()))) {
+                    continue;
+                }
+                List<String> typed = role.stream()
+                        .map(r -> words.stream().filter(w -> SchemaLexicon.forms(w).contains(r)).findFirst().orElse(null))
+                        .toList();
+                boolean shared = table.columns().stream()
+                        .filter(c -> !c.equalsIgnoreCase(key.fromColumn()))
+                        .anyMatch(c -> Abbreviations.builtIn().expand(NameWords.words(c)).stream().anyMatch(role::contains));
+                if (!typed.contains(null) && !shared) {
+                    found.add(new RoleReach(String.join(" ", typed), key));
+                }
+            }
+        }
+        return found.stream()
+                .filter(r -> found.stream().filter(o -> o.phrase().equals(r.phrase())).count() == 1)
+                .toList();
     }
 
     private static boolean namesChainTable(String word, List<KnownSchema.Table> chainTables) {
@@ -1550,7 +1815,7 @@ public class QueryIntentParser {
                 continue;
             }
             if ("date".equals(entry.type())) {
-                QueryIntent.ColumnRef dateRef = dateColumn(normalized, chainTables, joined, adjective.group(3)).ref();
+                QueryIntent.ColumnRef dateRef = dateColumn(normalized, chainTables, joined, adjective.group(3), false, false, null, null).ref();
                 QueryIntent.Direction direction = "least".equals(adjective.group(2))
                         ? (entry.direction() == QueryIntent.Direction.ASC ? QueryIntent.Direction.DESC : QueryIntent.Direction.ASC)
                         : entry.direction();

@@ -15,6 +15,7 @@ import net.sf.jsqlparser.expression.BinaryExpression;
 import net.sf.jsqlparser.expression.Expression;
 import net.sf.jsqlparser.expression.Function;
 import net.sf.jsqlparser.expression.Parenthesis;
+import net.sf.jsqlparser.expression.operators.relational.EqualsTo;
 import net.sf.jsqlparser.expression.operators.relational.Between;
 import net.sf.jsqlparser.expression.operators.relational.InExpression;
 import net.sf.jsqlparser.expression.operators.relational.IsNullExpression;
@@ -40,7 +41,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Pattern;
 
-/** Flags LLM-generated SQL that appears to miss part of the question. */
+/** Flags LLM-generated SQL that appears to miss part of the question, or names or joins what the schema doesn't have. */
 @Component
 public class GeneratedQueryValidator {
 
@@ -111,6 +112,45 @@ public class GeneratedQueryValidator {
         return false;
     }
 
+    private static final Pattern MONGO_EVERY_DOCUMENT = Pattern.compile(
+            "^\\s*(?:db\\.([\\w.]+?)\\.)?(?:(deleteMany|remove|updateMany|update)\\s*\\(\\s*\\{\\s*}|(drop)\\s*\\(\\s*\\))",
+            Pattern.CASE_INSENSITIVE);
+
+    public Optional<String> unsafeStatement(String generatedQuery, String databaseType) {
+        if (generatedQuery == null) {
+            return Optional.empty();
+        }
+        if ("MongoDB".equalsIgnoreCase(databaseType)) {
+            java.util.regex.Matcher m = MONGO_EVERY_DOCUMENT.matcher(generatedQuery);
+            if (!m.find()) {
+                return Optional.empty();
+            }
+            String collection = m.group(1) != null ? "'" + m.group(1) + "'" : "the collection";
+            return Optional.of("This query would " + (m.group(3) != null ? "drop the whole collection " + collection
+                    : "change every document of " + collection)
+                    + ". QuerySense does not suggest that; say which documents you mean.");
+        }
+        Statement statement;
+        try {
+            statement = CCJSqlParserUtil.parse(stripTrailingSemicolon(generatedQuery));
+        } catch (JSQLParserException e) {
+            return Optional.empty();
+        }
+        if (statement instanceof net.sf.jsqlparser.statement.delete.Delete delete && delete.getWhere() == null) {
+            return Optional.of("This query would delete every row of '" + delete.getTable().getName()
+                    + "'. QuerySense does not suggest a DELETE without a WHERE; say which rows you mean.");
+        }
+        if (statement instanceof net.sf.jsqlparser.statement.update.Update update && update.getWhere() == null) {
+            return Optional.of("This query would change every row of '" + update.getTable().getName()
+                    + "'. QuerySense does not suggest an UPDATE without a WHERE; say which rows you mean.");
+        }
+        if (statement instanceof net.sf.jsqlparser.statement.drop.Drop
+                || statement instanceof net.sf.jsqlparser.statement.truncate.Truncate) {
+            return Optional.of("This query would remove a whole table. QuerySense does not suggest DROP or TRUNCATE.");
+        }
+        return Optional.empty();
+    }
+
     public Optional<String> namesUnknownIdentifiers(String generatedQuery, String databaseType) {
         if ("MongoDB".equalsIgnoreCase(databaseType)) {
             return generatedQuery == null ? Optional.empty() : mongoIssue(generatedQuery);
@@ -174,7 +214,57 @@ public class GeneratedQueryValidator {
             }
         }
 
+        List<KnownSchema.ForeignKey> keys = activeSchema.foreignKeys(Dialect.MYSQL);
+        if (keys.isEmpty() || select.getJoins() == null) {
+            return Optional.empty();
+        }
+        for (Join join : select.getJoins()) {
+            if (join.getOnExpressions() != null) {
+                for (Expression on : join.getOnExpressions()) {
+                    Optional<String> issue = unrelatedJoin(on, byQualifier, keys);
+                    if (issue.isPresent()) {
+                        return issue;
+                    }
+                }
+            }
+        }
         return Optional.empty();
+    }
+
+    private Optional<String> unrelatedJoin(Expression expression, Map<String, KnownSchema.Table> byQualifier,
+                                           List<KnownSchema.ForeignKey> keys) {
+        if (expression instanceof Parenthesis parenthesis) {
+            return unrelatedJoin(parenthesis.getExpression(), byQualifier, keys);
+        }
+        if (!(expression instanceof BinaryExpression binary)) {
+            return Optional.empty();
+        }
+        if (!(expression instanceof EqualsTo)) {
+            return unrelatedJoin(binary.getLeftExpression(), byQualifier, keys)
+                    .or(() -> unrelatedJoin(binary.getRightExpression(), byQualifier, keys));
+        }
+        if (!(binary.getLeftExpression() instanceof Column left) || !(binary.getRightExpression() instanceof Column right)
+                || left.getTable() == null || right.getTable() == null) {
+            return Optional.empty();
+        }
+        KnownSchema.Table a = byQualifier.get(left.getTable().getName().toLowerCase());
+        KnownSchema.Table b = byQualifier.get(right.getTable().getName().toLowerCase());
+        if (a == null || b == null || a.equals(b) || left.getColumnName().equalsIgnoreCase(right.getColumnName())) {
+            return Optional.empty();
+        }
+        boolean declared = keys.stream().anyMatch(fk ->
+                links(fk, a.name(), left.getColumnName(), b.name(), right.getColumnName())
+                        || links(fk, b.name(), right.getColumnName(), a.name(), left.getColumnName()));
+        return declared ? Optional.empty()
+                : Optional.of("This query joins " + a.name() + "." + left.getColumnName() + " to " + b.name() + "."
+                        + right.getColumnName() + ", but the schema declares no relationship between those columns, "
+                        + "so it pairs up unrelated rows.");
+    }
+
+    private static boolean links(KnownSchema.ForeignKey fk, String fromTable, String fromColumn,
+                                 String toTable, String toColumn) {
+        return fk.fromTable().equalsIgnoreCase(fromTable) && fk.fromColumn().equalsIgnoreCase(fromColumn)
+                && fk.toTable().equalsIgnoreCase(toTable) && fk.toColumn().equalsIgnoreCase(toColumn);
     }
 
     private Optional<String> mongoIssue(String generatedQuery) {

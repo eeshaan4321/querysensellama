@@ -1,0 +1,12 @@
+[
+  {"id": "M1", "question": "Show all customers"},
+  {"id": "M2", "question": "Show customers in Mumbai"},
+  {"id": "M3", "question": "How many orders are there"},
+  {"id": "M4", "question": "Average price of products"},
+  {"id": "M5", "question": "Top 5 products by price"},
+  {"id": "M6", "question": "How many customers per city"},
+  {"id": "M7", "question": "Show orders with their customers"},
+  {"id": "M8", "question": "Customers without orders"},
+  {"id": "M9", "question": "Which customers have placed more than 3 orders"},
+  {"id": "M10", "question": "Delete all orders"}
+]

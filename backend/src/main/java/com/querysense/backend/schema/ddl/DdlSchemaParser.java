@@ -44,7 +44,12 @@ public class DdlSchemaParser implements SchemaUploadParser {
         Map<String, SchemaAliases.TableAliases> aliases = new LinkedHashMap<>();
 
         List<SampleInsert> samples = new ArrayList<>();
+        List<String> alters = new ArrayList<>();
         for (String statement : SqlStatementSplitter.split(ddl)) {
+            if (startsAlterTable(statement)) {
+                alters.add(statement);
+                continue;
+            }
             if (!startsCreateTable(statement)) {
                 InsertRows.read(statement).ifPresent(sample -> {
                     samples.add(sample);
@@ -71,8 +76,136 @@ public class DdlSchemaParser implements SchemaUploadParser {
             }
         }
 
+        alters.forEach(statement -> applyAlter(statement, tables, warnings));
+
         return new ParsedSchema(widenKeyedText(tables), List.copyOf(warnings), List.of(), Map.copyOf(aliases),
                 List.copyOf(samples));
+    }
+
+    private static final Pattern ALTER_HEAD = Pattern.compile(
+            "^\\s*ALTER\\s+TABLE\\s+(?:IF\\s+EXISTS\\s+)?(?:ONLY\\s+)?([`\"\\w.]+)\\s+(.*)$",
+            Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
+    private static final String CONSTRAINT_NAME = "(?:CONSTRAINT\\s+[`\"\\w]+\\s+)?";
+    private static final Pattern ADD_FOREIGN_KEY = Pattern.compile(
+            "^ADD\\s+" + CONSTRAINT_NAME + "FOREIGN\\s+KEY\\s*(?:[`\"\\w]+\\s*)?\\(([^)]*)\\)\\s*"
+                    + "REFERENCES\\s+([`\"\\w.]+)\\s*\\(([^)]*)\\)",
+            Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
+    private static final Pattern ADD_PRIMARY_KEY = Pattern.compile(
+            "^ADD\\s+" + CONSTRAINT_NAME + "PRIMARY\\s+KEY\\s*(?:USING\\s+\\w+\\s*)?\\(([^)]*)\\)",
+            Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
+    private static final Pattern ADD_UNIQUE = Pattern.compile(
+            "^ADD\\s+" + CONSTRAINT_NAME + "UNIQUE\\s*(?:KEY\\s+|INDEX\\s+)?(?:[`\"\\w]+\\s*)?\\(([^)]*)\\)",
+            Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
+    private static final Pattern NO_EFFECT_ON_SHAPE = Pattern.compile(
+            "^(?:OWNER\\s+TO\\b|(?:DISABLE|ENABLE)\\s+KEYS\\b|AUTO_INCREMENT\\s*=|REPLICA\\s+IDENTITY\\b"
+                    + "|ALTER\\s+COLUMN\\s+\\S+\\s+SET\\s+DEFAULT\\b|MODIFY\\s+(?:COLUMN\\s+)?\\S+\\s+.*AUTO_INCREMENT)",
+            Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
+
+    private void applyAlter(String statement, List<ParsedTable> tables, List<String> warnings) {
+        Matcher head = ALTER_HEAD.matcher(statement.strip());
+        if (!head.matches()) {
+            warnings.add("Did not apply an ALTER TABLE statement it could not read: " + snippet(statement));
+            return;
+        }
+        String tableName = unquote(head.group(1));
+        int index = indexOfTable(tables, tableName);
+        if (index < 0) {
+            warnings.add("Did not apply an ALTER TABLE on '" + tableName
+                    + "': the file has no CREATE TABLE for it. Statement: " + snippet(statement));
+            return;
+        }
+        ParsedTable table = tables.get(index);
+        List<ParsedColumn> columns = new ArrayList<>(table.columns());
+        List<KnownSchema.ForeignKey> foreignKeys = new ArrayList<>(table.foreignKeys());
+        List<String> unapplied = new ArrayList<>();
+
+        for (String clause : splitTopLevel(head.group(2))) {
+            Matcher fk = ADD_FOREIGN_KEY.matcher(clause);
+            Matcher pk = ADD_PRIMARY_KEY.matcher(clause);
+            Matcher unique = ADD_UNIQUE.matcher(clause);
+            if (fk.find()) {
+                List<String> from = splitArgs(fk.group(1));
+                List<String> to = splitArgs(fk.group(3));
+                String toTable = unquote(fk.group(2));
+                for (int i = 0; i < from.size() && i < to.size(); i++) {
+                    foreignKeys.add(new KnownSchema.ForeignKey(table.name(), unquote(from.get(i)), toTable, unquote(to.get(i))));
+                }
+            } else if (pk.find()) {
+                for (String name : splitArgs(pk.group(1))) {
+                    replaceColumn(columns, unquote(name), c -> new ParsedColumn(c.name(), c.type(), c.typeArgs(),
+                            true, c.autoIncrement(), c.unique(), true));
+                }
+            } else if (unique.find() && splitArgs(unique.group(1)).size() == 1) {
+                replaceColumn(columns, unquote(splitArgs(unique.group(1)).get(0)), c -> new ParsedColumn(c.name(),
+                        c.type(), c.typeArgs(), c.notNull(), c.autoIncrement(), true, c.primaryKey()));
+            } else if (!NO_EFFECT_ON_SHAPE.matcher(clause).find()) {
+                unapplied.add(clause.replaceAll("\\s+", " ").trim());
+            }
+        }
+        if (!unapplied.isEmpty()) {
+            warnings.add("Did not apply part of an ALTER TABLE on '" + table.name() + "' (" + String.join("; ", unapplied)
+                    + "): QuerySense reads ADD PRIMARY KEY, ADD UNIQUE and ADD FOREIGN KEY there, and nothing else.");
+        }
+        tables.set(index, new ParsedTable(table.name(), List.copyOf(columns), List.copyOf(foreignKeys),
+                table.embeddedArrays(), table.validator()));
+    }
+
+    private static int indexOfTable(List<ParsedTable> tables, String name) {
+        for (int i = 0; i < tables.size(); i++) {
+            if (tables.get(i).name().equalsIgnoreCase(name)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private static void replaceColumn(List<ParsedColumn> columns, String name,
+                                      java.util.function.UnaryOperator<ParsedColumn> change) {
+        for (int i = 0; i < columns.size(); i++) {
+            if (columns.get(i).name().equalsIgnoreCase(name)) {
+                columns.set(i, change.apply(columns.get(i)));
+            }
+        }
+    }
+
+    private static List<String> splitTopLevel(String text) {
+        List<String> out = new ArrayList<>();
+        StringBuilder current = new StringBuilder();
+        int depth = 0;
+        char quote = 0;
+        for (char c : text.toCharArray()) {
+            if (quote != 0) {
+                if (c == quote) {
+                    quote = 0;
+                }
+            } else if (c == '\'' || c == '"' || c == '`') {
+                quote = c;
+            } else if (c == '(') {
+                depth++;
+            } else if (c == ')') {
+                depth--;
+            } else if (c == ',' && depth == 0) {
+                if (!current.toString().isBlank()) {
+                    out.add(current.toString().strip());
+                }
+                current.setLength(0);
+                continue;
+            }
+            current.append(c);
+        }
+        String last = current.toString().strip();
+        if (last.endsWith(";")) {
+            last = last.substring(0, last.length() - 1).strip();
+        }
+        if (!last.isEmpty()) {
+            out.add(last);
+        }
+        return out;
+    }
+
+    private boolean startsAlterTable(String statement) {
+        String head = statement.stripLeading().toUpperCase(Locale.ROOT).replaceAll("\\s+", " ");
+        return head.startsWith("ALTER TABLE");
     }
 
     private static final String SKIPPED_PREFIX = "Skipped table '";
@@ -111,7 +244,11 @@ public class DdlSchemaParser implements SchemaUploadParser {
                                     c.unique(), c.primaryKey())
                             : c)
                     .toList();
-            out.add(new ParsedTable(table.name(), columns, table.foreignKeys(), table.embeddedArrays(), table.validator()));
+            Map<String, KnownSchema.ForeignKey> distinct = new LinkedHashMap<>();
+            table.foreignKeys().forEach(fk -> distinct.putIfAbsent(
+                    key(fk.fromTable(), fk.fromColumn()) + ">" + key(fk.toTable(), fk.toColumn()), fk));
+            out.add(new ParsedTable(table.name(), columns, List.copyOf(distinct.values()), table.embeddedArrays(),
+                    table.validator()));
         }
         return List.copyOf(out);
     }
@@ -256,7 +393,13 @@ public class DdlSchemaParser implements SchemaUploadParser {
             return;
         }
         for (Index index : createTable.getIndexes()) {
-            if (index.getType() == null || !index.getType().toUpperCase(Locale.ROOT).contains("PRIMARY")) {
+            String type = index.getType() == null ? "" : index.getType().toUpperCase(Locale.ROOT);
+            if (type.contains("UNIQUE") && index.getColumnsNames().size() == 1) {
+                replaceColumn(columns, unquote(index.getColumnsNames().get(0)), c -> new ParsedColumn(c.name(),
+                        c.type(), c.typeArgs(), c.notNull(), c.autoIncrement(), true, c.primaryKey()));
+                continue;
+            }
+            if (!type.contains("PRIMARY")) {
                 continue;
             }
             for (String raw : index.getColumnsNames()) {

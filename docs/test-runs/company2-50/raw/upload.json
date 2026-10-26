@@ -1,0 +1,203 @@
+{
+  "status": 200,
+  "ms": 4585.9,
+  "response": {
+    "schemaId": "upload-23c100f8",
+    "label": "company2_hr.sql",
+    "catalog": "querysense_uploads",
+    "builtIn": false,
+    "tables": [
+      {
+        "name": "employee",
+        "columns": [
+          "emp_id",
+          "first_name",
+          "middle_initial",
+          "last_name",
+          "birth_date",
+          "address",
+          "gender",
+          "salary",
+          "manager_id",
+          "dept_no"
+        ],
+        "rowCount": 12000,
+        "embeddedArrays": [],
+        "fieldTypes": {
+          "emp_id": "VARCHAR",
+          "first_name": "VARCHAR",
+          "middle_initial": "CHAR",
+          "last_name": "VARCHAR",
+          "birth_date": "DATE",
+          "address": "VARCHAR",
+          "gender": "CHAR",
+          "salary": "DECIMAL",
+          "manager_id": "VARCHAR",
+          "dept_no": "INT"
+        },
+        "aliases": [],
+        "columnAliases": {}
+      },
+      {
+        "name": "department",
+        "columns": [
+          "dept_name",
+          "dept_no",
+          "head_emp_id",
+          "head_start_date"
+        ],
+        "rowCount": 12000,
+        "embeddedArrays": [],
+        "fieldTypes": {
+          "dept_name": "VARCHAR",
+          "dept_no": "INT",
+          "head_emp_id": "VARCHAR",
+          "head_start_date": "DATE"
+        },
+        "aliases": [],
+        "columnAliases": {}
+      },
+      {
+        "name": "dept_location",
+        "columns": [
+          "dept_no",
+          "location"
+        ],
+        "rowCount": 12000,
+        "embeddedArrays": [],
+        "fieldTypes": {
+          "dept_no": "INT",
+          "location": "VARCHAR"
+        },
+        "aliases": [],
+        "columnAliases": {}
+      },
+      {
+        "name": "project",
+        "columns": [
+          "project_name",
+          "project_no",
+          "site",
+          "dept_no"
+        ],
+        "rowCount": 12000,
+        "embeddedArrays": [],
+        "fieldTypes": {
+          "project_name": "VARCHAR",
+          "project_no": "INT",
+          "site": "VARCHAR",
+          "dept_no": "INT"
+        },
+        "aliases": [],
+        "columnAliases": {}
+      },
+      {
+        "name": "assignment",
+        "columns": [
+          "emp_id",
+          "project_no",
+          "hours"
+        ],
+        "rowCount": 12000,
+        "embeddedArrays": [],
+        "fieldTypes": {
+          "emp_id": "VARCHAR",
+          "project_no": "INT",
+          "hours": "DECIMAL"
+        },
+        "aliases": [],
+        "columnAliases": {}
+      },
+      {
+        "name": "dependent",
+        "columns": [
+          "emp_id",
+          "dependent_name",
+          "gender",
+          "birth_date",
+          "relationship"
+        ],
+        "rowCount": 12000,
+        "embeddedArrays": [],
+        "fieldTypes": {
+          "emp_id": "VARCHAR",
+          "dependent_name": "VARCHAR",
+          "gender": "CHAR",
+          "birth_date": "DATE",
+          "relationship": "VARCHAR"
+        },
+        "aliases": [],
+        "columnAliases": {}
+      }
+    ],
+    "foreignKeys": [
+      {
+        "fromTable": "employee",
+        "fromColumn": "manager_id",
+        "toTable": "employee",
+        "toColumn": "emp_id"
+      },
+      {
+        "fromTable": "employee",
+        "fromColumn": "dept_no",
+        "toTable": "department",
+        "toColumn": "dept_no"
+      },
+      {
+        "fromTable": "department",
+        "fromColumn": "head_emp_id",
+        "toTable": "employee",
+        "toColumn": "emp_id"
+      },
+      {
+        "fromTable": "dept_location",
+        "fromColumn": "dept_no",
+        "toTable": "department",
+        "toColumn": "dept_no"
+      },
+      {
+        "fromTable": "project",
+        "fromColumn": "dept_no",
+        "toTable": "department",
+        "toColumn": "dept_no"
+      },
+      {
+        "fromTable": "assignment",
+        "fromColumn": "emp_id",
+        "toTable": "employee",
+        "toColumn": "emp_id"
+      },
+      {
+        "fromTable": "assignment",
+        "fromColumn": "project_no",
+        "toTable": "project",
+        "toColumn": "project_no"
+      },
+      {
+        "fromTable": "dependent",
+        "fromColumn": "emp_id",
+        "toTable": "employee",
+        "toColumn": "emp_id"
+      }
+    ],
+    "warnings": [],
+    "loadedAt": "2026-10-25T11:43:08.600090400Z",
+    "dialect": "MYSQL",
+    "indexes": []
+  },
+  "db_checks": {
+    "row_counts": {
+      "employee": "12000",
+      "department": "12000",
+      "dept_location": "12000",
+      "project": "12000",
+      "assignment": "12000",
+      "dependent": "12000"
+    },
+    "fk_constraints": "assignment\temp_id\temployee\temp_id\nassignment\tproject_no\tproject\tproject_no\ndepartment\thead_emp_id\temployee\temp_id\ndependent\temp_id\temployee\temp_id\ndept_location\tdept_no\tdepartment\tdept_no\nemployee\tdept_no\tdepartment\tdept_no\nemployee\tmanager_id\temployee\temp_id\nproject\tdept_no\tdepartment\tdept_no\n",
+    "indexes": "assignment\tfk_assignment_6\t1\tproject_no\nassignment\tPRIMARY\t0\temp_id,project_no\ndepartment\tdept_name\t0\tdept_name\ndepartment\tfk_department_2\t1\thead_emp_id\ndepartment\tPRIMARY\t0\tdept_no\ndependent\tPRIMARY\t0\temp_id,dependent_name\ndept_location\tPRIMARY\t0\tdept_no,location\nemployee\tfk_employee_0\t1\tmanager_id\nemployee\tfk_employee_1\t1\tdept_no\nemployee\tPRIMARY\t0\temp_id\nproject\tfk_project_4\t1\tdept_no\nproject\tPRIMARY\t0\tproject_no\nproject\tproject_name\t0\tproject_name\n",
+    "orphans": "employee.dept_no\t0\nemployee.manager_id\t0\ndepartment.head_emp_id\t0\nassignment.emp_id\t0\nassignment.project_no\t0\ndependent.emp_id\t0\nproject.dept_no\t0\ndept_location.dept_no\t0\n",
+    "file_rows": "Arjun\tMehta\tE1001\t72000\tE1002\t5\nKavita\tRao\tE1002\t95000\tE1008\t5\nRamesh\tIyer\tE1008\t150000\tNULL\t1\n",
+    "file_departments": "Corporate\t1\tE1008\nOperations\t4\tE1004\nEngineering\t5\tE1002\n"
+  }
+}

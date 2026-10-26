@@ -22,7 +22,7 @@ import java.util.regex.Pattern;
 /** Every name, declared alias, inflection and built-in synonym that reaches a table or column of the active schema. */
 public class SchemaLexicon {
 
-    public enum MatchKind { EXACT, INFLECTION, SCHEMA_ALIAS, SYNONYM, TYPO }
+    public enum MatchKind { EXACT, INFLECTION, SCHEMA_ALIAS, SYNONYM, TYPO, ABBREVIATION, CHOSEN_JOIN, THESAURUS, DERIVED, NARROWER }
 
     public record Binding(String item, String phrase, MatchKind kind) {}
 
@@ -58,11 +58,17 @@ public class SchemaLexicon {
 
     private final ActiveSchemaProvider activeSchema;
     private final Synonyms synonyms;
+    private final Thesaurus thesaurus;
     private final Map<Dialect, Cached> cache = new ConcurrentHashMap<>();
 
     public SchemaLexicon(ActiveSchemaProvider activeSchema, Synonyms synonyms) {
+        this(activeSchema, synonyms, Thesaurus.builtIn());
+    }
+
+    public SchemaLexicon(ActiveSchemaProvider activeSchema, Synonyms synonyms, Thesaurus thesaurus) {
         this.activeSchema = activeSchema;
         this.synonyms = synonyms;
+        this.thesaurus = thesaurus;
     }
 
     public TableMatches tables(String text, Dialect dialect) {
@@ -163,6 +169,13 @@ public class SchemaLexicon {
         if (!(aliased instanceof Unbound)) {
             return aliased;
         }
+        List<String> abbreviated = table.columns().stream()
+                .filter(c -> expanded(c).filter(full -> phraseForms(full).contains(token)).isPresent())
+                .toList();
+        ColumnMatch abbreviation = pick(table, token, abbreviated, MatchKind.ABBREVIATION);
+        if (!(abbreviation instanceof Unbound)) {
+            return abbreviation;
+        }
         List<String> synonymous = table.columns().stream()
                 .filter(c -> isSynonym(token, base(c)))
                 .toList();
@@ -172,6 +185,13 @@ public class SchemaLexicon {
         }
         if (exact instanceof Ambiguous) {
             return exact;
+        }
+        List<String> dictionary = table.columns().stream()
+                .filter(c -> isThesaurusLink(token, base(c)))
+                .toList();
+        ColumnMatch thesaurusMatch = pick(table, token, dictionary, MatchKind.THESAURUS);
+        if (!(thesaurusMatch instanceof Unbound)) {
+            return thesaurusMatch;
         }
         if (token.contains(" ") || token.length() < Edits.MIN_TYPO_LENGTH || isKnownWord(table, token, aliases)) {
             return new Unbound();
@@ -260,13 +280,39 @@ public class SchemaLexicon {
                 .toList();
     }
 
+    private static Optional<String> expanded(String column) {
+        List<String> words = NameWords.words(column.substring(column.lastIndexOf('.') + 1));
+        List<String> full = Abbreviations.builtIn().expand(words);
+        return full.equals(words) ? Optional.empty() : Optional.of(String.join(" ", full));
+    }
+
     private boolean isSynonym(String token, String base) {
-        if (base.contains(" ") || token.equals(base)) {
+        if (token.contains(" ") || token.equals(base)) {
             return false;
         }
-        Set<String> related = new HashSet<>(synonyms.of(base));
-        related.addAll(synonyms.of(singular(base)));
-        return related.contains(token) || related.contains(singular(token));
+        for (String word : base.split(" ")) {
+            Set<String> related = new HashSet<>(synonyms.of(word));
+            related.addAll(synonyms.of(singular(word)));
+            if (related.contains(token) || related.contains(singular(token))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isThesaurusLink(String token, String base) {
+        if (token.equals(base)) {
+            return false;
+        }
+        Set<String> related = new HashSet<>(thesaurus.synonymsOf(base));
+        related.addAll(thesaurus.synonymsOf(singular(base)));
+        if (base.contains(" ")) {
+            for (String word : base.split(" ")) {
+                related.addAll(thesaurus.synonymsOf(word));
+                related.addAll(thesaurus.synonymsOf(singular(word)));
+            }
+        }
+        return phraseForms(token).stream().anyMatch(related::contains);
     }
 
     private boolean isKnownWord(KnownSchema.Table table, String token, SchemaAliases.TableAliases aliases) {
@@ -332,6 +378,9 @@ public class SchemaLexicon {
             Set<String> related = new LinkedHashSet<>(synonyms.of(name));
             related.addAll(synonyms.of(singular));
             related.forEach(word -> forms(word).forEach(f -> put(all, f, table, MatchKind.SYNONYM)));
+            Set<String> dictionary = new LinkedHashSet<>(thesaurus.synonymsOf(name));
+            dictionary.addAll(thesaurus.synonymsOf(singular));
+            dictionary.forEach(word -> forms(word).forEach(f -> put(all, f, table, MatchKind.THESAURUS)));
         }
     }
 

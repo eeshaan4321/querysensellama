@@ -66,21 +66,59 @@ class SchemaProvisionerTest {
 
     @Test
     @DisplayName("adds foreign keys after every table exists, not inline")
-    void addsForeignKeysAfterwards() {
+    void addsForeignKeysAfterwards() throws Exception {
         ParsedTable customers = new ParsedTable("customers", List.of(pk("id")), List.of());
         ParsedTable orders = new ParsedTable("orders",
                 List.of(pk("id"), col("customer_id", "INT")),
                 List.of(new KnownSchema.ForeignKey("orders", "customer_id", "customers", "id")));
 
-        provisioner.provision(new ParsedSchema(List.of(customers, orders), List.of()));
+        ParsedSchema schema = new ParsedSchema(List.of(customers, orders), List.of());
+        provisioner.provision(schema);
+        assertThat(executedStatements()).noneMatch(s -> s.contains("ADD CONSTRAINT"));
 
-        List<String> executed = executedStatements();
-        int lastCreate = lastIndexMatching(executed, "CREATE TABLE");
-        int addFk = lastIndexMatching(executed, "ADD CONSTRAINT");
+        java.sql.Statement statement = onOneConnection();
+        assertThat(provisioner.finish(schema)).isEmpty();
 
-        assertThat(addFk).isGreaterThan(lastCreate);
-        assertThat(executed.get(addFk))
+        ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+        org.mockito.Mockito.verify(statement, org.mockito.Mockito.times(3)).execute(sql.capture());
+        assertThat(sql.getAllValues().get(0)).isEqualTo("SET FOREIGN_KEY_CHECKS = 0");
+        assertThat(sql.getAllValues().get(1))
+                .contains("ADD CONSTRAINT")
                 .contains("FOREIGN KEY (`customer_id`) REFERENCES `querysense_uploads`.`customers` (`id`)");
+        assertThat(sql.getAllValues().get(2)).isEqualTo("SET FOREIGN_KEY_CHECKS = 1");
+    }
+
+    @Test
+    @DisplayName("a foreign key MySQL refuses comes back as a warning, and checks are switched back on")
+    void refusedForeignKeyIsAWarning() throws Exception {
+        ParsedTable customers = new ParsedTable("customers", List.of(pk("id")), List.of());
+        ParsedTable orders = new ParsedTable("orders",
+                List.of(pk("id"), col("customer_id", "INT")),
+                List.of(new KnownSchema.ForeignKey("orders", "customer_id", "customers", "id")));
+        java.sql.Statement statement = onOneConnection();
+        when(statement.execute(org.mockito.ArgumentMatchers.contains("ADD CONSTRAINT")))
+                .thenThrow(new java.sql.SQLException("Failed to add the foreign key constraint. Missing index"));
+
+        assertThat(provisioner.finish(new ParsedSchema(List.of(customers, orders), List.of())))
+                .singleElement().asString()
+                .contains("orders.customer_id -> customers.id")
+                .contains("Missing index");
+        org.mockito.Mockito.verify(statement).execute("SET FOREIGN_KEY_CHECKS = 1");
+    }
+
+    @SuppressWarnings("unchecked")
+    private java.sql.Statement onOneConnection() {
+        java.sql.Connection connection = mock(java.sql.Connection.class);
+        java.sql.Statement statement = mock(java.sql.Statement.class);
+        try {
+            when(connection.createStatement()).thenReturn(statement);
+        } catch (java.sql.SQLException e) {
+            throw new IllegalStateException(e);
+        }
+        when(jdbcTemplate.execute(org.mockito.ArgumentMatchers.any(org.springframework.jdbc.core.ConnectionCallback.class)))
+                .thenAnswer(call -> ((org.springframework.jdbc.core.ConnectionCallback<Object>) call.getArgument(0))
+                        .doInConnection(connection));
+        return statement;
     }
 
     @Test

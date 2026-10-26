@@ -1,0 +1,20 @@
+diff --git a/backend/src/main/java/com/querysense/backend/service/impl/OllamaService.java b/backend/src/main/java/com/querysense/backend/service/impl/OllamaService.java
+index b2aa0ec..ec8f023 100644
+--- a/backend/src/main/java/com/querysense/backend/service/impl/OllamaService.java
++++ b/backend/src/main/java/com/querysense/backend/service/impl/OllamaService.java
+@@ -81,6 +81,15 @@ public class OllamaService implements LlmFallbackService {
+                     restTemplate.postForEntity(apiUrl, new HttpEntity<>(body, headers), Map.class);
+ 
+             Map<String, Object> payload = response.getBody();
++            // TEMP-TOKEN-LOG (company-50 test run) — remove after the run
++            if (payload != null) {
++                org.slf4j.LoggerFactory.getLogger("TEMP-TOKEN-LOG").info(
++                        "TEMP-TOKEN-LOG prompt_eval_count={} eval_count={} total_duration_ns={} prompt_b64={}",
++                        payload.get("prompt_eval_count"), payload.get("eval_count"), payload.get("total_duration"),
++                        java.util.Base64.getEncoder().encodeToString(String.valueOf(body.get("prompt"))
++                                .getBytes(java.nio.charset.StandardCharsets.UTF_8)));
++            }
++            // END TEMP-TOKEN-LOG
+             if (payload == null || payload.get("response") == null) {
+                 throw new LlmUnavailableException(
+                         "Ollama returned a response with no generated text. "

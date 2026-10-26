@@ -10,6 +10,11 @@ const KIND_LABEL = {
   SCHEMA_ALIAS: 'alias declared by the schema',
   SYNONYM: 'built-in synonym',
   TYPO: 'one letter off',
+  ABBREVIATION: 'abbreviation spelled out',
+  CHOSEN_JOIN: 'join chosen from the wording',
+  THESAURUS: 'dictionary synonym',
+  DERIVED: 'from the verb',
+  NARROWER: 'a kind of, from your data',
 };
 
 export function RuleTracePanel({ trace, handledBy, interpretations = [] }) {

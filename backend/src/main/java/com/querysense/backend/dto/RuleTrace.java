@@ -14,6 +14,7 @@ public record RuleTrace(
 
     public static final String BUILT = "BUILT";
     public static final String DECLINED = "DECLINED";
+    public static final String REFUSED = "REFUSED";
 
     public RuleTrace(String outcome, String shape, List<Binding> bindings, JoinEdge joinEdge,
                      List<String> checksPassed, String declineReason) {
@@ -28,5 +29,9 @@ public record RuleTrace(
 
     public boolean built() {
         return BUILT.equals(outcome);
+    }
+
+    public boolean refused() {
+        return REFUSED.equals(outcome);
     }
 }

@@ -14,6 +14,24 @@ export function QueryResultPanel({ result, targetDb }) {
   const reduced = useReducedMotion();
   const tone = isLlmSource(result.handledBy) ? 'llm' : 'rule';
 
+  if (result.ruleTrace?.outcome === 'REFUSED') {
+    return (
+      <div className={`query-result query-result--${tone}`}>
+        <div className="query-result__head">
+          <span className="query-result__heading">No query generated</span>
+          <EngineBadge handledBy={result.handledBy} />
+        </div>
+        <div className="schema-warning" role="status">
+          <span className="schema-warning__label">Refused by the rule engine</span>
+          <p className="schema-warning__detail">{result.ruleTrace.declineReason}</p>
+          <p className="schema-warning__note">
+            The language model was not asked either, and nothing was saved to history.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <motion.div
       key={result.handledBy}

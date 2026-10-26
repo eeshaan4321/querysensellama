@@ -36,7 +36,7 @@ export function SchemaAdvisorPage() {
     }
   }
 
-  if (!build) {
+  if (!build?.generatedQuery) {
     return (
       <div>
         <PageHeader title="Schema advisor" description="Indexing, normalization, and structural recommendations anchored to observed EXPLAIN behavior." />

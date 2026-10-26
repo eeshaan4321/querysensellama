@@ -27,6 +27,26 @@ class SqlStructureParserTest {
     }
 
     @Test
+    @DisplayName("an expression or aggregate is not a column an index can be put on, so it names nothing")
+    void expressionsNameNoColumn() {
+        assertThat(parser.parse("SELECT * FROM EMPLOYEE WHERE YEAR(Bdate) > 1965").getFilteredColumn()).isNull();
+        assertThat(parser.parse("SELECT * FROM EMPLOYEE ORDER BY Salary * 2").getOrderByColumn()).isNull();
+        assertThat(parser.parse("SELECT p.Pname, SUM(w.Hours) FROM PROJECT p JOIN WORKS_ON w ON p.Pnumber = w.Pno "
+                + "GROUP BY p.Pname ORDER BY SUM(w.Hours) DESC").getOrderByColumn()).isNull();
+        assertThat(parser.parse("SELECT * FROM EMPLOYEE ORDER BY e.Lname").getOrderByColumn()).isEqualTo("e.Lname");
+    }
+
+    @Test
+    @DisplayName("table aliases in FROM and JOIN map back to their tables")
+    void aliasesMapToTables() {
+        var result = parser.parse("SELECT e.Fname FROM EMPLOYEE e JOIN DEPARTMENT AS d ON e.Dno = d.Dnumber");
+
+        assertThat(result.realTableName("e")).isEqualTo("EMPLOYEE");
+        assertThat(result.realTableName("D")).isEqualTo("DEPARTMENT");
+        assertThat(result.realTableName("EMPLOYEE")).isEqualTo("EMPLOYEE");
+    }
+
+    @Test
     @DisplayName("an OR across two columns names neither, since no single index serves it")
     void orAcrossColumns() {
         assertThat(parser.parse("SELECT * FROM customers WHERE city = 'pune' OR name = 'asha'").getFilteredColumn())

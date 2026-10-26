@@ -1,0 +1,3874 @@
+[
+  {
+    "id": "A1",
+    "source": "Q2 (rule engine)",
+    "kind": "full scan, filter",
+    "sql": "SELECT * FROM employee WHERE salary > 100000;",
+    "status": 200,
+    "ms": 62.5,
+    "response": {
+      "originalQuery": "SELECT * FROM employee WHERE salary > 100000;",
+      "optimizedQuery": "SELECT emp_id, first_name, middle_initial, last_name, birth_date, address, gender, salary, manager_id, dept_no FROM employee WHERE salary > 100000;",
+      "rewritten": true,
+      "changes": [
+        {
+          "ruleId": "RW1",
+          "explanation": "Named the 10 columns of 'employee' instead of SELECT *, so an index covering them can answer the query without reading the row. The rows returned are identical."
+        }
+      ],
+      "originalAnalysis": {
+        "tableName": "employee",
+        "queryType": "SELECT",
+        "databaseType": "MySQL",
+        "estimatedRows": 12398,
+        "filtered": 33.33,
+        "estimatedRowsReturned": 4132,
+        "accessType": "ALL",
+        "usesIndex": false,
+        "hasFullTableScan": true,
+        "usesFilesort": false,
+        "usesTemporaryTable": false,
+        "keyUsed": null,
+        "tables": [
+          {
+            "tableName": "employee",
+            "accessType": "ALL",
+            "possibleKeys": null,
+            "keyUsed": null,
+            "keyLength": null,
+            "ref": null,
+            "estimatedRows": 12398,
+            "filtered": 33.33,
+            "extra": "Using where",
+            "fullTableScan": true,
+            "usesIndex": false,
+            "usesFilesort": false,
+            "usesTemporaryTable": false,
+            "estimatedRowsReturned": 4132,
+            "readAmplification": 3.000484027105518
+          }
+        ],
+        "hasUnindexedFilter": false,
+        "hasUnanchoredRegex": false,
+        "filteredColumn": "salary",
+        "orderByColumn": null,
+        "warnings": [
+          "Full table scan detected on 'employee'. MySQL selected a full scan for this table. If the query is slow, check whether an index on the filtered or joined columns could reduce the rows examined."
+        ],
+        "explainFailed": false,
+        "planTree": {
+          "kind": "query_block",
+          "label": "query block",
+          "accessType": null,
+          "keyUsed": null,
+          "estimatedRows": null,
+          "cost": 1280.05,
+          "usesFilesort": false,
+          "usesTemporaryTable": false,
+          "children": [
+            {
+              "kind": "table",
+              "label": "employee",
+              "accessType": "ALL",
+              "keyUsed": null,
+              "estimatedRows": 12398,
+              "cost": 1280.05,
+              "usesFilesort": false,
+              "usesTemporaryTable": false,
+              "children": []
+            }
+          ]
+        },
+        "queryCost": 1280.05,
+        "executionMillis": null,
+        "verdict": {
+          "severity": "CRITICAL",
+          "label": "Needs attention",
+          "headline": "Reads the whole employee table \u2014 about 12,398 rows \u2014 then discards 66.7% of what it read.",
+          "detail": "MySQL reported no index it could have used for this table."
+        },
+        "fullScanTables": [
+          "employee"
+        ],
+        "readAmplification": 3.000484027105518
+      },
+      "optimizedAnalysis": {
+        "tableName": "employee",
+        "queryType": "SELECT",
+        "databaseType": "MySQL",
+        "estimatedRows": 12398,
+        "filtered": 33.33,
+        "estimatedRowsReturned": 4132,
+        "accessType": "ALL",
+        "usesIndex": false,
+        "hasFullTableScan": true,
+        "usesFilesort": false,
+        "usesTemporaryTable": false,
+        "keyUsed": null,
+        "tables": [
+          {
+            "tableName": "employee",
+            "accessType": "ALL",
+            "possibleKeys": null,
+            "keyUsed": null,
+            "keyLength": null,
+            "ref": null,
+            "estimatedRows": 12398,
+            "filtered": 33.33,
+            "extra": "Using where",
+            "fullTableScan": true,
+            "usesIndex": false,
+            "usesFilesort": false,
+            "usesTemporaryTable": false,
+            "estimatedRowsReturned": 4132,
+            "readAmplification": 3.000484027105518
+          }
+        ],
+        "hasUnindexedFilter": false,
+        "hasUnanchoredRegex": false,
+        "filteredColumn": "salary",
+        "orderByColumn": null,
+        "warnings": [
+          "Full table scan detected on 'employee'. MySQL selected a full scan for this table. If the query is slow, check whether an index on the filtered or joined columns could reduce the rows examined."
+        ],
+        "explainFailed": false,
+        "planTree": {
+          "kind": "query_block",
+          "label": "query block",
+          "accessType": null,
+          "keyUsed": null,
+          "estimatedRows": null,
+          "cost": 1280.05,
+          "usesFilesort": false,
+          "usesTemporaryTable": false,
+          "children": [
+            {
+              "kind": "table",
+              "label": "employee",
+              "accessType": "ALL",
+              "keyUsed": null,
+              "estimatedRows": 12398,
+              "cost": 1280.05,
+              "usesFilesort": false,
+              "usesTemporaryTable": false,
+              "children": []
+            }
+          ]
+        },
+        "queryCost": 1280.05,
+        "executionMillis": null,
+        "verdict": {
+          "severity": "CRITICAL",
+          "label": "Needs attention",
+          "headline": "Reads the whole employee table \u2014 about 12,398 rows \u2014 then discards 66.7% of what it read.",
+          "detail": "MySQL reported no index it could have used for this table."
+        },
+        "fullScanTables": [
+          "employee"
+        ],
+        "readAmplification": 3.000484027105518
+      },
+      "estimatedRowsDelta": 0,
+      "queryCostDelta": 0.0,
+      "estimate": true,
+      "summary": "1 rewrite rule applied. EXPLAIN estimates the same number of rows read either way, so the rewrite changes the shape of the query without changing what it reads."
+    }
+  },
+  {
+    "id": "A2",
+    "source": "Q4 (rule engine)",
+    "kind": "full scan, BETWEEN",
+    "sql": "SELECT * FROM employee WHERE salary BETWEEN 100000 AND 200000;",
+    "status": 200,
+    "ms": 45.3,
+    "response": {
+      "originalQuery": "SELECT * FROM employee WHERE salary BETWEEN 100000 AND 200000;",
+      "optimizedQuery": "SELECT emp_id, first_name, middle_initial, last_name, birth_date, address, gender, salary, manager_id, dept_no FROM employee WHERE salary BETWEEN 100000 AND 200000;",
+      "rewritten": true,
+      "changes": [
+        {
+          "ruleId": "RW1",
+          "explanation": "Named the 10 columns of 'employee' instead of SELECT *, so an index covering them can answer the query without reading the row. The rows returned are identical."
+        }
+      ],
+      "originalAnalysis": {
+        "tableName": "employee",
+        "queryType": "SELECT",
+        "databaseType": "MySQL",
+        "estimatedRows": 12398,
+        "filtered": 11.11,
+        "estimatedRowsReturned": 1377,
+        "accessType": "ALL",
+        "usesIndex": false,
+        "hasFullTableScan": true,
+        "usesFilesort": false,
+        "usesTemporaryTable": false,
+        "keyUsed": null,
+        "tables": [
+          {
+            "tableName": "employee",
+            "accessType": "ALL",
+            "possibleKeys": null,
+            "keyUsed": null,
+            "keyLength": null,
+            "ref": null,
+            "estimatedRows": 12398,
+            "filtered": 11.11,
+            "extra": "Using where",
+            "fullTableScan": true,
+            "usesIndex": false,
+            "usesFilesort": false,
+            "usesTemporaryTable": false,
+            "estimatedRowsReturned": 1377,
+            "readAmplification": 9.003631082062455
+          }
+        ],
+        "hasUnindexedFilter": false,
+        "hasUnanchoredRegex": false,
+        "filteredColumn": "salary",
+        "orderByColumn": null,
+        "warnings": [
+          "Full table scan detected on 'employee'. MySQL selected a full scan for this table. If the query is slow, check whether an index on the filtered or joined columns could reduce the rows examined."
+        ],
+        "explainFailed": false,
+        "planTree": {
+          "kind": "query_block",
+          "label": "query block",
+          "accessType": null,
+          "keyUsed": null,
+          "estimatedRows": null,
+          "cost": 1280.05,
+          "usesFilesort": false,
+          "usesTemporaryTable": false,
+          "children": [
+            {
+              "kind": "table",
+              "label": "employee",
+              "accessType": "ALL",
+              "keyUsed": null,
+              "estimatedRows": 12398,
+              "cost": 1280.05,
+              "usesFilesort": false,
+              "usesTemporaryTable": false,
+              "children": []
+            }
+          ]
+        },
+        "queryCost": 1280.05,
+        "executionMillis": null,
+        "verdict": {
+          "severity": "CRITICAL",
+          "label": "Needs attention",
+          "headline": "Reads the whole employee table \u2014 about 12,398 rows \u2014 then discards 88.9% of what it read.",
+          "detail": "MySQL reported no index it could have used for this table."
+        },
+        "fullScanTables": [
+          "employee"
+        ],
+        "readAmplification": 9.003631082062455
+      },
+      "optimizedAnalysis": {
+        "tableName": "employee",
+        "queryType": "SELECT",
+        "databaseType": "MySQL",
+        "estimatedRows": 12398,
+        "filtered": 11.11,
+        "estimatedRowsReturned": 1377,
+        "accessType": "ALL",
+        "usesIndex": false,
+        "hasFullTableScan": true,
+        "usesFilesort": false,
+        "usesTemporaryTable": false,
+        "keyUsed": null,
+        "tables": [
+          {
+            "tableName": "employee",
+            "accessType": "ALL",
+            "possibleKeys": null,
+            "keyUsed": null,
+            "keyLength": null,
+            "ref": null,
+            "estimatedRows": 12398,
+            "filtered": 11.11,
+            "extra": "Using where",
+            "fullTableScan": true,
+            "usesIndex": false,
+            "usesFilesort": false,
+            "usesTemporaryTable": false,
+            "estimatedRowsReturned": 1377,
+            "readAmplification": 9.003631082062455
+          }
+        ],
+        "hasUnindexedFilter": false,
+        "hasUnanchoredRegex": false,
+        "filteredColumn": "salary",
+        "orderByColumn": null,
+        "warnings": [
+          "Full table scan detected on 'employee'. MySQL selected a full scan for this table. If the query is slow, check whether an index on the filtered or joined columns could reduce the rows examined."
+        ],
+        "explainFailed": false,
+        "planTree": {
+          "kind": "query_block",
+          "label": "query block",
+          "accessType": null,
+          "keyUsed": null,
+          "estimatedRows": null,
+          "cost": 1280.05,
+          "usesFilesort": false,
+          "usesTemporaryTable": false,
+          "children": [
+            {
+              "kind": "table",
+              "label": "employee",
+              "accessType": "ALL",
+              "keyUsed": null,
+              "estimatedRows": 12398,
+              "cost": 1280.05,
+              "usesFilesort": false,
+              "usesTemporaryTable": false,
+              "children": []
+            }
+          ]
+        },
+        "queryCost": 1280.05,
+        "executionMillis": null,
+        "verdict": {
+          "severity": "CRITICAL",
+          "label": "Needs attention",
+          "headline": "Reads the whole employee table \u2014 about 12,398 rows \u2014 then discards 88.9% of what it read.",
+          "detail": "MySQL reported no index it could have used for this table."
+        },
+        "fullScanTables": [
+          "employee"
+        ],
+        "readAmplification": 9.003631082062455
+      },
+      "estimatedRowsDelta": 0,
+      "queryCostDelta": 0.0,
+      "estimate": true,
+      "summary": "1 rewrite rule applied. EXPLAIN estimates the same number of rows read either way, so the rewrite changes the shape of the query without changing what it reads."
+    }
+  },
+  {
+    "id": "A3",
+    "source": "Q5 (rule engine)",
+    "kind": "full scan, text filter",
+    "sql": "SELECT * FROM project WHERE site = 'pune';",
+    "status": 200,
+    "ms": 30.9,
+    "response": {
+      "originalQuery": "SELECT * FROM project WHERE site = 'pune';",
+      "optimizedQuery": "SELECT project_name, project_no, site, dept_no FROM project WHERE site = 'pune';",
+      "rewritten": true,
+      "changes": [
+        {
+          "ruleId": "RW1",
+          "explanation": "Named the 4 columns of 'project' instead of SELECT *, so an index covering them can answer the query without reading the row. The rows returned are identical."
+        }
+      ],
+      "originalAnalysis": {
+        "tableName": "project",
+        "queryType": "SELECT",
+        "databaseType": "MySQL",
+        "estimatedRows": 11704,
+        "filtered": 10.0,
+        "estimatedRowsReturned": 1170,
+        "accessType": "ALL",
+        "usesIndex": false,
+        "hasFullTableScan": true,
+        "usesFilesort": false,
+        "usesTemporaryTable": false,
+        "keyUsed": null,
+        "tables": [
+          {
+            "tableName": "project",
+            "accessType": "ALL",
+            "possibleKeys": null,
+            "keyUsed": null,
+            "keyLength": null,
+            "ref": null,
+            "estimatedRows": 11704,
+            "filtered": 10.0,
+            "extra": "Using where",
+            "fullTableScan": true,
+            "usesIndex": false,
+            "usesFilesort": false,
+            "usesTemporaryTable": false,
+            "estimatedRowsReturned": 1170,
+            "readAmplification": 10.003418803418803
+          }
+        ],
+        "hasUnindexedFilter": false,
+        "hasUnanchoredRegex": false,
+        "filteredColumn": "site",
+        "orderByColumn": null,
+        "warnings": [
+          "Full table scan detected on 'project'. MySQL selected a full scan for this table. If the query is slow, check whether an index on the filtered or joined columns could reduce the rows examined."
+        ],
+        "explainFailed": false,
+        "planTree": {
+          "kind": "query_block",
+          "label": "query block",
+          "accessType": null,
+          "keyUsed": null,
+          "estimatedRows": null,
+          "cost": 1194.65,
+          "usesFilesort": false,
+          "usesTemporaryTable": false,
+          "children": [
+            {
+              "kind": "table",
+              "label": "project",
+              "accessType": "ALL",
+              "keyUsed": null,
+              "estimatedRows": 11704,
+              "cost": 1194.65,
+              "usesFilesort": false,
+              "usesTemporaryTable": false,
+              "children": []
+            }
+          ]
+        },
+        "queryCost": 1194.65,
+        "executionMillis": null,
+        "verdict": {
+          "severity": "CRITICAL",
+          "label": "Needs attention",
+          "headline": "Reads the whole project table \u2014 about 11,704 rows \u2014 then discards 90% of what it read.",
+          "detail": "MySQL reported no index it could have used for this table."
+        },
+        "fullScanTables": [
+          "project"
+        ],
+        "readAmplification": 10.003418803418803
+      },
+      "optimizedAnalysis": {
+        "tableName": "project",
+        "queryType": "SELECT",
+        "databaseType": "MySQL",
+        "estimatedRows": 11704,
+        "filtered": 10.0,
+        "estimatedRowsReturned": 1170,
+        "accessType": "ALL",
+        "usesIndex": false,
+        "hasFullTableScan": true,
+        "usesFilesort": false,
+        "usesTemporaryTable": false,
+        "keyUsed": null,
+        "tables": [
+          {
+            "tableName": "project",
+            "accessType": "ALL",
+            "possibleKeys": null,
+            "keyUsed": null,
+            "keyLength": null,
+            "ref": null,
+            "estimatedRows": 11704,
+            "filtered": 10.0,
+            "extra": "Using where",
+            "fullTableScan": true,
+            "usesIndex": false,
+            "usesFilesort": false,
+            "usesTemporaryTable": false,
+            "estimatedRowsReturned": 1170,
+            "readAmplification": 10.003418803418803
+          }
+        ],
+        "hasUnindexedFilter": false,
+        "hasUnanchoredRegex": false,
+        "filteredColumn": "site",
+        "orderByColumn": null,
+        "warnings": [
+          "Full table scan detected on 'project'. MySQL selected a full scan for this table. If the query is slow, check whether an index on the filtered or joined columns could reduce the rows examined."
+        ],
+        "explainFailed": false,
+        "planTree": {
+          "kind": "query_block",
+          "label": "query block",
+          "accessType": null,
+          "keyUsed": null,
+          "estimatedRows": null,
+          "cost": 1194.65,
+          "usesFilesort": false,
+          "usesTemporaryTable": false,
+          "children": [
+            {
+              "kind": "table",
+              "label": "project",
+              "accessType": "ALL",
+              "keyUsed": null,
+              "estimatedRows": 11704,
+              "cost": 1194.65,
+              "usesFilesort": false,
+              "usesTemporaryTable": false,
+              "children": []
+            }
+          ]
+        },
+        "queryCost": 1194.65,
+        "executionMillis": null,
+        "verdict": {
+          "severity": "CRITICAL",
+          "label": "Needs attention",
+          "headline": "Reads the whole project table \u2014 about 11,704 rows \u2014 then discards 90% of what it read.",
+          "detail": "MySQL reported no index it could have used for this table."
+        },
+        "fullScanTables": [
+          "project"
+        ],
+        "readAmplification": 10.003418803418803
+      },
+      "estimatedRowsDelta": 0,
+      "queryCostDelta": 0.0,
+      "estimate": true,
+      "summary": "1 rewrite rule applied. EXPLAIN estimates the same number of rows read either way, so the rewrite changes the shape of the query without changing what it reads."
+    }
+  },
+  {
+    "id": "A4",
+    "source": "Q7 (rule engine)",
+    "kind": "ref lookup on FK index",
+    "sql": "SELECT * FROM employee WHERE dept_no = 5;",
+    "status": 200,
+    "ms": 44.3,
+    "response": {
+      "originalQuery": "SELECT * FROM employee WHERE dept_no = 5;",
+      "optimizedQuery": "SELECT emp_id, first_name, middle_initial, last_name, birth_date, address, gender, salary, manager_id, dept_no FROM employee WHERE dept_no = 5;",
+      "rewritten": true,
+      "changes": [
+        {
+          "ruleId": "RW1",
+          "explanation": "Named the 10 columns of 'employee' instead of SELECT *, so an index covering them can answer the query without reading the row. The rows returned are identical."
+        }
+      ],
+      "originalAnalysis": {
+        "tableName": "employee",
+        "queryType": "SELECT",
+        "databaseType": "MySQL",
+        "estimatedRows": 7,
+        "filtered": 100.0,
+        "estimatedRowsReturned": 7,
+        "accessType": "ref",
+        "usesIndex": true,
+        "hasFullTableScan": false,
+        "usesFilesort": false,
+        "usesTemporaryTable": false,
+        "keyUsed": "fk_employee_1",
+        "tables": [
+          {
+            "tableName": "employee",
+            "accessType": "ref",
+            "possibleKeys": "fk_employee_1",
+            "keyUsed": "fk_employee_1",
+            "keyLength": "4",
+            "ref": "const",
+            "estimatedRows": 7,
+            "filtered": 100.0,
+            "extra": null,
+            "fullTableScan": false,
+            "usesIndex": true,
+            "usesFilesort": false,
+            "usesTemporaryTable": false,
+            "estimatedRowsReturned": 7,
+            "readAmplification": 1.0
+          }
+        ],
+        "hasUnindexedFilter": false,
+        "hasUnanchoredRegex": false,
+        "filteredColumn": "dept_no",
+        "orderByColumn": null,
+        "warnings": [],
+        "explainFailed": false,
+        "planTree": {
+          "kind": "query_block",
+          "label": "query block",
+          "accessType": null,
+          "keyUsed": null,
+          "estimatedRows": null,
+          "cost": 2.45,
+          "usesFilesort": false,
+          "usesTemporaryTable": false,
+          "children": [
+            {
+              "kind": "table",
+              "label": "employee",
+              "accessType": "ref",
+              "keyUsed": "fk_employee_1",
+              "estimatedRows": 7,
+              "cost": 2.45,
+              "usesFilesort": false,
+              "usesTemporaryTable": false,
+              "children": []
+            }
+          ]
+        },
+        "queryCost": 2.45,
+        "executionMillis": null,
+        "verdict": {
+          "severity": "INFO",
+          "label": "Looks efficient",
+          "headline": "Uses the fk_employee_1 index to find rows instead of reading the whole table.",
+          "detail": "About 7 rows are expected to be read."
+        },
+        "fullScanTables": [],
+        "readAmplification": 1.0
+      },
+      "optimizedAnalysis": {
+        "tableName": "employee",
+        "queryType": "SELECT",
+        "databaseType": "MySQL",
+        "estimatedRows": 7,
+        "filtered": 100.0,
+        "estimatedRowsReturned": 7,
+        "accessType": "ref",
+        "usesIndex": true,
+        "hasFullTableScan": false,
+        "usesFilesort": false,
+        "usesTemporaryTable": false,
+        "keyUsed": "fk_employee_1",
+        "tables": [
+          {
+            "tableName": "employee",
+            "accessType": "ref",
+            "possibleKeys": "fk_employee_1",
+            "keyUsed": "fk_employee_1",
+            "keyLength": "4",
+            "ref": "const",
+            "estimatedRows": 7,
+            "filtered": 100.0,
+            "extra": null,
+            "fullTableScan": false,
+            "usesIndex": true,
+            "usesFilesort": false,
+            "usesTemporaryTable": false,
+            "estimatedRowsReturned": 7,
+            "readAmplification": 1.0
+          }
+        ],
+        "hasUnindexedFilter": false,
+        "hasUnanchoredRegex": false,
+        "filteredColumn": "dept_no",
+        "orderByColumn": null,
+        "warnings": [],
+        "explainFailed": false,
+        "planTree": {
+          "kind": "query_block",
+          "label": "query block",
+          "accessType": null,
+          "keyUsed": null,
+          "estimatedRows": null,
+          "cost": 2.45,
+          "usesFilesort": false,
+          "usesTemporaryTable": false,
+          "children": [
+            {
+              "kind": "table",
+              "label": "employee",
+              "accessType": "ref",
+              "keyUsed": "fk_employee_1",
+              "estimatedRows": 7,
+              "cost": 2.45,
+              "usesFilesort": false,
+              "usesTemporaryTable": false,
+              "children": []
+            }
+          ]
+        },
+        "queryCost": 2.45,
+        "executionMillis": null,
+        "verdict": {
+          "severity": "INFO",
+          "label": "Looks efficient",
+          "headline": "Uses the fk_employee_1 index to find rows instead of reading the whole table.",
+          "detail": "About 7 rows are expected to be read."
+        },
+        "fullScanTables": [],
+        "readAmplification": 1.0
+      },
+      "estimatedRowsDelta": 0,
+      "queryCostDelta": 0.0,
+      "estimate": true,
+      "summary": "1 rewrite rule applied. EXPLAIN estimates the same number of rows read either way, so the rewrite changes the shape of the query without changing what it reads."
+    }
+  },
+  {
+    "id": "A5",
+    "source": "Q8 (rule engine)",
+    "kind": "full scan, text filter",
+    "sql": "SELECT * FROM dependent WHERE relationship = 'spouse';",
+    "status": 200,
+    "ms": 31.5,
+    "response": {
+      "originalQuery": "SELECT * FROM dependent WHERE relationship = 'spouse';",
+      "optimizedQuery": "SELECT emp_id, dependent_name, gender, birth_date, relationship FROM dependent WHERE relationship = 'spouse';",
+      "rewritten": true,
+      "changes": [
+        {
+          "ruleId": "RW1",
+          "explanation": "Named the 5 columns of 'dependent' instead of SELECT *, so an index covering them can answer the query without reading the row. The rows returned are identical."
+        }
+      ],
+      "originalAnalysis": {
+        "tableName": "dependent",
+        "queryType": "SELECT",
+        "databaseType": "MySQL",
+        "estimatedRows": 11642,
+        "filtered": 10.0,
+        "estimatedRowsReturned": 1164,
+        "accessType": "ALL",
+        "usesIndex": false,
+        "hasFullTableScan": true,
+        "usesFilesort": false,
+        "usesTemporaryTable": false,
+        "keyUsed": null,
+        "tables": [
+          {
+            "tableName": "dependent",
+            "accessType": "ALL",
+            "possibleKeys": null,
+            "keyUsed": null,
+            "keyLength": null,
+            "ref": null,
+            "estimatedRows": 11642,
+            "filtered": 10.0,
+            "extra": "Using where",
+            "fullTableScan": true,
+            "usesIndex": false,
+            "usesFilesort": false,
+            "usesTemporaryTable": false,
+            "estimatedRowsReturned": 1164,
+            "readAmplification": 10.00171821305842
+          }
+        ],
+        "hasUnindexedFilter": false,
+        "hasUnanchoredRegex": false,
+        "filteredColumn": "relationship",
+        "orderByColumn": null,
+        "warnings": [
+          "Full table scan detected on 'dependent'. MySQL selected a full scan for this table. If the query is slow, check whether an index on the filtered or joined columns could reduce the rows examined."
+        ],
+        "explainFailed": false,
+        "planTree": {
+          "kind": "query_block",
+          "label": "query block",
+          "accessType": null,
+          "keyUsed": null,
+          "estimatedRows": null,
+          "cost": 1188.45,
+          "usesFilesort": false,
+          "usesTemporaryTable": false,
+          "children": [
+            {
+              "kind": "table",
+              "label": "dependent",
+              "accessType": "ALL",
+              "keyUsed": null,
+              "estimatedRows": 11642,
+              "cost": 1188.45,
+              "usesFilesort": false,
+              "usesTemporaryTable": false,
+              "children": []
+            }
+          ]
+        },
+        "queryCost": 1188.45,
+        "executionMillis": null,
+        "verdict": {
+          "severity": "CRITICAL",
+          "label": "Needs attention",
+          "headline": "Reads the whole dependent table \u2014 about 11,642 rows \u2014 then discards 90% of what it read.",
+          "detail": "MySQL reported no index it could have used for this table."
+        },
+        "fullScanTables": [
+          "dependent"
+        ],
+        "readAmplification": 10.00171821305842
+      },
+      "optimizedAnalysis": {
+        "tableName": "dependent",
+        "queryType": "SELECT",
+        "databaseType": "MySQL",
+        "estimatedRows": 11642,
+        "filtered": 10.0,
+        "estimatedRowsReturned": 1164,
+        "accessType": "ALL",
+        "usesIndex": false,
+        "hasFullTableScan": true,
+        "usesFilesort": false,
+        "usesTemporaryTable": false,
+        "keyUsed": null,
+        "tables": [
+          {
+            "tableName": "dependent",
+            "accessType": "ALL",
+            "possibleKeys": null,
+            "keyUsed": null,
+            "keyLength": null,
+            "ref": null,
+            "estimatedRows": 11642,
+            "filtered": 10.0,
+            "extra": "Using where",
+            "fullTableScan": true,
+            "usesIndex": false,
+            "usesFilesort": false,
+            "usesTemporaryTable": false,
+            "estimatedRowsReturned": 1164,
+            "readAmplification": 10.00171821305842
+          }
+        ],
+        "hasUnindexedFilter": false,
+        "hasUnanchoredRegex": false,
+        "filteredColumn": "relationship",
+        "orderByColumn": null,
+        "warnings": [
+          "Full table scan detected on 'dependent'. MySQL selected a full scan for this table. If the query is slow, check whether an index on the filtered or joined columns could reduce the rows examined."
+        ],
+        "explainFailed": false,
+        "planTree": {
+          "kind": "query_block",
+          "label": "query block",
+          "accessType": null,
+          "keyUsed": null,
+          "estimatedRows": null,
+          "cost": 1188.45,
+          "usesFilesort": false,
+          "usesTemporaryTable": false,
+          "children": [
+            {
+              "kind": "table",
+              "label": "dependent",
+              "accessType": "ALL",
+              "keyUsed": null,
+              "estimatedRows": 11642,
+              "cost": 1188.45,
+              "usesFilesort": false,
+              "usesTemporaryTable": false,
+              "children": []
+            }
+          ]
+        },
+        "queryCost": 1188.45,
+        "executionMillis": null,
+        "verdict": {
+          "severity": "CRITICAL",
+          "label": "Needs attention",
+          "headline": "Reads the whole dependent table \u2014 about 11,642 rows \u2014 then discards 90% of what it read.",
+          "detail": "MySQL reported no index it could have used for this table."
+        },
+        "fullScanTables": [
+          "dependent"
+        ],
+        "readAmplification": 10.00171821305842
+      },
+      "estimatedRowsDelta": 0,
+      "queryCostDelta": 0.0,
+      "estimate": true,
+      "summary": "1 rewrite rule applied. EXPLAIN estimates the same number of rows read either way, so the rewrite changes the shape of the query without changing what it reads."
+    }
+  },
+  {
+    "id": "A6",
+    "source": "Q9 (rule engine)",
+    "kind": "COUNT(*)",
+    "sql": "SELECT COUNT(*) FROM employee;",
+    "status": 200,
+    "ms": 20.5,
+    "response": {
+      "originalQuery": "SELECT COUNT(*) FROM employee;",
+      "optimizedQuery": "SELECT COUNT(*) FROM employee;",
+      "rewritten": false,
+      "changes": [],
+      "originalAnalysis": {
+        "tableName": "employee",
+        "queryType": "SELECT",
+        "databaseType": "MySQL",
+        "estimatedRows": 12398,
+        "filtered": 100.0,
+        "estimatedRowsReturned": 12398,
+        "accessType": "index",
+        "usesIndex": true,
+        "hasFullTableScan": false,
+        "usesFilesort": false,
+        "usesTemporaryTable": false,
+        "keyUsed": "fk_employee_1",
+        "tables": [
+          {
+            "tableName": "employee",
+            "accessType": "index",
+            "possibleKeys": null,
+            "keyUsed": "fk_employee_1",
+            "keyLength": "4",
+            "ref": null,
+            "estimatedRows": 12398,
+            "filtered": 100.0,
+            "extra": "Using index",
+            "fullTableScan": false,
+            "usesIndex": true,
+            "usesFilesort": false,
+            "usesTemporaryTable": false,
+            "estimatedRowsReturned": 12398,
+            "readAmplification": 1.0
+          }
+        ],
+        "hasUnindexedFilter": false,
+        "hasUnanchoredRegex": false,
+        "filteredColumn": null,
+        "orderByColumn": null,
+        "warnings": [
+          "Query has no WHERE clause \u2014 this may scan the entire table regardless of available indexes."
+        ],
+        "explainFailed": false,
+        "planTree": {
+          "kind": "query_block",
+          "label": "query block",
+          "accessType": null,
+          "keyUsed": null,
+          "estimatedRows": null,
+          "cost": 1280.05,
+          "usesFilesort": false,
+          "usesTemporaryTable": false,
+          "children": [
+            {
+              "kind": "table",
+              "label": "employee",
+              "accessType": "index",
+              "keyUsed": "fk_employee_1",
+              "estimatedRows": 12398,
+              "cost": 1280.05,
+              "usesFilesort": false,
+              "usesTemporaryTable": false,
+              "children": []
+            }
+          ]
+        },
+        "queryCost": 1280.05,
+        "executionMillis": null,
+        "verdict": {
+          "severity": "INFO",
+          "label": "Looks efficient",
+          "headline": "Uses the fk_employee_1 index to find rows instead of reading the whole table.",
+          "detail": "About 12,398 rows are expected to be read."
+        },
+        "fullScanTables": [],
+        "readAmplification": 1.0
+      },
+      "optimizedAnalysis": null,
+      "estimatedRowsDelta": null,
+      "queryCostDelta": null,
+      "estimate": true,
+      "summary": "No rewrite rule applied to this query, so there is nothing to compare it against."
+    }
+  },
+  {
+    "id": "A7",
+    "source": "Q11 (rule engine)",
+    "kind": "aggregate, full scan",
+    "sql": "SELECT AVG(salary) FROM employee;",
+    "status": 200,
+    "ms": 29.5,
+    "response": {
+      "originalQuery": "SELECT AVG(salary) FROM employee;",
+      "optimizedQuery": "SELECT AVG(salary) FROM employee;",
+      "rewritten": false,
+      "changes": [],
+      "originalAnalysis": {
+        "tableName": "employee",
+        "queryType": "SELECT",
+        "databaseType": "MySQL",
+        "estimatedRows": 12398,
+        "filtered": 100.0,
+        "estimatedRowsReturned": 12398,
+        "accessType": "ALL",
+        "usesIndex": false,
+        "hasFullTableScan": true,
+        "usesFilesort": false,
+        "usesTemporaryTable": false,
+        "keyUsed": null,
+        "tables": [
+          {
+            "tableName": "employee",
+            "accessType": "ALL",
+            "possibleKeys": null,
+            "keyUsed": null,
+            "keyLength": null,
+            "ref": null,
+            "estimatedRows": 12398,
+            "filtered": 100.0,
+            "extra": null,
+            "fullTableScan": true,
+            "usesIndex": false,
+            "usesFilesort": false,
+            "usesTemporaryTable": false,
+            "estimatedRowsReturned": 12398,
+            "readAmplification": 1.0
+          }
+        ],
+        "hasUnindexedFilter": false,
+        "hasUnanchoredRegex": false,
+        "filteredColumn": null,
+        "orderByColumn": null,
+        "warnings": [
+          "Query has no WHERE clause \u2014 this may scan the entire table regardless of available indexes.",
+          "Full table scan detected on 'employee'. MySQL selected a full scan for this table. If the query is slow, check whether an index on the filtered or joined columns could reduce the rows examined."
+        ],
+        "explainFailed": false,
+        "planTree": {
+          "kind": "query_block",
+          "label": "query block",
+          "accessType": null,
+          "keyUsed": null,
+          "estimatedRows": null,
+          "cost": 1280.05,
+          "usesFilesort": false,
+          "usesTemporaryTable": false,
+          "children": [
+            {
+              "kind": "table",
+              "label": "employee",
+              "accessType": "ALL",
+              "keyUsed": null,
+              "estimatedRows": 12398,
+              "cost": 1280.05,
+              "usesFilesort": false,
+              "usesTemporaryTable": false,
+              "children": []
+            }
+          ]
+        },
+        "queryCost": 1280.05,
+        "executionMillis": null,
+        "verdict": {
+          "severity": "INFO",
+          "label": "Looks reasonable",
+          "headline": "Reads the whole employee table \u2014 about 12,398 rows \u2014 and returns most of them.",
+          "detail": "A full scan is the efficient plan when a query genuinely needs this much of the table, so there is little an index could save here."
+        },
+        "fullScanTables": [
+          "employee"
+        ],
+        "readAmplification": 1.0
+      },
+      "optimizedAnalysis": null,
+      "estimatedRowsDelta": null,
+      "queryCostDelta": null,
+      "estimate": true,
+      "summary": "No rewrite rule applied to this query, so there is nothing to compare it against."
+    }
+  },
+  {
+    "id": "A8",
+    "source": "Q15 (rule engine)",
+    "kind": "aggregate, full scan",
+    "sql": "SELECT SUM(hours) FROM assignment;",
+    "status": 200,
+    "ms": 32.1,
+    "response": {
+      "originalQuery": "SELECT SUM(hours) FROM assignment;",
+      "optimizedQuery": "SELECT SUM(hours) FROM assignment;",
+      "rewritten": false,
+      "changes": [],
+      "originalAnalysis": {
+        "tableName": "assignment",
+        "queryType": "SELECT",
+        "databaseType": "MySQL",
+        "estimatedRows": 12000,
+        "filtered": 100.0,
+        "estimatedRowsReturned": 12000,
+        "accessType": "ALL",
+        "usesIndex": false,
+        "hasFullTableScan": true,
+        "usesFilesort": false,
+        "usesTemporaryTable": false,
+        "keyUsed": null,
+        "tables": [
+          {
+            "tableName": "assignment",
+            "accessType": "ALL",
+            "possibleKeys": null,
+            "keyUsed": null,
+            "keyLength": null,
+            "ref": null,
+            "estimatedRows": 12000,
+            "filtered": 100.0,
+            "extra": null,
+            "fullTableScan": true,
+            "usesIndex": false,
+            "usesFilesort": false,
+            "usesTemporaryTable": false,
+            "estimatedRowsReturned": 12000,
+            "readAmplification": 1.0
+          }
+        ],
+        "hasUnindexedFilter": false,
+        "hasUnanchoredRegex": false,
+        "filteredColumn": null,
+        "orderByColumn": null,
+        "warnings": [
+          "Query has no WHERE clause \u2014 this may scan the entire table regardless of available indexes.",
+          "Full table scan detected on 'assignment'. MySQL selected a full scan for this table. If the query is slow, check whether an index on the filtered or joined columns could reduce the rows examined."
+        ],
+        "explainFailed": false,
+        "planTree": {
+          "kind": "query_block",
+          "label": "query block",
+          "accessType": null,
+          "keyUsed": null,
+          "estimatedRows": null,
+          "cost": 1208.25,
+          "usesFilesort": false,
+          "usesTemporaryTable": false,
+          "children": [
+            {
+              "kind": "table",
+              "label": "assignment",
+              "accessType": "ALL",
+              "keyUsed": null,
+              "estimatedRows": 12000,
+              "cost": 1208.25,
+              "usesFilesort": false,
+              "usesTemporaryTable": false,
+              "children": []
+            }
+          ]
+        },
+        "queryCost": 1208.25,
+        "executionMillis": null,
+        "verdict": {
+          "severity": "INFO",
+          "label": "Looks reasonable",
+          "headline": "Reads the whole assignment table \u2014 about 12,000 rows \u2014 and returns most of them.",
+          "detail": "A full scan is the efficient plan when a query genuinely needs this much of the table, so there is little an index could save here."
+        },
+        "fullScanTables": [
+          "assignment"
+        ],
+        "readAmplification": 1.0
+      },
+      "optimizedAnalysis": null,
+      "estimatedRowsDelta": null,
+      "queryCostDelta": null,
+      "estimate": true,
+      "summary": "No rewrite rule applied to this query, so there is nothing to compare it against."
+    }
+  },
+  {
+    "id": "A9",
+    "source": "Q16 (rule engine)",
+    "kind": "GROUP BY on indexed column",
+    "sql": "SELECT dept_no, COUNT(*) FROM employee GROUP BY dept_no;",
+    "status": 200,
+    "ms": 30.3,
+    "response": {
+      "originalQuery": "SELECT dept_no, COUNT(*) FROM employee GROUP BY dept_no;",
+      "optimizedQuery": "SELECT dept_no, COUNT(*) FROM employee GROUP BY dept_no;",
+      "rewritten": false,
+      "changes": [],
+      "originalAnalysis": {
+        "tableName": "employee",
+        "queryType": "SELECT",
+        "databaseType": "MySQL",
+        "estimatedRows": 12398,
+        "filtered": 100.0,
+        "estimatedRowsReturned": 12398,
+        "accessType": "index",
+        "usesIndex": true,
+        "hasFullTableScan": false,
+        "usesFilesort": false,
+        "usesTemporaryTable": false,
+        "keyUsed": "fk_employee_1",
+        "tables": [
+          {
+            "tableName": "employee",
+            "accessType": "index",
+            "possibleKeys": "fk_employee_1",
+            "keyUsed": "fk_employee_1",
+            "keyLength": "4",
+            "ref": null,
+            "estimatedRows": 12398,
+            "filtered": 100.0,
+            "extra": "Using index",
+            "fullTableScan": false,
+            "usesIndex": true,
+            "usesFilesort": false,
+            "usesTemporaryTable": false,
+            "estimatedRowsReturned": 12398,
+            "readAmplification": 1.0
+          }
+        ],
+        "hasUnindexedFilter": false,
+        "hasUnanchoredRegex": false,
+        "filteredColumn": null,
+        "orderByColumn": null,
+        "warnings": [
+          "Query has no WHERE clause \u2014 this may scan the entire table regardless of available indexes.",
+          "Query uses GROUP BY \u2014 check EXPLAIN output for 'Using temporary' if this feels slow."
+        ],
+        "explainFailed": false,
+        "planTree": {
+          "kind": "query_block",
+          "label": "query block",
+          "accessType": null,
+          "keyUsed": null,
+          "estimatedRows": null,
+          "cost": 1280.05,
+          "usesFilesort": false,
+          "usesTemporaryTable": false,
+          "children": [
+            {
+              "kind": "grouping_operation",
+              "label": "grouping operation",
+              "accessType": null,
+              "keyUsed": null,
+              "estimatedRows": null,
+              "cost": null,
+              "usesFilesort": false,
+              "usesTemporaryTable": false,
+              "children": [
+                {
+                  "kind": "table",
+                  "label": "employee",
+                  "accessType": "index",
+                  "keyUsed": "fk_employee_1",
+                  "estimatedRows": 12398,
+                  "cost": 1280.05,
+                  "usesFilesort": false,
+                  "usesTemporaryTable": false,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        "queryCost": 1280.05,
+        "executionMillis": null,
+        "verdict": {
+          "severity": "INFO",
+          "label": "Looks efficient",
+          "headline": "Uses the fk_employee_1 index to find rows instead of reading the whole table.",
+          "detail": "About 12,398 rows are expected to be read."
+        },
+        "fullScanTables": [],
+        "readAmplification": 1.0
+      },
+      "optimizedAnalysis": null,
+      "estimatedRowsDelta": null,
+      "queryCostDelta": null,
+      "estimate": true,
+      "summary": "No rewrite rule applied to this query, so there is nothing to compare it against."
+    }
+  },
+  {
+    "id": "A10",
+    "source": "Q17 (rule engine)",
+    "kind": "GROUP BY on indexed column",
+    "sql": "SELECT dept_no, COUNT(*) FROM project GROUP BY dept_no;",
+    "status": 200,
+    "ms": 33.5,
+    "response": {
+      "originalQuery": "SELECT dept_no, COUNT(*) FROM project GROUP BY dept_no;",
+      "optimizedQuery": "SELECT dept_no, COUNT(*) FROM project GROUP BY dept_no;",
+      "rewritten": false,
+      "changes": [],
+      "originalAnalysis": {
+        "tableName": "project",
+        "queryType": "SELECT",
+        "databaseType": "MySQL",
+        "estimatedRows": 11704,
+        "filtered": 100.0,
+        "estimatedRowsReturned": 11704,
+        "accessType": "index",
+        "usesIndex": true,
+        "hasFullTableScan": false,
+        "usesFilesort": false,
+        "usesTemporaryTable": false,
+        "keyUsed": "fk_project_4",
+        "tables": [
+          {
+            "tableName": "project",
+            "accessType": "index",
+            "possibleKeys": "fk_project_4",
+            "keyUsed": "fk_project_4",
+            "keyLength": "4",
+            "ref": null,
+            "estimatedRows": 11704,
+            "filtered": 100.0,
+            "extra": "Using index",
+            "fullTableScan": false,
+            "usesIndex": true,
+            "usesFilesort": false,
+            "usesTemporaryTable": false,
+            "estimatedRowsReturned": 11704,
+            "readAmplification": 1.0
+          }
+        ],
+        "hasUnindexedFilter": false,
+        "hasUnanchoredRegex": false,
+        "filteredColumn": null,
+        "orderByColumn": null,
+        "warnings": [
+          "Query has no WHERE clause \u2014 this may scan the entire table regardless of available indexes.",
+          "Query uses GROUP BY \u2014 check EXPLAIN output for 'Using temporary' if this feels slow."
+        ],
+        "explainFailed": false,
+        "planTree": {
+          "kind": "query_block",
+          "label": "query block",
+          "accessType": null,
+          "keyUsed": null,
+          "estimatedRows": null,
+          "cost": 1194.65,
+          "usesFilesort": false,
+          "usesTemporaryTable": false,
+          "children": [
+            {
+              "kind": "grouping_operation",
+              "label": "grouping operation",
+              "accessType": null,
+              "keyUsed": null,
+              "estimatedRows": null,
+              "cost": null,
+              "usesFilesort": false,
+              "usesTemporaryTable": false,
+              "children": [
+                {
+                  "kind": "table",
+                  "label": "project",
+                  "accessType": "index",
+                  "keyUsed": "fk_project_4",
+                  "estimatedRows": 11704,
+                  "cost": 1194.65,
+                  "usesFilesort": false,
+                  "usesTemporaryTable": false,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        "queryCost": 1194.65,
+        "executionMillis": null,
+        "verdict": {
+          "severity": "INFO",
+          "label": "Looks efficient",
+          "headline": "Uses the fk_project_4 index to find rows instead of reading the whole table.",
+          "detail": "About 11,704 rows are expected to be read."
+        },
+        "fullScanTables": [],
+        "readAmplification": 1.0
+      },
+      "optimizedAnalysis": null,
+      "estimatedRowsDelta": null,
+      "queryCostDelta": null,
+      "estimate": true,
+      "summary": "No rewrite rule applied to this query, so there is nothing to compare it against."
+    }
+  },
+  {
+    "id": "A11",
+    "source": "Q19 (rule engine)",
+    "kind": "GROUP BY unindexed (temporary table)",
+    "sql": "SELECT relationship, COUNT(*) FROM dependent GROUP BY relationship;",
+    "status": 200,
+    "ms": 28.4,
+    "response": {
+      "originalQuery": "SELECT relationship, COUNT(*) FROM dependent GROUP BY relationship;",
+      "optimizedQuery": "SELECT relationship, COUNT(*) FROM dependent GROUP BY relationship;",
+      "rewritten": false,
+      "changes": [],
+      "originalAnalysis": {
+        "tableName": "dependent",
+        "queryType": "SELECT",
+        "databaseType": "MySQL",
+        "estimatedRows": 11642,
+        "filtered": 100.0,
+        "estimatedRowsReturned": 11642,
+        "accessType": "ALL",
+        "usesIndex": false,
+        "hasFullTableScan": true,
+        "usesFilesort": false,
+        "usesTemporaryTable": true,
+        "keyUsed": null,
+        "tables": [
+          {
+            "tableName": "dependent",
+            "accessType": "ALL",
+            "possibleKeys": null,
+            "keyUsed": null,
+            "keyLength": null,
+            "ref": null,
+            "estimatedRows": 11642,
+            "filtered": 100.0,
+            "extra": "Using temporary",
+            "fullTableScan": true,
+            "usesIndex": false,
+            "usesFilesort": false,
+            "usesTemporaryTable": true,
+            "estimatedRowsReturned": 11642,
+            "readAmplification": 1.0
+          }
+        ],
+        "hasUnindexedFilter": false,
+        "hasUnanchoredRegex": false,
+        "filteredColumn": null,
+        "orderByColumn": null,
+        "warnings": [
+          "Query has no WHERE clause \u2014 this may scan the entire table regardless of available indexes.",
+          "Query uses GROUP BY \u2014 check EXPLAIN output for 'Using temporary' if this feels slow.",
+          "Full table scan detected on 'dependent'. MySQL selected a full scan for this table. If the query is slow, check whether an index on the filtered or joined columns could reduce the rows examined.",
+          "Temporary table used for 'dependent'. This may increase work for GROUP BY or DISTINCT operations."
+        ],
+        "explainFailed": false,
+        "planTree": {
+          "kind": "query_block",
+          "label": "query block",
+          "accessType": null,
+          "keyUsed": null,
+          "estimatedRows": null,
+          "cost": 1188.45,
+          "usesFilesort": false,
+          "usesTemporaryTable": false,
+          "children": [
+            {
+              "kind": "grouping_operation",
+              "label": "grouping operation",
+              "accessType": null,
+              "keyUsed": null,
+              "estimatedRows": null,
+              "cost": null,
+              "usesFilesort": false,
+              "usesTemporaryTable": true,
+              "children": [
+                {
+                  "kind": "table",
+                  "label": "dependent",
+                  "accessType": "ALL",
+                  "keyUsed": null,
+                  "estimatedRows": 11642,
+                  "cost": 1188.45,
+                  "usesFilesort": false,
+                  "usesTemporaryTable": false,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        "queryCost": 1188.45,
+        "executionMillis": null,
+        "verdict": {
+          "severity": "WARNING",
+          "label": "Could be better",
+          "headline": "MySQL has to assemble roughly 11,642 rows after reading them.",
+          "detail": "No index supplied the rows in the order this query needs, so the ordering or grouping work happens as a separate step."
+        },
+        "fullScanTables": [
+          "dependent"
+        ],
+        "readAmplification": 1.0
+      },
+      "optimizedAnalysis": null,
+      "estimatedRowsDelta": null,
+      "queryCostDelta": null,
+      "estimate": true,
+      "summary": "No rewrite rule applied to this query, so there is nothing to compare it against."
+    }
+  },
+  {
+    "id": "A12",
+    "source": "Q20 (LLM)",
+    "kind": "GROUP BY + SUM",
+    "sql": "SELECT project_no, SUM(hours) AS total_hours FROM assignment GROUP BY project_no;",
+    "status": 200,
+    "ms": 8.2,
+    "response": {
+      "originalQuery": "SELECT project_no, SUM(hours) AS total_hours FROM assignment GROUP BY project_no;",
+      "optimizedQuery": "SELECT project_no, SUM(hours) AS total_hours FROM assignment GROUP BY project_no;",
+      "rewritten": false,
+      "changes": [],
+      "originalAnalysis": {
+        "tableName": "assignment",
+        "queryType": "SELECT",
+        "databaseType": "MySQL",
+        "estimatedRows": 12000,
+        "filtered": 100.0,
+        "estimatedRowsReturned": 12000,
+        "accessType": "index",
+        "usesIndex": true,
+        "hasFullTableScan": false,
+        "usesFilesort": false,
+        "usesTemporaryTable": false,
+        "keyUsed": "fk_assignment_6",
+        "tables": [
+          {
+            "tableName": "assignment",
+            "accessType": "index",
+            "possibleKeys": "PRIMARY,fk_assignment_6",
+            "keyUsed": "fk_assignment_6",
+            "keyLength": "4",
+            "ref": null,
+            "estimatedRows": 12000,
+            "filtered": 100.0,
+            "extra": null,
+            "fullTableScan": false,
+            "usesIndex": true,
+            "usesFilesort": false,
+            "usesTemporaryTable": false,
+            "estimatedRowsReturned": 12000,
+            "readAmplification": 1.0
+          }
+        ],
+        "hasUnindexedFilter": false,
+        "hasUnanchoredRegex": false,
+        "filteredColumn": null,
+        "orderByColumn": null,
+        "warnings": [
+          "Query has no WHERE clause \u2014 this may scan the entire table regardless of available indexes.",
+          "Query uses GROUP BY \u2014 check EXPLAIN output for 'Using temporary' if this feels slow."
+        ],
+        "explainFailed": false,
+        "planTree": {
+          "kind": "query_block",
+          "label": "query block",
+          "accessType": null,
+          "keyUsed": null,
+          "estimatedRows": null,
+          "cost": 1208.25,
+          "usesFilesort": false,
+          "usesTemporaryTable": false,
+          "children": [
+            {
+              "kind": "grouping_operation",
+              "label": "grouping operation",
+              "accessType": null,
+              "keyUsed": null,
+              "estimatedRows": null,
+              "cost": null,
+              "usesFilesort": false,
+              "usesTemporaryTable": false,
+              "children": [
+                {
+                  "kind": "table",
+                  "label": "assignment",
+                  "accessType": "index",
+                  "keyUsed": "fk_assignment_6",
+                  "estimatedRows": 12000,
+                  "cost": 1208.25,
+                  "usesFilesort": false,
+                  "usesTemporaryTable": false,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        "queryCost": 1208.25,
+        "executionMillis": null,
+        "verdict": {
+          "severity": "INFO",
+          "label": "Looks efficient",
+          "headline": "Uses the fk_assignment_6 index to find rows instead of reading the whole table.",
+          "detail": "About 12,000 rows are expected to be read."
+        },
+        "fullScanTables": [],
+        "readAmplification": 1.0
+      },
+      "optimizedAnalysis": null,
+      "estimatedRowsDelta": null,
+      "queryCostDelta": null,
+      "estimate": true,
+      "summary": "No rewrite rule applied to this query, so there is nothing to compare it against."
+    }
+  },
+  {
+    "id": "A13",
+    "source": "Q21 (rule engine)",
+    "kind": "sort + LIMIT (filesort)",
+    "sql": "SELECT * FROM employee ORDER BY salary DESC LIMIT 5;",
+    "status": 200,
+    "ms": 44.6,
+    "response": {
+      "originalQuery": "SELECT * FROM employee ORDER BY salary DESC LIMIT 5;",
+      "optimizedQuery": "SELECT emp_id, first_name, middle_initial, last_name, birth_date, address, gender, salary, manager_id, dept_no FROM employee ORDER BY salary DESC LIMIT 5;",
+      "rewritten": true,
+      "changes": [
+        {
+          "ruleId": "RW1",
+          "explanation": "Named the 10 columns of 'employee' instead of SELECT *, so an index covering them can answer the query without reading the row. The rows returned are identical."
+        }
+      ],
+      "originalAnalysis": {
+        "tableName": "employee",
+        "queryType": "SELECT",
+        "databaseType": "MySQL",
+        "estimatedRows": 12398,
+        "filtered": 100.0,
+        "estimatedRowsReturned": 12398,
+        "accessType": "ALL",
+        "usesIndex": false,
+        "hasFullTableScan": true,
+        "usesFilesort": true,
+        "usesTemporaryTable": false,
+        "keyUsed": null,
+        "tables": [
+          {
+            "tableName": "employee",
+            "accessType": "ALL",
+            "possibleKeys": null,
+            "keyUsed": null,
+            "keyLength": null,
+            "ref": null,
+            "estimatedRows": 12398,
+            "filtered": 100.0,
+            "extra": "Using filesort",
+            "fullTableScan": true,
+            "usesIndex": false,
+            "usesFilesort": true,
+            "usesTemporaryTable": false,
+            "estimatedRowsReturned": 12398,
+            "readAmplification": 1.0
+          }
+        ],
+        "hasUnindexedFilter": false,
+        "hasUnanchoredRegex": false,
+        "filteredColumn": null,
+        "orderByColumn": "salary",
+        "warnings": [
+          "Query has no WHERE clause \u2014 this may scan the entire table regardless of available indexes.",
+          "Full table scan detected on 'employee'. MySQL selected a full scan for this table. If the query is slow, check whether an index on the filtered or joined columns could reduce the rows examined.",
+          "Filesort used for 'employee'. If the query is slow, check whether an index matching the ORDER BY columns could reduce sorting work."
+        ],
+        "explainFailed": false,
+        "planTree": {
+          "kind": "query_block",
+          "label": "query block",
+          "accessType": null,
+          "keyUsed": null,
+          "estimatedRows": null,
+          "cost": 1280.05,
+          "usesFilesort": false,
+          "usesTemporaryTable": false,
+          "children": [
+            {
+              "kind": "ordering_operation",
+              "label": "ordering operation",
+              "accessType": null,
+              "keyUsed": null,
+              "estimatedRows": null,
+              "cost": null,
+              "usesFilesort": true,
+              "usesTemporaryTable": false,
+              "children": [
+                {
+                  "kind": "table",
+                  "label": "employee",
+                  "accessType": "ALL",
+                  "keyUsed": null,
+                  "estimatedRows": 12398,
+                  "cost": 1280.05,
+                  "usesFilesort": false,
+                  "usesTemporaryTable": false,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        "queryCost": 1280.05,
+        "executionMillis": null,
+        "verdict": {
+          "severity": "WARNING",
+          "label": "Could be better",
+          "headline": "MySQL has to sort roughly 12,398 rows after reading them.",
+          "detail": "No index supplied the rows in the order this query needs, so the ordering or grouping work happens as a separate step."
+        },
+        "fullScanTables": [
+          "employee"
+        ],
+        "readAmplification": 1.0
+      },
+      "optimizedAnalysis": {
+        "tableName": "employee",
+        "queryType": "SELECT",
+        "databaseType": "MySQL",
+        "estimatedRows": 12398,
+        "filtered": 100.0,
+        "estimatedRowsReturned": 12398,
+        "accessType": "ALL",
+        "usesIndex": false,
+        "hasFullTableScan": true,
+        "usesFilesort": true,
+        "usesTemporaryTable": false,
+        "keyUsed": null,
+        "tables": [
+          {
+            "tableName": "employee",
+            "accessType": "ALL",
+            "possibleKeys": null,
+            "keyUsed": null,
+            "keyLength": null,
+            "ref": null,
+            "estimatedRows": 12398,
+            "filtered": 100.0,
+            "extra": "Using filesort",
+            "fullTableScan": true,
+            "usesIndex": false,
+            "usesFilesort": true,
+            "usesTemporaryTable": false,
+            "estimatedRowsReturned": 12398,
+            "readAmplification": 1.0
+          }
+        ],
+        "hasUnindexedFilter": false,
+        "hasUnanchoredRegex": false,
+        "filteredColumn": null,
+        "orderByColumn": "salary",
+        "warnings": [
+          "Query has no WHERE clause \u2014 this may scan the entire table regardless of available indexes.",
+          "Full table scan detected on 'employee'. MySQL selected a full scan for this table. If the query is slow, check whether an index on the filtered or joined columns could reduce the rows examined.",
+          "Filesort used for 'employee'. If the query is slow, check whether an index matching the ORDER BY columns could reduce sorting work."
+        ],
+        "explainFailed": false,
+        "planTree": {
+          "kind": "query_block",
+          "label": "query block",
+          "accessType": null,
+          "keyUsed": null,
+          "estimatedRows": null,
+          "cost": 1280.05,
+          "usesFilesort": false,
+          "usesTemporaryTable": false,
+          "children": [
+            {
+              "kind": "ordering_operation",
+              "label": "ordering operation",
+              "accessType": null,
+              "keyUsed": null,
+              "estimatedRows": null,
+              "cost": null,
+              "usesFilesort": true,
+              "usesTemporaryTable": false,
+              "children": [
+                {
+                  "kind": "table",
+                  "label": "employee",
+                  "accessType": "ALL",
+                  "keyUsed": null,
+                  "estimatedRows": 12398,
+                  "cost": 1280.05,
+                  "usesFilesort": false,
+                  "usesTemporaryTable": false,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        "queryCost": 1280.05,
+        "executionMillis": null,
+        "verdict": {
+          "severity": "WARNING",
+          "label": "Could be better",
+          "headline": "MySQL has to sort roughly 12,398 rows after reading them.",
+          "detail": "No index supplied the rows in the order this query needs, so the ordering or grouping work happens as a separate step."
+        },
+        "fullScanTables": [
+          "employee"
+        ],
+        "readAmplification": 1.0
+      },
+      "estimatedRowsDelta": 0,
+      "queryCostDelta": 0.0,
+      "estimate": true,
+      "summary": "1 rewrite rule applied. EXPLAIN estimates the same number of rows read either way, so the rewrite changes the shape of the query without changing what it reads."
+    }
+  },
+  {
+    "id": "A14",
+    "source": "Q23 (rule engine)",
+    "kind": "sort on unique column",
+    "sql": "SELECT * FROM department ORDER BY dept_name ASC;",
+    "status": 200,
+    "ms": 41.2,
+    "response": {
+      "originalQuery": "SELECT * FROM department ORDER BY dept_name ASC;",
+      "optimizedQuery": "SELECT dept_name, dept_no, head_emp_id, head_start_date FROM department ORDER BY dept_name ASC;",
+      "rewritten": true,
+      "changes": [
+        {
+          "ruleId": "RW1",
+          "explanation": "Named the 4 columns of 'department' instead of SELECT *, so an index covering them can answer the query without reading the row. The rows returned are identical."
+        }
+      ],
+      "originalAnalysis": {
+        "tableName": "department",
+        "queryType": "SELECT",
+        "databaseType": "MySQL",
+        "estimatedRows": 12343,
+        "filtered": 100.0,
+        "estimatedRowsReturned": 12343,
+        "accessType": "ALL",
+        "usesIndex": false,
+        "hasFullTableScan": true,
+        "usesFilesort": true,
+        "usesTemporaryTable": false,
+        "keyUsed": null,
+        "tables": [
+          {
+            "tableName": "department",
+            "accessType": "ALL",
+            "possibleKeys": null,
+            "keyUsed": null,
+            "keyLength": null,
+            "ref": null,
+            "estimatedRows": 12343,
+            "filtered": 100.0,
+            "extra": "Using filesort",
+            "fullTableScan": true,
+            "usesIndex": false,
+            "usesFilesort": true,
+            "usesTemporaryTable": false,
+            "estimatedRowsReturned": 12343,
+            "readAmplification": 1.0
+          }
+        ],
+        "hasUnindexedFilter": false,
+        "hasUnanchoredRegex": false,
+        "filteredColumn": null,
+        "orderByColumn": "dept_name",
+        "warnings": [
+          "Query has no WHERE clause \u2014 this may scan the entire table regardless of available indexes.",
+          "Query sorts results without a LIMIT \u2014 consider adding one if you only need a subset of rows.",
+          "Full table scan detected on 'department'. MySQL selected a full scan for this table. If the query is slow, check whether an index on the filtered or joined columns could reduce the rows examined.",
+          "Filesort used for 'department'. If the query is slow, check whether an index matching the ORDER BY columns could reduce sorting work."
+        ],
+        "explainFailed": false,
+        "planTree": {
+          "kind": "query_block",
+          "label": "query block",
+          "accessType": null,
+          "keyUsed": null,
+          "estimatedRows": null,
+          "cost": 13601.55,
+          "usesFilesort": false,
+          "usesTemporaryTable": false,
+          "children": [
+            {
+              "kind": "ordering_operation",
+              "label": "ordering operation",
+              "accessType": null,
+              "keyUsed": null,
+              "estimatedRows": null,
+              "cost": null,
+              "usesFilesort": true,
+              "usesTemporaryTable": false,
+              "children": [
+                {
+                  "kind": "table",
+                  "label": "department",
+                  "accessType": "ALL",
+                  "keyUsed": null,
+                  "estimatedRows": 12343,
+                  "cost": 1258.55,
+                  "usesFilesort": false,
+                  "usesTemporaryTable": false,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        "queryCost": 13601.55,
+        "executionMillis": null,
+        "verdict": {
+          "severity": "WARNING",
+          "label": "Could be better",
+          "headline": "MySQL has to sort roughly 12,343 rows after reading them.",
+          "detail": "No index supplied the rows in the order this query needs, so the ordering or grouping work happens as a separate step."
+        },
+        "fullScanTables": [
+          "department"
+        ],
+        "readAmplification": 1.0
+      },
+      "optimizedAnalysis": {
+        "tableName": "department",
+        "queryType": "SELECT",
+        "databaseType": "MySQL",
+        "estimatedRows": 12343,
+        "filtered": 100.0,
+        "estimatedRowsReturned": 12343,
+        "accessType": "ALL",
+        "usesIndex": false,
+        "hasFullTableScan": true,
+        "usesFilesort": true,
+        "usesTemporaryTable": false,
+        "keyUsed": null,
+        "tables": [
+          {
+            "tableName": "department",
+            "accessType": "ALL",
+            "possibleKeys": null,
+            "keyUsed": null,
+            "keyLength": null,
+            "ref": null,
+            "estimatedRows": 12343,
+            "filtered": 100.0,
+            "extra": "Using filesort",
+            "fullTableScan": true,
+            "usesIndex": false,
+            "usesFilesort": true,
+            "usesTemporaryTable": false,
+            "estimatedRowsReturned": 12343,
+            "readAmplification": 1.0
+          }
+        ],
+        "hasUnindexedFilter": false,
+        "hasUnanchoredRegex": false,
+        "filteredColumn": null,
+        "orderByColumn": "dept_name",
+        "warnings": [
+          "Query has no WHERE clause \u2014 this may scan the entire table regardless of available indexes.",
+          "Query sorts results without a LIMIT \u2014 consider adding one if you only need a subset of rows.",
+          "Full table scan detected on 'department'. MySQL selected a full scan for this table. If the query is slow, check whether an index on the filtered or joined columns could reduce the rows examined.",
+          "Filesort used for 'department'. If the query is slow, check whether an index matching the ORDER BY columns could reduce sorting work."
+        ],
+        "explainFailed": false,
+        "planTree": {
+          "kind": "query_block",
+          "label": "query block",
+          "accessType": null,
+          "keyUsed": null,
+          "estimatedRows": null,
+          "cost": 13601.55,
+          "usesFilesort": false,
+          "usesTemporaryTable": false,
+          "children": [
+            {
+              "kind": "ordering_operation",
+              "label": "ordering operation",
+              "accessType": null,
+              "keyUsed": null,
+              "estimatedRows": null,
+              "cost": null,
+              "usesFilesort": true,
+              "usesTemporaryTable": false,
+              "children": [
+                {
+                  "kind": "table",
+                  "label": "department",
+                  "accessType": "ALL",
+                  "keyUsed": null,
+                  "estimatedRows": 12343,
+                  "cost": 1258.55,
+                  "usesFilesort": false,
+                  "usesTemporaryTable": false,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        "queryCost": 13601.55,
+        "executionMillis": null,
+        "verdict": {
+          "severity": "WARNING",
+          "label": "Could be better",
+          "headline": "MySQL has to sort roughly 12,343 rows after reading them.",
+          "detail": "No index supplied the rows in the order this query needs, so the ordering or grouping work happens as a separate step."
+        },
+        "fullScanTables": [
+          "department"
+        ],
+        "readAmplification": 1.0
+      },
+      "estimatedRowsDelta": 0,
+      "queryCostDelta": 0.0,
+      "estimate": true,
+      "summary": "1 rewrite rule applied. EXPLAIN estimates the same number of rows read either way, so the rewrite changes the shape of the query without changing what it reads."
+    }
+  },
+  {
+    "id": "A15",
+    "source": "Q25 (rule engine)",
+    "kind": "sort + LIMIT 1 on date",
+    "sql": "SELECT * FROM employee ORDER BY birth_date ASC LIMIT 1;",
+    "status": 200,
+    "ms": 51.6,
+    "response": {
+      "originalQuery": "SELECT * FROM employee ORDER BY birth_date ASC LIMIT 1;",
+      "optimizedQuery": "SELECT emp_id, first_name, middle_initial, last_name, birth_date, address, gender, salary, manager_id, dept_no FROM employee ORDER BY birth_date ASC LIMIT 1;",
+      "rewritten": true,
+      "changes": [
+        {
+          "ruleId": "RW1",
+          "explanation": "Named the 10 columns of 'employee' instead of SELECT *, so an index covering them can answer the query without reading the row. The rows returned are identical."
+        }
+      ],
+      "originalAnalysis": {
+        "tableName": "employee",
+        "queryType": "SELECT",
+        "databaseType": "MySQL",
+        "estimatedRows": 12398,
+        "filtered": 100.0,
+        "estimatedRowsReturned": 12398,
+        "accessType": "ALL",
+        "usesIndex": false,
+        "hasFullTableScan": true,
+        "usesFilesort": true,
+        "usesTemporaryTable": false,
+        "keyUsed": null,
+        "tables": [
+          {
+            "tableName": "employee",
+            "accessType": "ALL",
+            "possibleKeys": null,
+            "keyUsed": null,
+            "keyLength": null,
+            "ref": null,
+            "estimatedRows": 12398,
+            "filtered": 100.0,
+            "extra": "Using filesort",
+            "fullTableScan": true,
+            "usesIndex": false,
+            "usesFilesort": true,
+            "usesTemporaryTable": false,
+            "estimatedRowsReturned": 12398,
+            "readAmplification": 1.0
+          }
+        ],
+        "hasUnindexedFilter": false,
+        "hasUnanchoredRegex": false,
+        "filteredColumn": null,
+        "orderByColumn": "birth_date",
+        "warnings": [
+          "Query has no WHERE clause \u2014 this may scan the entire table regardless of available indexes.",
+          "Full table scan detected on 'employee'. MySQL selected a full scan for this table. If the query is slow, check whether an index on the filtered or joined columns could reduce the rows examined.",
+          "Filesort used for 'employee'. If the query is slow, check whether an index matching the ORDER BY columns could reduce sorting work."
+        ],
+        "explainFailed": false,
+        "planTree": {
+          "kind": "query_block",
+          "label": "query block",
+          "accessType": null,
+          "keyUsed": null,
+          "estimatedRows": null,
+          "cost": 1280.05,
+          "usesFilesort": false,
+          "usesTemporaryTable": false,
+          "children": [
+            {
+              "kind": "ordering_operation",
+              "label": "ordering operation",
+              "accessType": null,
+              "keyUsed": null,
+              "estimatedRows": null,
+              "cost": null,
+              "usesFilesort": true,
+              "usesTemporaryTable": false,
+              "children": [
+                {
+                  "kind": "table",
+                  "label": "employee",
+                  "accessType": "ALL",
+                  "keyUsed": null,
+                  "estimatedRows": 12398,
+                  "cost": 1280.05,
+                  "usesFilesort": false,
+                  "usesTemporaryTable": false,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        "queryCost": 1280.05,
+        "executionMillis": null,
+        "verdict": {
+          "severity": "WARNING",
+          "label": "Could be better",
+          "headline": "MySQL has to sort roughly 12,398 rows after reading them.",
+          "detail": "No index supplied the rows in the order this query needs, so the ordering or grouping work happens as a separate step."
+        },
+        "fullScanTables": [
+          "employee"
+        ],
+        "readAmplification": 1.0
+      },
+      "optimizedAnalysis": {
+        "tableName": "employee",
+        "queryType": "SELECT",
+        "databaseType": "MySQL",
+        "estimatedRows": 12398,
+        "filtered": 100.0,
+        "estimatedRowsReturned": 12398,
+        "accessType": "ALL",
+        "usesIndex": false,
+        "hasFullTableScan": true,
+        "usesFilesort": true,
+        "usesTemporaryTable": false,
+        "keyUsed": null,
+        "tables": [
+          {
+            "tableName": "employee",
+            "accessType": "ALL",
+            "possibleKeys": null,
+            "keyUsed": null,
+            "keyLength": null,
+            "ref": null,
+            "estimatedRows": 12398,
+            "filtered": 100.0,
+            "extra": "Using filesort",
+            "fullTableScan": true,
+            "usesIndex": false,
+            "usesFilesort": true,
+            "usesTemporaryTable": false,
+            "estimatedRowsReturned": 12398,
+            "readAmplification": 1.0
+          }
+        ],
+        "hasUnindexedFilter": false,
+        "hasUnanchoredRegex": false,
+        "filteredColumn": null,
+        "orderByColumn": "birth_date",
+        "warnings": [
+          "Query has no WHERE clause \u2014 this may scan the entire table regardless of available indexes.",
+          "Full table scan detected on 'employee'. MySQL selected a full scan for this table. If the query is slow, check whether an index on the filtered or joined columns could reduce the rows examined.",
+          "Filesort used for 'employee'. If the query is slow, check whether an index matching the ORDER BY columns could reduce sorting work."
+        ],
+        "explainFailed": false,
+        "planTree": {
+          "kind": "query_block",
+          "label": "query block",
+          "accessType": null,
+          "keyUsed": null,
+          "estimatedRows": null,
+          "cost": 1280.05,
+          "usesFilesort": false,
+          "usesTemporaryTable": false,
+          "children": [
+            {
+              "kind": "ordering_operation",
+              "label": "ordering operation",
+              "accessType": null,
+              "keyUsed": null,
+              "estimatedRows": null,
+              "cost": null,
+              "usesFilesort": true,
+              "usesTemporaryTable": false,
+              "children": [
+                {
+                  "kind": "table",
+                  "label": "employee",
+                  "accessType": "ALL",
+                  "keyUsed": null,
+                  "estimatedRows": 12398,
+                  "cost": 1280.05,
+                  "usesFilesort": false,
+                  "usesTemporaryTable": false,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        "queryCost": 1280.05,
+        "executionMillis": null,
+        "verdict": {
+          "severity": "WARNING",
+          "label": "Could be better",
+          "headline": "MySQL has to sort roughly 12,398 rows after reading them.",
+          "detail": "No index supplied the rows in the order this query needs, so the ordering or grouping work happens as a separate step."
+        },
+        "fullScanTables": [
+          "employee"
+        ],
+        "readAmplification": 1.0
+      },
+      "estimatedRowsDelta": 0,
+      "queryCostDelta": 0.0,
+      "estimate": true,
+      "summary": "1 rewrite rule applied. EXPLAIN estimates the same number of rows read either way, so the rewrite changes the shape of the query without changing what it reads."
+    }
+  },
+  {
+    "id": "A16",
+    "source": "Q27 (rule engine)",
+    "kind": "2-table join",
+    "sql": "SELECT * FROM dependent JOIN employee ON dependent.emp_id = employee.emp_id;",
+    "status": 200,
+    "ms": 26.9,
+    "response": {
+      "originalQuery": "SELECT * FROM dependent JOIN employee ON dependent.emp_id = employee.emp_id;",
+      "optimizedQuery": "SELECT * FROM dependent JOIN employee ON dependent.emp_id = employee.emp_id;",
+      "rewritten": false,
+      "changes": [],
+      "originalAnalysis": {
+        "tableName": "dependent",
+        "queryType": "SELECT",
+        "databaseType": "MySQL",
+        "estimatedRows": 11642,
+        "filtered": 100.0,
+        "estimatedRowsReturned": 11642,
+        "accessType": "ALL",
+        "usesIndex": true,
+        "hasFullTableScan": true,
+        "usesFilesort": false,
+        "usesTemporaryTable": false,
+        "keyUsed": "PRIMARY",
+        "tables": [
+          {
+            "tableName": "dependent",
+            "accessType": "ALL",
+            "possibleKeys": "PRIMARY",
+            "keyUsed": null,
+            "keyLength": null,
+            "ref": null,
+            "estimatedRows": 11642,
+            "filtered": 100.0,
+            "extra": null,
+            "fullTableScan": true,
+            "usesIndex": false,
+            "usesFilesort": false,
+            "usesTemporaryTable": false,
+            "estimatedRowsReturned": 11642,
+            "readAmplification": 1.0
+          },
+          {
+            "tableName": "employee",
+            "accessType": "eq_ref",
+            "possibleKeys": "PRIMARY",
+            "keyUsed": "PRIMARY",
+            "keyLength": "34",
+            "ref": "querysense_uploads.dependent.emp_id",
+            "estimatedRows": 1,
+            "filtered": 100.0,
+            "extra": null,
+            "fullTableScan": false,
+            "usesIndex": true,
+            "usesFilesort": false,
+            "usesTemporaryTable": false,
+            "estimatedRowsReturned": 1,
+            "readAmplification": 1.0
+          }
+        ],
+        "hasUnindexedFilter": false,
+        "hasUnanchoredRegex": false,
+        "filteredColumn": null,
+        "orderByColumn": null,
+        "warnings": [
+          "Query joins multiple tables \u2014 the execution plan is reported per table, so check each table's access type individually.",
+          "Query has no WHERE clause \u2014 this may scan the entire table regardless of available indexes.",
+          "Full table scan detected on 'dependent'. MySQL selected a full scan for this table. If the query is slow, check whether an index on the filtered or joined columns could reduce the rows examined."
+        ],
+        "explainFailed": false,
+        "planTree": {
+          "kind": "query_block",
+          "label": "query block",
+          "accessType": null,
+          "keyUsed": null,
+          "estimatedRows": null,
+          "cost": 5263.15,
+          "usesFilesort": false,
+          "usesTemporaryTable": false,
+          "children": [
+            {
+              "kind": "nested_loop",
+              "label": "nested loop",
+              "accessType": null,
+              "keyUsed": null,
+              "estimatedRows": null,
+              "cost": null,
+              "usesFilesort": false,
+              "usesTemporaryTable": false,
+              "children": [
+                {
+                  "kind": "table",
+                  "label": "dependent",
+                  "accessType": "ALL",
+                  "keyUsed": null,
+                  "estimatedRows": 11642,
+                  "cost": 1188.45,
+                  "usesFilesort": false,
+                  "usesTemporaryTable": false,
+                  "children": []
+                },
+                {
+                  "kind": "table",
+                  "label": "employee",
+                  "accessType": "eq_ref",
+                  "keyUsed": "PRIMARY",
+                  "estimatedRows": 1,
+                  "cost": 5263.15,
+                  "usesFilesort": false,
+                  "usesTemporaryTable": false,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        "queryCost": 5263.15,
+        "executionMillis": null,
+        "verdict": {
+          "severity": "WARNING",
+          "label": "Could be better",
+          "headline": "An index on dependent was available, but MySQL chose not to use it.",
+          "detail": "MySQL only uses an index when it estimates that doing so is cheaper. On a small table, or for a query that matches most rows, reading the table directly genuinely is cheaper."
+        },
+        "fullScanTables": [
+          "dependent"
+        ],
+        "readAmplification": 1.0
+      },
+      "optimizedAnalysis": null,
+      "estimatedRowsDelta": null,
+      "queryCostDelta": null,
+      "estimate": true,
+      "summary": "No rewrite rule applied to this query, so there is nothing to compare it against."
+    }
+  },
+  {
+    "id": "A17",
+    "source": "Q29 (rule engine)",
+    "kind": "2-table join",
+    "sql": "SELECT * FROM employee JOIN department ON employee.dept_no = department.dept_no;",
+    "status": 200,
+    "ms": 29.9,
+    "response": {
+      "originalQuery": "SELECT * FROM employee JOIN department ON employee.dept_no = department.dept_no;",
+      "optimizedQuery": "SELECT * FROM employee JOIN department ON employee.dept_no = department.dept_no;",
+      "rewritten": false,
+      "changes": [],
+      "originalAnalysis": {
+        "tableName": "employee",
+        "queryType": "SELECT",
+        "databaseType": "MySQL",
+        "estimatedRows": 12398,
+        "filtered": 100.0,
+        "estimatedRowsReturned": 12398,
+        "accessType": "ALL",
+        "usesIndex": true,
+        "hasFullTableScan": true,
+        "usesFilesort": false,
+        "usesTemporaryTable": false,
+        "keyUsed": "PRIMARY",
+        "tables": [
+          {
+            "tableName": "employee",
+            "accessType": "ALL",
+            "possibleKeys": "fk_employee_1",
+            "keyUsed": null,
+            "keyLength": null,
+            "ref": null,
+            "estimatedRows": 12398,
+            "filtered": 100.0,
+            "extra": null,
+            "fullTableScan": true,
+            "usesIndex": false,
+            "usesFilesort": false,
+            "usesTemporaryTable": false,
+            "estimatedRowsReturned": 12398,
+            "readAmplification": 1.0
+          },
+          {
+            "tableName": "department",
+            "accessType": "eq_ref",
+            "possibleKeys": "PRIMARY",
+            "keyUsed": "PRIMARY",
+            "keyLength": "4",
+            "ref": "querysense_uploads.employee.dept_no",
+            "estimatedRows": 1,
+            "filtered": 100.0,
+            "extra": null,
+            "fullTableScan": false,
+            "usesIndex": true,
+            "usesFilesort": false,
+            "usesTemporaryTable": false,
+            "estimatedRowsReturned": 1,
+            "readAmplification": 1.0
+          }
+        ],
+        "hasUnindexedFilter": false,
+        "hasUnanchoredRegex": false,
+        "filteredColumn": null,
+        "orderByColumn": null,
+        "warnings": [
+          "Query joins multiple tables \u2014 the execution plan is reported per table, so check each table's access type individually.",
+          "Query has no WHERE clause \u2014 this may scan the entire table regardless of available indexes.",
+          "Full table scan detected on 'employee'. MySQL selected a full scan for this table. If the query is slow, check whether an index on the filtered or joined columns could reduce the rows examined."
+        ],
+        "explainFailed": false,
+        "planTree": {
+          "kind": "query_block",
+          "label": "query block",
+          "accessType": null,
+          "keyUsed": null,
+          "estimatedRows": null,
+          "cost": 5619.35,
+          "usesFilesort": false,
+          "usesTemporaryTable": false,
+          "children": [
+            {
+              "kind": "nested_loop",
+              "label": "nested loop",
+              "accessType": null,
+              "keyUsed": null,
+              "estimatedRows": null,
+              "cost": null,
+              "usesFilesort": false,
+              "usesTemporaryTable": false,
+              "children": [
+                {
+                  "kind": "table",
+                  "label": "employee",
+                  "accessType": "ALL",
+                  "keyUsed": null,
+                  "estimatedRows": 12398,
+                  "cost": 1280.05,
+                  "usesFilesort": false,
+                  "usesTemporaryTable": false,
+                  "children": []
+                },
+                {
+                  "kind": "table",
+                  "label": "department",
+                  "accessType": "eq_ref",
+                  "keyUsed": "PRIMARY",
+                  "estimatedRows": 1,
+                  "cost": 5619.35,
+                  "usesFilesort": false,
+                  "usesTemporaryTable": false,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        "queryCost": 5619.35,
+        "executionMillis": null,
+        "verdict": {
+          "severity": "WARNING",
+          "label": "Could be better",
+          "headline": "An index on employee was available, but MySQL chose not to use it.",
+          "detail": "MySQL only uses an index when it estimates that doing so is cheaper. On a small table, or for a query that matches most rows, reading the table directly genuinely is cheaper."
+        },
+        "fullScanTables": [
+          "employee"
+        ],
+        "readAmplification": 1.0
+      },
+      "optimizedAnalysis": null,
+      "estimatedRowsDelta": null,
+      "queryCostDelta": null,
+      "estimate": true,
+      "summary": "No rewrite rule applied to this query, so there is nothing to compare it against."
+    }
+  },
+  {
+    "id": "A18",
+    "source": "Q32 (LLM)",
+    "kind": "3-table join with const lookup",
+    "sql": "SELECT e.first_name, e.middle_initial, e.last_name FROM employee e JOIN assignment a ON e.emp_id = a.emp_id JOIN project p ON a.project_no = p.project_no WHERE p.project_name = 'Atlas';",
+    "status": 200,
+    "ms": 9.0,
+    "response": {
+      "originalQuery": "SELECT e.first_name, e.middle_initial, e.last_name FROM employee e JOIN assignment a ON e.emp_id = a.emp_id JOIN project p ON a.project_no = p.project_no WHERE p.project_name = 'Atlas';",
+      "optimizedQuery": "SELECT e.first_name, e.middle_initial, e.last_name FROM employee e JOIN assignment a ON e.emp_id = a.emp_id JOIN project p ON a.project_no = p.project_no WHERE p.project_name = 'Atlas';",
+      "rewritten": false,
+      "changes": [],
+      "originalAnalysis": {
+        "tableName": "p",
+        "queryType": "SELECT",
+        "databaseType": "MySQL",
+        "estimatedRows": 2,
+        "filtered": 100.0,
+        "estimatedRowsReturned": 2,
+        "accessType": "ref",
+        "usesIndex": true,
+        "hasFullTableScan": false,
+        "usesFilesort": false,
+        "usesTemporaryTable": false,
+        "keyUsed": "project_name",
+        "tables": [
+          {
+            "tableName": "p",
+            "accessType": "const",
+            "possibleKeys": "PRIMARY,project_name",
+            "keyUsed": "project_name",
+            "keyLength": "102",
+            "ref": "const",
+            "estimatedRows": 1,
+            "filtered": 100.0,
+            "extra": "Using index",
+            "fullTableScan": false,
+            "usesIndex": true,
+            "usesFilesort": false,
+            "usesTemporaryTable": false,
+            "estimatedRowsReturned": 1,
+            "readAmplification": 1.0
+          },
+          {
+            "tableName": "a",
+            "accessType": "ref",
+            "possibleKeys": "PRIMARY,fk_assignment_6",
+            "keyUsed": "fk_assignment_6",
+            "keyLength": "4",
+            "ref": "const",
+            "estimatedRows": 2,
+            "filtered": 100.0,
+            "extra": "Using index",
+            "fullTableScan": false,
+            "usesIndex": true,
+            "usesFilesort": false,
+            "usesTemporaryTable": false,
+            "estimatedRowsReturned": 2,
+            "readAmplification": 1.0
+          },
+          {
+            "tableName": "e",
+            "accessType": "eq_ref",
+            "possibleKeys": "PRIMARY",
+            "keyUsed": "PRIMARY",
+            "keyLength": "34",
+            "ref": "querysense_uploads.a.emp_id",
+            "estimatedRows": 1,
+            "filtered": 100.0,
+            "extra": null,
+            "fullTableScan": false,
+            "usesIndex": true,
+            "usesFilesort": false,
+            "usesTemporaryTable": false,
+            "estimatedRowsReturned": 1,
+            "readAmplification": 1.0
+          }
+        ],
+        "hasUnindexedFilter": false,
+        "hasUnanchoredRegex": false,
+        "filteredColumn": "p.project_name",
+        "orderByColumn": null,
+        "warnings": [
+          "Query joins multiple tables \u2014 the execution plan is reported per table, so check each table's access type individually."
+        ],
+        "explainFailed": false,
+        "planTree": {
+          "kind": "query_block",
+          "label": "query block",
+          "accessType": null,
+          "keyUsed": null,
+          "estimatedRows": null,
+          "cost": 1.85,
+          "usesFilesort": false,
+          "usesTemporaryTable": false,
+          "children": [
+            {
+              "kind": "nested_loop",
+              "label": "nested loop",
+              "accessType": null,
+              "keyUsed": null,
+              "estimatedRows": null,
+              "cost": null,
+              "usesFilesort": false,
+              "usesTemporaryTable": false,
+              "children": [
+                {
+                  "kind": "table",
+                  "label": "p",
+                  "accessType": "const",
+                  "keyUsed": "project_name",
+                  "estimatedRows": 1,
+                  "cost": 0.0,
+                  "usesFilesort": false,
+                  "usesTemporaryTable": false,
+                  "children": []
+                },
+                {
+                  "kind": "table",
+                  "label": "a",
+                  "accessType": "ref",
+                  "keyUsed": "fk_assignment_6",
+                  "estimatedRows": 2,
+                  "cost": 1.15,
+                  "usesFilesort": false,
+                  "usesTemporaryTable": false,
+                  "children": []
+                },
+                {
+                  "kind": "table",
+                  "label": "e",
+                  "accessType": "eq_ref",
+                  "keyUsed": "PRIMARY",
+                  "estimatedRows": 1,
+                  "cost": 1.85,
+                  "usesFilesort": false,
+                  "usesTemporaryTable": false,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        "queryCost": 1.85,
+        "executionMillis": null,
+        "verdict": {
+          "severity": "INFO",
+          "label": "Looks efficient",
+          "headline": "Uses the project_name index to find rows instead of reading the whole table.",
+          "detail": "About 2 rows are expected to be read."
+        },
+        "fullScanTables": [],
+        "readAmplification": 1.0
+      },
+      "optimizedAnalysis": null,
+      "estimatedRowsDelta": null,
+      "queryCostDelta": null,
+      "estimate": true,
+      "summary": "No rewrite rule applied to this query, so there is nothing to compare it against."
+    }
+  },
+  {
+    "id": "A19",
+    "source": "Q33 (LLM)",
+    "kind": "3-table join",
+    "sql": "SELECT e.emp_id, e.first_name, e.last_name, p.project_name FROM employee e JOIN assignment a ON e.emp_id = a.emp_id JOIN project p ON a.project_no = p.project_no;",
+    "status": 200,
+    "ms": 24.8,
+    "response": {
+      "originalQuery": "SELECT e.emp_id, e.first_name, e.last_name, p.project_name FROM employee e JOIN assignment a ON e.emp_id = a.emp_id JOIN project p ON a.project_no = p.project_no;",
+      "optimizedQuery": "SELECT e.emp_id, e.first_name, e.last_name, p.project_name FROM employee e JOIN assignment a ON e.emp_id = a.emp_id JOIN project p ON a.project_no = p.project_no;",
+      "rewritten": false,
+      "changes": [],
+      "originalAnalysis": {
+        "tableName": "a",
+        "queryType": "SELECT",
+        "databaseType": "MySQL",
+        "estimatedRows": 12000,
+        "filtered": 100.0,
+        "estimatedRowsReturned": 12000,
+        "accessType": "index",
+        "usesIndex": true,
+        "hasFullTableScan": false,
+        "usesFilesort": false,
+        "usesTemporaryTable": false,
+        "keyUsed": "fk_assignment_6",
+        "tables": [
+          {
+            "tableName": "a",
+            "accessType": "index",
+            "possibleKeys": "PRIMARY,fk_assignment_6",
+            "keyUsed": "fk_assignment_6",
+            "keyLength": "4",
+            "ref": null,
+            "estimatedRows": 12000,
+            "filtered": 100.0,
+            "extra": "Using index",
+            "fullTableScan": false,
+            "usesIndex": true,
+            "usesFilesort": false,
+            "usesTemporaryTable": false,
+            "estimatedRowsReturned": 12000,
+            "readAmplification": 1.0
+          },
+          {
+            "tableName": "p",
+            "accessType": "eq_ref",
+            "possibleKeys": "PRIMARY",
+            "keyUsed": "PRIMARY",
+            "keyLength": "4",
+            "ref": "querysense_uploads.a.project_no",
+            "estimatedRows": 1,
+            "filtered": 100.0,
+            "extra": null,
+            "fullTableScan": false,
+            "usesIndex": true,
+            "usesFilesort": false,
+            "usesTemporaryTable": false,
+            "estimatedRowsReturned": 1,
+            "readAmplification": 1.0
+          },
+          {
+            "tableName": "e",
+            "accessType": "eq_ref",
+            "possibleKeys": "PRIMARY",
+            "keyUsed": "PRIMARY",
+            "keyLength": "34",
+            "ref": "querysense_uploads.a.emp_id",
+            "estimatedRows": 1,
+            "filtered": 100.0,
+            "extra": null,
+            "fullTableScan": false,
+            "usesIndex": true,
+            "usesFilesort": false,
+            "usesTemporaryTable": false,
+            "estimatedRowsReturned": 1,
+            "readAmplification": 1.0
+          }
+        ],
+        "hasUnindexedFilter": false,
+        "hasUnanchoredRegex": false,
+        "filteredColumn": null,
+        "orderByColumn": null,
+        "warnings": [
+          "Query joins multiple tables \u2014 the execution plan is reported per table, so check each table's access type individually.",
+          "Query has no WHERE clause \u2014 this may scan the entire table regardless of available indexes."
+        ],
+        "explainFailed": false,
+        "planTree": {
+          "kind": "query_block",
+          "label": "query block",
+          "accessType": null,
+          "keyUsed": null,
+          "estimatedRows": null,
+          "cost": 9608.25,
+          "usesFilesort": false,
+          "usesTemporaryTable": false,
+          "children": [
+            {
+              "kind": "nested_loop",
+              "label": "nested loop",
+              "accessType": null,
+              "keyUsed": null,
+              "estimatedRows": null,
+              "cost": null,
+              "usesFilesort": false,
+              "usesTemporaryTable": false,
+              "children": [
+                {
+                  "kind": "table",
+                  "label": "a",
+                  "accessType": "index",
+                  "keyUsed": "fk_assignment_6",
+                  "estimatedRows": 12000,
+                  "cost": 1208.25,
+                  "usesFilesort": false,
+                  "usesTemporaryTable": false,
+                  "children": []
+                },
+                {
+                  "kind": "table",
+                  "label": "p",
+                  "accessType": "eq_ref",
+                  "keyUsed": "PRIMARY",
+                  "estimatedRows": 1,
+                  "cost": 5408.25,
+                  "usesFilesort": false,
+                  "usesTemporaryTable": false,
+                  "children": []
+                },
+                {
+                  "kind": "table",
+                  "label": "e",
+                  "accessType": "eq_ref",
+                  "keyUsed": "PRIMARY",
+                  "estimatedRows": 1,
+                  "cost": 9608.25,
+                  "usesFilesort": false,
+                  "usesTemporaryTable": false,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        "queryCost": 9608.25,
+        "executionMillis": null,
+        "verdict": {
+          "severity": "INFO",
+          "label": "Looks efficient",
+          "headline": "Uses the fk_assignment_6 index to find rows instead of reading the whole table.",
+          "detail": "About 12,000 rows are expected to be read."
+        },
+        "fullScanTables": [],
+        "readAmplification": 1.0
+      },
+      "optimizedAnalysis": null,
+      "estimatedRowsDelta": null,
+      "queryCostDelta": null,
+      "estimate": true,
+      "summary": "No rewrite rule applied to this query, so there is nothing to compare it against."
+    }
+  },
+  {
+    "id": "A20",
+    "source": "Q34 (LLM)",
+    "kind": "4-table join",
+    "sql": "SELECT d.dependent_name, d.gender, d.birth_date, d.relationship FROM dependent d JOIN employee e ON d.emp_id = e.emp_id JOIN assignment a ON e.emp_id = a.emp_id JOIN project p ON a.project_no = p.project_no WHERE p.project_name = 'Atlas';",
+    "status": 200,
+    "ms": 10.7,
+    "response": {
+      "originalQuery": "SELECT d.dependent_name, d.gender, d.birth_date, d.relationship FROM dependent d JOIN employee e ON d.emp_id = e.emp_id JOIN assignment a ON e.emp_id = a.emp_id JOIN project p ON a.project_no = p.project_no WHERE p.project_name = 'Atlas';",
+      "optimizedQuery": "SELECT d.dependent_name, d.gender, d.birth_date, d.relationship FROM dependent d JOIN employee e ON d.emp_id = e.emp_id JOIN assignment a ON e.emp_id = a.emp_id JOIN project p ON a.project_no = p.project_no WHERE p.project_name = 'Atlas';",
+      "rewritten": false,
+      "changes": [],
+      "originalAnalysis": {
+        "tableName": "p",
+        "queryType": "SELECT",
+        "databaseType": "MySQL",
+        "estimatedRows": 2,
+        "filtered": 100.0,
+        "estimatedRowsReturned": 2,
+        "accessType": "ref",
+        "usesIndex": true,
+        "hasFullTableScan": false,
+        "usesFilesort": false,
+        "usesTemporaryTable": false,
+        "keyUsed": "project_name",
+        "tables": [
+          {
+            "tableName": "p",
+            "accessType": "const",
+            "possibleKeys": "PRIMARY,project_name",
+            "keyUsed": "project_name",
+            "keyLength": "102",
+            "ref": "const",
+            "estimatedRows": 1,
+            "filtered": 100.0,
+            "extra": "Using index",
+            "fullTableScan": false,
+            "usesIndex": true,
+            "usesFilesort": false,
+            "usesTemporaryTable": false,
+            "estimatedRowsReturned": 1,
+            "readAmplification": 1.0
+          },
+          {
+            "tableName": "a",
+            "accessType": "ref",
+            "possibleKeys": "PRIMARY,fk_assignment_6",
+            "keyUsed": "fk_assignment_6",
+            "keyLength": "4",
+            "ref": "const",
+            "estimatedRows": 2,
+            "filtered": 100.0,
+            "extra": "Using index",
+            "fullTableScan": false,
+            "usesIndex": true,
+            "usesFilesort": false,
+            "usesTemporaryTable": false,
+            "estimatedRowsReturned": 2,
+            "readAmplification": 1.0
+          },
+          {
+            "tableName": "e",
+            "accessType": "eq_ref",
+            "possibleKeys": "PRIMARY",
+            "keyUsed": "PRIMARY",
+            "keyLength": "34",
+            "ref": "querysense_uploads.a.emp_id",
+            "estimatedRows": 1,
+            "filtered": 100.0,
+            "extra": "Using index",
+            "fullTableScan": false,
+            "usesIndex": true,
+            "usesFilesort": false,
+            "usesTemporaryTable": false,
+            "estimatedRowsReturned": 1,
+            "readAmplification": 1.0
+          },
+          {
+            "tableName": "d",
+            "accessType": "ref",
+            "possibleKeys": "PRIMARY",
+            "keyUsed": "PRIMARY",
+            "keyLength": "34",
+            "ref": "querysense_uploads.a.emp_id",
+            "estimatedRows": 1,
+            "filtered": 100.0,
+            "extra": null,
+            "fullTableScan": false,
+            "usesIndex": true,
+            "usesFilesort": false,
+            "usesTemporaryTable": false,
+            "estimatedRowsReturned": 1,
+            "readAmplification": 1.0
+          }
+        ],
+        "hasUnindexedFilter": false,
+        "hasUnanchoredRegex": false,
+        "filteredColumn": "p.project_name",
+        "orderByColumn": null,
+        "warnings": [
+          "Query joins multiple tables \u2014 the execution plan is reported per table, so check each table's access type individually."
+        ],
+        "explainFailed": false,
+        "planTree": {
+          "kind": "query_block",
+          "label": "query block",
+          "accessType": null,
+          "keyUsed": null,
+          "estimatedRows": null,
+          "cost": 2.64,
+          "usesFilesort": false,
+          "usesTemporaryTable": false,
+          "children": [
+            {
+              "kind": "nested_loop",
+              "label": "nested loop",
+              "accessType": null,
+              "keyUsed": null,
+              "estimatedRows": null,
+              "cost": null,
+              "usesFilesort": false,
+              "usesTemporaryTable": false,
+              "children": [
+                {
+                  "kind": "table",
+                  "label": "p",
+                  "accessType": "const",
+                  "keyUsed": "project_name",
+                  "estimatedRows": 1,
+                  "cost": 0.0,
+                  "usesFilesort": false,
+                  "usesTemporaryTable": false,
+                  "children": []
+                },
+                {
+                  "kind": "table",
+                  "label": "a",
+                  "accessType": "ref",
+                  "keyUsed": "fk_assignment_6",
+                  "estimatedRows": 2,
+                  "cost": 1.15,
+                  "usesFilesort": false,
+                  "usesTemporaryTable": false,
+                  "children": []
+                },
+                {
+                  "kind": "table",
+                  "label": "e",
+                  "accessType": "eq_ref",
+                  "keyUsed": "PRIMARY",
+                  "estimatedRows": 1,
+                  "cost": 1.85,
+                  "usesFilesort": false,
+                  "usesTemporaryTable": false,
+                  "children": []
+                },
+                {
+                  "kind": "table",
+                  "label": "d",
+                  "accessType": "ref",
+                  "keyUsed": "PRIMARY",
+                  "estimatedRows": 1,
+                  "cost": 2.64,
+                  "usesFilesort": false,
+                  "usesTemporaryTable": false,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        "queryCost": 2.64,
+        "executionMillis": null,
+        "verdict": {
+          "severity": "INFO",
+          "label": "Looks efficient",
+          "headline": "Uses the project_name index to find rows instead of reading the whole table.",
+          "detail": "About 2 rows are expected to be read."
+        },
+        "fullScanTables": [],
+        "readAmplification": 1.0
+      },
+      "optimizedAnalysis": null,
+      "estimatedRowsDelta": null,
+      "queryCostDelta": null,
+      "estimate": true,
+      "summary": "No rewrite rule applied to this query, so there is nothing to compare it against."
+    }
+  },
+  {
+    "id": "A21",
+    "source": "Q36 (LLM)",
+    "kind": "self-join with filter",
+    "sql": "SELECT e.emp_id, e.first_name, e.middle_initial, e.last_name FROM employee e JOIN employee m ON e.manager_id = m.emp_id WHERE m.first_name = 'Kavita' AND m.last_name = 'Rao';",
+    "status": 200,
+    "ms": 34.5,
+    "response": {
+      "originalQuery": "SELECT e.emp_id, e.first_name, e.middle_initial, e.last_name FROM employee e JOIN employee m ON e.manager_id = m.emp_id WHERE m.first_name = 'Kavita' AND m.last_name = 'Rao';",
+      "optimizedQuery": "SELECT e.emp_id, e.first_name, e.middle_initial, e.last_name FROM employee e JOIN employee m ON e.manager_id = m.emp_id WHERE m.first_name = 'Kavita' AND m.last_name = 'Rao';",
+      "rewritten": false,
+      "changes": [],
+      "originalAnalysis": {
+        "tableName": "m",
+        "queryType": "SELECT",
+        "databaseType": "MySQL",
+        "estimatedRows": 12398,
+        "filtered": 1.0,
+        "estimatedRowsReturned": 124,
+        "accessType": "ALL",
+        "usesIndex": true,
+        "hasFullTableScan": true,
+        "usesFilesort": false,
+        "usesTemporaryTable": false,
+        "keyUsed": "fk_employee_0",
+        "tables": [
+          {
+            "tableName": "m",
+            "accessType": "ALL",
+            "possibleKeys": "PRIMARY",
+            "keyUsed": null,
+            "keyLength": null,
+            "ref": null,
+            "estimatedRows": 12398,
+            "filtered": 1.0,
+            "extra": "Using where",
+            "fullTableScan": true,
+            "usesIndex": false,
+            "usesFilesort": false,
+            "usesTemporaryTable": false,
+            "estimatedRowsReturned": 124,
+            "readAmplification": 99.98387096774194
+          },
+          {
+            "tableName": "e",
+            "accessType": "ref",
+            "possibleKeys": "fk_employee_0",
+            "keyUsed": "fk_employee_0",
+            "keyLength": "35",
+            "ref": "querysense_uploads.m.emp_id",
+            "estimatedRows": 2,
+            "filtered": 100.0,
+            "extra": null,
+            "fullTableScan": false,
+            "usesIndex": true,
+            "usesFilesort": false,
+            "usesTemporaryTable": false,
+            "estimatedRowsReturned": 2,
+            "readAmplification": 1.0
+          }
+        ],
+        "hasUnindexedFilter": false,
+        "hasUnanchoredRegex": false,
+        "filteredColumn": "m.first_name",
+        "orderByColumn": null,
+        "warnings": [
+          "Query joins multiple tables \u2014 the execution plan is reported per table, so check each table's access type individually.",
+          "Full table scan detected on 'm'. MySQL selected a full scan for this table. If the query is slow, check whether an index on the filtered or joined columns could reduce the rows examined."
+        ],
+        "explainFailed": false,
+        "planTree": {
+          "kind": "query_block",
+          "label": "query block",
+          "accessType": null,
+          "keyUsed": null,
+          "estimatedRows": null,
+          "cost": 1369.71,
+          "usesFilesort": false,
+          "usesTemporaryTable": false,
+          "children": [
+            {
+              "kind": "nested_loop",
+              "label": "nested loop",
+              "accessType": null,
+              "keyUsed": null,
+              "estimatedRows": null,
+              "cost": null,
+              "usesFilesort": false,
+              "usesTemporaryTable": false,
+              "children": [
+                {
+                  "kind": "table",
+                  "label": "m",
+                  "accessType": "ALL",
+                  "keyUsed": null,
+                  "estimatedRows": 12398,
+                  "cost": 1280.05,
+                  "usesFilesort": false,
+                  "usesTemporaryTable": false,
+                  "children": []
+                },
+                {
+                  "kind": "table",
+                  "label": "e",
+                  "accessType": "ref",
+                  "keyUsed": "fk_employee_0",
+                  "estimatedRows": 2,
+                  "cost": 1369.71,
+                  "usesFilesort": false,
+                  "usesTemporaryTable": false,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        "queryCost": 1369.71,
+        "executionMillis": null,
+        "verdict": {
+          "severity": "CRITICAL",
+          "label": "Needs attention",
+          "headline": "Reads the whole employee table \u2014 about 12,398 rows \u2014 then discards 99% of what it read.",
+          "detail": "MySQL listed PRIMARY on employee as usable for this query and then chose not to use it."
+        },
+        "fullScanTables": [
+          "m"
+        ],
+        "readAmplification": 99.98387096774194
+      },
+      "optimizedAnalysis": null,
+      "estimatedRowsDelta": null,
+      "queryCostDelta": null,
+      "estimate": true,
+      "summary": "No rewrite rule applied to this query, so there is nothing to compare it against."
+    }
+  },
+  {
+    "id": "A22",
+    "source": "Q37 (LLM)",
+    "kind": "GROUP BY on self-FK",
+    "sql": "SELECT manager_id, COUNT(emp_id) AS num_employees FROM employee GROUP BY manager_id;",
+    "status": 200,
+    "ms": 7.0,
+    "response": {
+      "originalQuery": "SELECT manager_id, COUNT(emp_id) AS num_employees FROM employee GROUP BY manager_id;",
+      "optimizedQuery": "SELECT manager_id, COUNT(emp_id) AS num_employees FROM employee GROUP BY manager_id;",
+      "rewritten": false,
+      "changes": [],
+      "originalAnalysis": {
+        "tableName": "employee",
+        "queryType": "SELECT",
+        "databaseType": "MySQL",
+        "estimatedRows": 12398,
+        "filtered": 100.0,
+        "estimatedRowsReturned": 12398,
+        "accessType": "index",
+        "usesIndex": true,
+        "hasFullTableScan": false,
+        "usesFilesort": false,
+        "usesTemporaryTable": false,
+        "keyUsed": "fk_employee_0",
+        "tables": [
+          {
+            "tableName": "employee",
+            "accessType": "index",
+            "possibleKeys": "fk_employee_0",
+            "keyUsed": "fk_employee_0",
+            "keyLength": "35",
+            "ref": null,
+            "estimatedRows": 12398,
+            "filtered": 100.0,
+            "extra": "Using index",
+            "fullTableScan": false,
+            "usesIndex": true,
+            "usesFilesort": false,
+            "usesTemporaryTable": false,
+            "estimatedRowsReturned": 12398,
+            "readAmplification": 1.0
+          }
+        ],
+        "hasUnindexedFilter": false,
+        "hasUnanchoredRegex": false,
+        "filteredColumn": null,
+        "orderByColumn": null,
+        "warnings": [
+          "Query has no WHERE clause \u2014 this may scan the entire table regardless of available indexes.",
+          "Query uses GROUP BY \u2014 check EXPLAIN output for 'Using temporary' if this feels slow."
+        ],
+        "explainFailed": false,
+        "planTree": {
+          "kind": "query_block",
+          "label": "query block",
+          "accessType": null,
+          "keyUsed": null,
+          "estimatedRows": null,
+          "cost": 1280.05,
+          "usesFilesort": false,
+          "usesTemporaryTable": false,
+          "children": [
+            {
+              "kind": "grouping_operation",
+              "label": "grouping operation",
+              "accessType": null,
+              "keyUsed": null,
+              "estimatedRows": null,
+              "cost": null,
+              "usesFilesort": false,
+              "usesTemporaryTable": false,
+              "children": [
+                {
+                  "kind": "table",
+                  "label": "employee",
+                  "accessType": "index",
+                  "keyUsed": "fk_employee_0",
+                  "estimatedRows": 12398,
+                  "cost": 1280.05,
+                  "usesFilesort": false,
+                  "usesTemporaryTable": false,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        "queryCost": 1280.05,
+        "executionMillis": null,
+        "verdict": {
+          "severity": "INFO",
+          "label": "Looks efficient",
+          "headline": "Uses the fk_employee_0 index to find rows instead of reading the whole table.",
+          "detail": "About 12,398 rows are expected to be read."
+        },
+        "fullScanTables": [],
+        "readAmplification": 1.0
+      },
+      "optimizedAnalysis": null,
+      "estimatedRowsDelta": null,
+      "queryCostDelta": null,
+      "estimate": true,
+      "summary": "No rewrite rule applied to this query, so there is nothing to compare it against."
+    }
+  },
+  {
+    "id": "A23",
+    "source": "Q38 (rule engine)",
+    "kind": "anti-join",
+    "sql": "SELECT employee.* FROM employee LEFT JOIN dependent ON employee.emp_id = dependent.emp_id WHERE dependent.emp_id IS NULL;",
+    "status": 200,
+    "ms": 22.9,
+    "response": {
+      "originalQuery": "SELECT employee.* FROM employee LEFT JOIN dependent ON employee.emp_id = dependent.emp_id WHERE dependent.emp_id IS NULL;",
+      "optimizedQuery": "SELECT employee.* FROM employee LEFT JOIN dependent ON employee.emp_id = dependent.emp_id WHERE dependent.emp_id IS NULL;",
+      "rewritten": false,
+      "changes": [],
+      "originalAnalysis": {
+        "tableName": "employee",
+        "queryType": "SELECT",
+        "databaseType": "MySQL",
+        "estimatedRows": 12398,
+        "filtered": 100.0,
+        "estimatedRowsReturned": 12398,
+        "accessType": "ALL",
+        "usesIndex": true,
+        "hasFullTableScan": true,
+        "usesFilesort": false,
+        "usesTemporaryTable": false,
+        "keyUsed": "PRIMARY",
+        "tables": [
+          {
+            "tableName": "employee",
+            "accessType": "ALL",
+            "possibleKeys": null,
+            "keyUsed": null,
+            "keyLength": null,
+            "ref": null,
+            "estimatedRows": 12398,
+            "filtered": 100.0,
+            "extra": null,
+            "fullTableScan": true,
+            "usesIndex": false,
+            "usesFilesort": false,
+            "usesTemporaryTable": false,
+            "estimatedRowsReturned": 12398,
+            "readAmplification": 1.0
+          },
+          {
+            "tableName": "dependent",
+            "accessType": "ref",
+            "possibleKeys": "PRIMARY",
+            "keyUsed": "PRIMARY",
+            "keyLength": "34",
+            "ref": "querysense_uploads.employee.emp_id",
+            "estimatedRows": 1,
+            "filtered": 100.0,
+            "extra": "Using where; Not exists; Using index",
+            "fullTableScan": false,
+            "usesIndex": true,
+            "usesFilesort": false,
+            "usesTemporaryTable": false,
+            "estimatedRowsReturned": 1,
+            "readAmplification": 1.0
+          }
+        ],
+        "hasUnindexedFilter": false,
+        "hasUnanchoredRegex": false,
+        "filteredColumn": null,
+        "orderByColumn": null,
+        "warnings": [
+          "Query joins multiple tables \u2014 the execution plan is reported per table, so check each table's access type individually.",
+          "Full table scan detected on 'employee'. MySQL selected a full scan for this table. If the query is slow, check whether an index on the filtered or joined columns could reduce the rows examined."
+        ],
+        "explainFailed": false,
+        "planTree": {
+          "kind": "query_block",
+          "label": "query block",
+          "accessType": null,
+          "keyUsed": null,
+          "estimatedRows": null,
+          "cost": 6194.21,
+          "usesFilesort": false,
+          "usesTemporaryTable": false,
+          "children": [
+            {
+              "kind": "nested_loop",
+              "label": "nested loop",
+              "accessType": null,
+              "keyUsed": null,
+              "estimatedRows": null,
+              "cost": null,
+              "usesFilesort": false,
+              "usesTemporaryTable": false,
+              "children": [
+                {
+                  "kind": "table",
+                  "label": "employee",
+                  "accessType": "ALL",
+                  "keyUsed": null,
+                  "estimatedRows": 12398,
+                  "cost": 1280.05,
+                  "usesFilesort": false,
+                  "usesTemporaryTable": false,
+                  "children": []
+                },
+                {
+                  "kind": "table",
+                  "label": "dependent",
+                  "accessType": "ref",
+                  "keyUsed": "PRIMARY",
+                  "estimatedRows": 1,
+                  "cost": 6194.22,
+                  "usesFilesort": false,
+                  "usesTemporaryTable": false,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        "queryCost": 6194.21,
+        "executionMillis": null,
+        "verdict": {
+          "severity": "INFO",
+          "label": "Looks reasonable",
+          "headline": "Reads the whole employee table \u2014 about 12,398 rows \u2014 and returns most of them.",
+          "detail": "A full scan is the efficient plan when a query genuinely needs this much of the table, so there is little an index could save here."
+        },
+        "fullScanTables": [
+          "employee"
+        ],
+        "readAmplification": 1.0
+      },
+      "optimizedAnalysis": null,
+      "estimatedRowsDelta": null,
+      "queryCostDelta": null,
+      "estimate": true,
+      "summary": "No rewrite rule applied to this query, so there is nothing to compare it against."
+    }
+  },
+  {
+    "id": "A24",
+    "source": "added by tester (not generated)",
+    "kind": "const lookup on primary key",
+    "sql": "SELECT * FROM employee WHERE emp_id = 'E1001';",
+    "status": 200,
+    "ms": 40.2,
+    "response": {
+      "originalQuery": "SELECT * FROM employee WHERE emp_id = 'E1001';",
+      "optimizedQuery": "SELECT emp_id, first_name, middle_initial, last_name, birth_date, address, gender, salary, manager_id, dept_no FROM employee WHERE emp_id = 'E1001';",
+      "rewritten": true,
+      "changes": [
+        {
+          "ruleId": "RW1",
+          "explanation": "Named the 10 columns of 'employee' instead of SELECT *, so an index covering them can answer the query without reading the row. The rows returned are identical."
+        }
+      ],
+      "originalAnalysis": {
+        "tableName": "employee",
+        "queryType": "SELECT",
+        "databaseType": "MySQL",
+        "estimatedRows": 1,
+        "filtered": 100.0,
+        "estimatedRowsReturned": 1,
+        "accessType": "const",
+        "usesIndex": true,
+        "hasFullTableScan": false,
+        "usesFilesort": false,
+        "usesTemporaryTable": false,
+        "keyUsed": "PRIMARY",
+        "tables": [
+          {
+            "tableName": "employee",
+            "accessType": "const",
+            "possibleKeys": "PRIMARY",
+            "keyUsed": "PRIMARY",
+            "keyLength": "34",
+            "ref": "const",
+            "estimatedRows": 1,
+            "filtered": 100.0,
+            "extra": null,
+            "fullTableScan": false,
+            "usesIndex": true,
+            "usesFilesort": false,
+            "usesTemporaryTable": false,
+            "estimatedRowsReturned": 1,
+            "readAmplification": 1.0
+          }
+        ],
+        "hasUnindexedFilter": false,
+        "hasUnanchoredRegex": false,
+        "filteredColumn": "emp_id",
+        "orderByColumn": null,
+        "warnings": [],
+        "explainFailed": false,
+        "planTree": {
+          "kind": "query_block",
+          "label": "query block",
+          "accessType": null,
+          "keyUsed": null,
+          "estimatedRows": null,
+          "cost": 1.0,
+          "usesFilesort": false,
+          "usesTemporaryTable": false,
+          "children": [
+            {
+              "kind": "table",
+              "label": "employee",
+              "accessType": "const",
+              "keyUsed": "PRIMARY",
+              "estimatedRows": 1,
+              "cost": 0.0,
+              "usesFilesort": false,
+              "usesTemporaryTable": false,
+              "children": []
+            }
+          ]
+        },
+        "queryCost": 1.0,
+        "executionMillis": null,
+        "verdict": {
+          "severity": "INFO",
+          "label": "Looks efficient",
+          "headline": "Uses the PRIMARY index to find rows instead of reading the whole table.",
+          "detail": "About 1 rows are expected to be read."
+        },
+        "fullScanTables": [],
+        "readAmplification": 1.0
+      },
+      "optimizedAnalysis": {
+        "tableName": "employee",
+        "queryType": "SELECT",
+        "databaseType": "MySQL",
+        "estimatedRows": 1,
+        "filtered": 100.0,
+        "estimatedRowsReturned": 1,
+        "accessType": "const",
+        "usesIndex": true,
+        "hasFullTableScan": false,
+        "usesFilesort": false,
+        "usesTemporaryTable": false,
+        "keyUsed": "PRIMARY",
+        "tables": [
+          {
+            "tableName": "employee",
+            "accessType": "const",
+            "possibleKeys": "PRIMARY",
+            "keyUsed": "PRIMARY",
+            "keyLength": "34",
+            "ref": "const",
+            "estimatedRows": 1,
+            "filtered": 100.0,
+            "extra": null,
+            "fullTableScan": false,
+            "usesIndex": true,
+            "usesFilesort": false,
+            "usesTemporaryTable": false,
+            "estimatedRowsReturned": 1,
+            "readAmplification": 1.0
+          }
+        ],
+        "hasUnindexedFilter": false,
+        "hasUnanchoredRegex": false,
+        "filteredColumn": "emp_id",
+        "orderByColumn": null,
+        "warnings": [],
+        "explainFailed": false,
+        "planTree": {
+          "kind": "query_block",
+          "label": "query block",
+          "accessType": null,
+          "keyUsed": null,
+          "estimatedRows": null,
+          "cost": 1.0,
+          "usesFilesort": false,
+          "usesTemporaryTable": false,
+          "children": [
+            {
+              "kind": "table",
+              "label": "employee",
+              "accessType": "const",
+              "keyUsed": "PRIMARY",
+              "estimatedRows": 1,
+              "cost": 0.0,
+              "usesFilesort": false,
+              "usesTemporaryTable": false,
+              "children": []
+            }
+          ]
+        },
+        "queryCost": 1.0,
+        "executionMillis": null,
+        "verdict": {
+          "severity": "INFO",
+          "label": "Looks efficient",
+          "headline": "Uses the PRIMARY index to find rows instead of reading the whole table.",
+          "detail": "About 1 rows are expected to be read."
+        },
+        "fullScanTables": [],
+        "readAmplification": 1.0
+      },
+      "estimatedRowsDelta": 0,
+      "queryCostDelta": 0.0,
+      "estimate": true,
+      "summary": "1 rewrite rule applied. EXPLAIN estimates the same number of rows read either way, so the rewrite changes the shape of the query without changing what it reads."
+    }
+  },
+  {
+    "id": "A25",
+    "source": "added by tester (non-sargable shape)",
+    "kind": "non-sargable filter",
+    "sql": "SELECT * FROM employee WHERE YEAR(birth_date) > 1965;",
+    "status": 200,
+    "ms": 30.9,
+    "response": {
+      "originalQuery": "SELECT * FROM employee WHERE YEAR(birth_date) > 1965;",
+      "optimizedQuery": "SELECT emp_id, first_name, middle_initial, last_name, birth_date, address, gender, salary, manager_id, dept_no FROM employee WHERE YEAR(birth_date) > 1965;",
+      "rewritten": true,
+      "changes": [
+        {
+          "ruleId": "RW1",
+          "explanation": "Named the 10 columns of 'employee' instead of SELECT *, so an index covering them can answer the query without reading the row. The rows returned are identical."
+        }
+      ],
+      "originalAnalysis": {
+        "tableName": "employee",
+        "queryType": "SELECT",
+        "databaseType": "MySQL",
+        "estimatedRows": 12398,
+        "filtered": 100.0,
+        "estimatedRowsReturned": 12398,
+        "accessType": "ALL",
+        "usesIndex": false,
+        "hasFullTableScan": true,
+        "usesFilesort": false,
+        "usesTemporaryTable": false,
+        "keyUsed": null,
+        "tables": [
+          {
+            "tableName": "employee",
+            "accessType": "ALL",
+            "possibleKeys": null,
+            "keyUsed": null,
+            "keyLength": null,
+            "ref": null,
+            "estimatedRows": 12398,
+            "filtered": 100.0,
+            "extra": "Using where",
+            "fullTableScan": true,
+            "usesIndex": false,
+            "usesFilesort": false,
+            "usesTemporaryTable": false,
+            "estimatedRowsReturned": 12398,
+            "readAmplification": 1.0
+          }
+        ],
+        "hasUnindexedFilter": false,
+        "hasUnanchoredRegex": false,
+        "filteredColumn": null,
+        "orderByColumn": null,
+        "warnings": [
+          "Full table scan detected on 'employee'. MySQL selected a full scan for this table. If the query is slow, check whether an index on the filtered or joined columns could reduce the rows examined."
+        ],
+        "explainFailed": false,
+        "planTree": {
+          "kind": "query_block",
+          "label": "query block",
+          "accessType": null,
+          "keyUsed": null,
+          "estimatedRows": null,
+          "cost": 1280.05,
+          "usesFilesort": false,
+          "usesTemporaryTable": false,
+          "children": [
+            {
+              "kind": "table",
+              "label": "employee",
+              "accessType": "ALL",
+              "keyUsed": null,
+              "estimatedRows": 12398,
+              "cost": 1280.05,
+              "usesFilesort": false,
+              "usesTemporaryTable": false,
+              "children": []
+            }
+          ]
+        },
+        "queryCost": 1280.05,
+        "executionMillis": null,
+        "verdict": {
+          "severity": "INFO",
+          "label": "Looks reasonable",
+          "headline": "Reads the whole employee table \u2014 about 12,398 rows \u2014 and returns most of them.",
+          "detail": "A full scan is the efficient plan when a query genuinely needs this much of the table, so there is little an index could save here."
+        },
+        "fullScanTables": [
+          "employee"
+        ],
+        "readAmplification": 1.0
+      },
+      "optimizedAnalysis": {
+        "tableName": "employee",
+        "queryType": "SELECT",
+        "databaseType": "MySQL",
+        "estimatedRows": 12398,
+        "filtered": 100.0,
+        "estimatedRowsReturned": 12398,
+        "accessType": "ALL",
+        "usesIndex": false,
+        "hasFullTableScan": true,
+        "usesFilesort": false,
+        "usesTemporaryTable": false,
+        "keyUsed": null,
+        "tables": [
+          {
+            "tableName": "employee",
+            "accessType": "ALL",
+            "possibleKeys": null,
+            "keyUsed": null,
+            "keyLength": null,
+            "ref": null,
+            "estimatedRows": 12398,
+            "filtered": 100.0,
+            "extra": "Using where",
+            "fullTableScan": true,
+            "usesIndex": false,
+            "usesFilesort": false,
+            "usesTemporaryTable": false,
+            "estimatedRowsReturned": 12398,
+            "readAmplification": 1.0
+          }
+        ],
+        "hasUnindexedFilter": false,
+        "hasUnanchoredRegex": false,
+        "filteredColumn": null,
+        "orderByColumn": null,
+        "warnings": [
+          "Full table scan detected on 'employee'. MySQL selected a full scan for this table. If the query is slow, check whether an index on the filtered or joined columns could reduce the rows examined."
+        ],
+        "explainFailed": false,
+        "planTree": {
+          "kind": "query_block",
+          "label": "query block",
+          "accessType": null,
+          "keyUsed": null,
+          "estimatedRows": null,
+          "cost": 1280.05,
+          "usesFilesort": false,
+          "usesTemporaryTable": false,
+          "children": [
+            {
+              "kind": "table",
+              "label": "employee",
+              "accessType": "ALL",
+              "keyUsed": null,
+              "estimatedRows": 12398,
+              "cost": 1280.05,
+              "usesFilesort": false,
+              "usesTemporaryTable": false,
+              "children": []
+            }
+          ]
+        },
+        "queryCost": 1280.05,
+        "executionMillis": null,
+        "verdict": {
+          "severity": "INFO",
+          "label": "Looks reasonable",
+          "headline": "Reads the whole employee table \u2014 about 12,398 rows \u2014 and returns most of them.",
+          "detail": "A full scan is the efficient plan when a query genuinely needs this much of the table, so there is little an index could save here."
+        },
+        "fullScanTables": [
+          "employee"
+        ],
+        "readAmplification": 1.0
+      },
+      "estimatedRowsDelta": 0,
+      "queryCostDelta": 0.0,
+      "estimate": true,
+      "summary": "1 rewrite rule applied. EXPLAIN estimates the same number of rows read either way, so the rewrite changes the shape of the query without changing what it reads."
+    }
+  },
+  {
+    "id": "A26",
+    "source": "Q46 (rule engine)",
+    "kind": "sargable date range, no index",
+    "sql": "SELECT * FROM employee WHERE birth_date >= '1966-01-01';",
+    "status": 200,
+    "ms": 22.6,
+    "response": {
+      "originalQuery": "SELECT * FROM employee WHERE birth_date >= '1966-01-01';",
+      "optimizedQuery": "SELECT emp_id, first_name, middle_initial, last_name, birth_date, address, gender, salary, manager_id, dept_no FROM employee WHERE birth_date >= '1966-01-01';",
+      "rewritten": true,
+      "changes": [
+        {
+          "ruleId": "RW1",
+          "explanation": "Named the 10 columns of 'employee' instead of SELECT *, so an index covering them can answer the query without reading the row. The rows returned are identical."
+        }
+      ],
+      "originalAnalysis": {
+        "tableName": "employee",
+        "queryType": "SELECT",
+        "databaseType": "MySQL",
+        "estimatedRows": 12398,
+        "filtered": 33.33,
+        "estimatedRowsReturned": 4132,
+        "accessType": "ALL",
+        "usesIndex": false,
+        "hasFullTableScan": true,
+        "usesFilesort": false,
+        "usesTemporaryTable": false,
+        "keyUsed": null,
+        "tables": [
+          {
+            "tableName": "employee",
+            "accessType": "ALL",
+            "possibleKeys": null,
+            "keyUsed": null,
+            "keyLength": null,
+            "ref": null,
+            "estimatedRows": 12398,
+            "filtered": 33.33,
+            "extra": "Using where",
+            "fullTableScan": true,
+            "usesIndex": false,
+            "usesFilesort": false,
+            "usesTemporaryTable": false,
+            "estimatedRowsReturned": 4132,
+            "readAmplification": 3.000484027105518
+          }
+        ],
+        "hasUnindexedFilter": false,
+        "hasUnanchoredRegex": false,
+        "filteredColumn": "birth_date",
+        "orderByColumn": null,
+        "warnings": [
+          "Full table scan detected on 'employee'. MySQL selected a full scan for this table. If the query is slow, check whether an index on the filtered or joined columns could reduce the rows examined."
+        ],
+        "explainFailed": false,
+        "planTree": {
+          "kind": "query_block",
+          "label": "query block",
+          "accessType": null,
+          "keyUsed": null,
+          "estimatedRows": null,
+          "cost": 1280.05,
+          "usesFilesort": false,
+          "usesTemporaryTable": false,
+          "children": [
+            {
+              "kind": "table",
+              "label": "employee",
+              "accessType": "ALL",
+              "keyUsed": null,
+              "estimatedRows": 12398,
+              "cost": 1280.05,
+              "usesFilesort": false,
+              "usesTemporaryTable": false,
+              "children": []
+            }
+          ]
+        },
+        "queryCost": 1280.05,
+        "executionMillis": null,
+        "verdict": {
+          "severity": "CRITICAL",
+          "label": "Needs attention",
+          "headline": "Reads the whole employee table \u2014 about 12,398 rows \u2014 then discards 66.7% of what it read.",
+          "detail": "MySQL reported no index it could have used for this table."
+        },
+        "fullScanTables": [
+          "employee"
+        ],
+        "readAmplification": 3.000484027105518
+      },
+      "optimizedAnalysis": {
+        "tableName": "employee",
+        "queryType": "SELECT",
+        "databaseType": "MySQL",
+        "estimatedRows": 12398,
+        "filtered": 33.33,
+        "estimatedRowsReturned": 4132,
+        "accessType": "ALL",
+        "usesIndex": false,
+        "hasFullTableScan": true,
+        "usesFilesort": false,
+        "usesTemporaryTable": false,
+        "keyUsed": null,
+        "tables": [
+          {
+            "tableName": "employee",
+            "accessType": "ALL",
+            "possibleKeys": null,
+            "keyUsed": null,
+            "keyLength": null,
+            "ref": null,
+            "estimatedRows": 12398,
+            "filtered": 33.33,
+            "extra": "Using where",
+            "fullTableScan": true,
+            "usesIndex": false,
+            "usesFilesort": false,
+            "usesTemporaryTable": false,
+            "estimatedRowsReturned": 4132,
+            "readAmplification": 3.000484027105518
+          }
+        ],
+        "hasUnindexedFilter": false,
+        "hasUnanchoredRegex": false,
+        "filteredColumn": "birth_date",
+        "orderByColumn": null,
+        "warnings": [
+          "Full table scan detected on 'employee'. MySQL selected a full scan for this table. If the query is slow, check whether an index on the filtered or joined columns could reduce the rows examined."
+        ],
+        "explainFailed": false,
+        "planTree": {
+          "kind": "query_block",
+          "label": "query block",
+          "accessType": null,
+          "keyUsed": null,
+          "estimatedRows": null,
+          "cost": 1280.05,
+          "usesFilesort": false,
+          "usesTemporaryTable": false,
+          "children": [
+            {
+              "kind": "table",
+              "label": "employee",
+              "accessType": "ALL",
+              "keyUsed": null,
+              "estimatedRows": 12398,
+              "cost": 1280.05,
+              "usesFilesort": false,
+              "usesTemporaryTable": false,
+              "children": []
+            }
+          ]
+        },
+        "queryCost": 1280.05,
+        "executionMillis": null,
+        "verdict": {
+          "severity": "CRITICAL",
+          "label": "Needs attention",
+          "headline": "Reads the whole employee table \u2014 about 12,398 rows \u2014 then discards 66.7% of what it read.",
+          "detail": "MySQL reported no index it could have used for this table."
+        },
+        "fullScanTables": [
+          "employee"
+        ],
+        "readAmplification": 3.000484027105518
+      },
+      "estimatedRowsDelta": 0,
+      "queryCostDelta": 0.0,
+      "estimate": true,
+      "summary": "1 rewrite rule applied. EXPLAIN estimates the same number of rows read either way, so the rewrite changes the shape of the query without changing what it reads."
+    }
+  }
+]

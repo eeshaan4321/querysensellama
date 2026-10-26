@@ -89,6 +89,29 @@ class SuggestedChangeTest {
     }
 
     @Test
+    @DisplayName("low resources escalate a finding but leave an INFO note (an ideal lookup) as INFO")
+    void lowResourcesDoNotEscalateInfo() {
+        List<OptimizationSuggestion> shifted = resources.adjustSeverity(ResourceLevel.LOW, List.of(
+                OptimizationSuggestion.domain("ideal lookup", SuggestionSeverity.INFO, null),
+                OptimizationSuggestion.domain("scan", SuggestionSeverity.WARNING, null)));
+
+        assertThat(shifted).extracting(OptimizationSuggestion::getSeverity)
+                .containsExactly(SuggestionSeverity.INFO, SuggestionSeverity.CRITICAL);
+    }
+
+    @Test
+    @DisplayName("an index suggestion on an aliased table names the real table")
+    void aliasedSuggestionNamesRealTable() {
+        QueryAnalysisResult result = new QueryAnalysisResult();
+        result.setTableName("e");
+        result.setTableAliases(java.util.Map.of("e", "EMPLOYEE"));
+
+        assertThat(com.querysense.backend.optimization.IndexStatements.forMySqlQuery(result, "e.Salary"))
+                .isEqualTo("CREATE INDEX idx_EMPLOYEE_Salary ON EMPLOYEE(Salary);");
+        assertThat(com.querysense.backend.optimization.IndexStatements.forMySqlQuery(result, "d.Dname")).isNull();
+    }
+
+    @Test
     @DisplayName("shifting severity keeps the suggested change and the source")
     void severityShiftKeepsChange() {
         OptimizationSuggestion original = OptimizationSuggestion.domain("m", SuggestionSeverity.WARNING, "CREATE INDEX x");

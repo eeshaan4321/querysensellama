@@ -1,0 +1,50 @@
+1 RULE_ENGINE 0.95 245.5 identical
+2 RULE_ENGINE 0.95 100.7 identical
+3 OLLAMA 0.65 796.0 same rows with fewer columns
+4 RULE_ENGINE 0.95 23.5 identical
+5 RULE_ENGINE 0.95 29.4 identical
+6 RULE_ENGINE 0.95 28.6 identical
+7 RULE_ENGINE 0.95 42.0 identical
+8 RULE_ENGINE 0.95 44.4 identical
+9 RULE_ENGINE 0.95 14.1 identical
+10 RULE_ENGINE 0.95 36.7 identical
+11 RULE_ENGINE 0.95 39.6 identical
+12 RULE_ENGINE 0.95 42.5 identical
+13 RULE_ENGINE 0.95 20.2 identical
+14 RULE_ENGINE 0.95 17.2 identical
+15 RULE_ENGINE 0.95 13.0 identical
+16 RULE_ENGINE 0.95 28.3 identical
+17 RULE_ENGINE 0.95 11.7 identical
+18 OLLAMA 0.65 381.3 identical
+19 RULE_ENGINE 0.95 34.6 identical
+20 OLLAMA 0.65 428.7 identical
+21 RULE_ENGINE 0.95 41.8 identical
+22 OLLAMA 0.65 645.1 same rows with fewer columns
+23 RULE_ENGINE 0.95 29.5 identical
+24 RULE_ENGINE 0.95 22.0 identical
+25 RULE_ENGINE 0.95 28.6 identical
+26 RULE_ENGINE 0.95 17.9 identical
+27 RULE_ENGINE 0.95 12.8 identical
+28 RULE_ENGINE 0.95 27.5 identical
+29 RULE_ENGINE 0.85 14.1 identical
+30 OLLAMA 0.65 702.7 same rows with fewer columns
+31 OLLAMA 0.65 630.6 same rows with fewer columns
+32 OLLAMA 0.65 884.0 different
+33 OLLAMA 0.65 829.8 same rows with fewer columns
+34 OLLAMA 0.65 1154.3 same rows with fewer columns
+35 OLLAMA 0.65 817.7 different
+36 OLLAMA 0.65 984.6 same rows with fewer columns
+37 OLLAMA 0.65 399.0 different
+38 RULE_ENGINE 0.95 12.5 identical
+39 RULE_ENGINE 0.95 18.8 different
+40 RULE_ENGINE 0.95 27.8 identical
+41 RULE_ENGINE 0.85 32.0 identical
+42 RULE_ENGINE 0.85 29.9 identical
+43 RULE_ENGINE 0.85 39.2 identical
+44 RULE_ENGINE 0.85 24.1 identical
+45 OLLAMA 0.65 376.0 same rows with fewer columns
+46 RULE_ENGINE 0.85 39.0 identical
+47 OLLAMA 0.65 153.7 not checked (no ground truth)
+48 OLLAMA 0.2 127.3 not checked (no ground truth)
+49 OLLAMA 0.2 228.8 not checked (no ground truth)
+50 OLLAMA 0.2 200.1 not checked (no ground truth)

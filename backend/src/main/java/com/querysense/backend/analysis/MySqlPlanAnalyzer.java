@@ -62,6 +62,7 @@ public class MySqlPlanAnalyzer implements PlanAnalyzer {
         explain.getWarnings().addAll(0, structural.getWarnings());
         explain.setFilteredColumn(structural.getFilteredColumn());
         explain.setOrderByColumn(structural.getOrderByColumn());
+        explain.setTableAliases(structural.getTableAliases());
         return explain;
     }
 }

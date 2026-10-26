@@ -31,7 +31,8 @@ public class MySqlIndexAdvisor implements IndexAdvisor {
                 && (filter.column() != null || discardsRows(result, filter.table()))) {
             String column = filter.column();
             String columnClause = column != null ? column : "<the column used in the WHERE clause>";
-            String table = tableLabel(filter.table());
+            String realTable = result.realTableName(filter.table());
+            String table = tableLabel(realTable);
 
             String summary = "To answer this, the database is reading " + rowsPhrase(result)
                     + " of " + table + " and checking each one"
@@ -41,14 +42,14 @@ public class MySqlIndexAdvisor implements IndexAdvisor {
 
             recommendations.add(new SchemaRecommendation(
                     "INDEX",
-                    filter.table(),
+                    realTable,
                     column,
                     summary,
                     "Full table scan detected (accessType=ALL) with no index in use"
                             + (column != null ? " on '" + column + "'" : "")
                             + " — the same signal reported by EXPLAIN.",
-                    "CREATE INDEX idx_" + safeName(filter.table(), column)
-                            + " ON " + filter.table() + "(" + columnClause + ");"
+                    "CREATE INDEX idx_" + safeName(realTable, column)
+                            + " ON " + realTable + "(" + columnClause + ");"
             ));
         }
 
@@ -81,24 +82,25 @@ public class MySqlIndexAdvisor implements IndexAdvisor {
                             : ", though not always.")
                     + " Re-check after applying rather than assuming it worked.";
 
+            String realSortTable = result.realTableName(sort.table());
             recommendations.add(new SchemaRecommendation(
                     "INDEX",
-                    sort.table(),
+                    realSortTable,
                     column,
                     summary,
                     "Query requires an extra sorting pass (Extra: 'Using filesort')"
                             + (column != null ? " for ORDER BY '" + column + "'" : "")
                             + " — an index matching the sort column can often (not always) avoid this."
                             + caveat,
-                    "CREATE INDEX idx_" + safeName(sort.table(), column)
-                            + " ON " + sort.table() + "(" + columnClause + ");"
+                    "CREATE INDEX idx_" + safeName(realSortTable, column)
+                            + " ON " + realSortTable + "(" + columnClause + ");"
             ));
         }
 
         if (result.isUsesTemporaryTable()) {
             recommendations.add(new SchemaRecommendation(
                     "STRUCTURAL",
-                    result.getTableName(),
+                    result.realTableName(result.getTableName()),
                     null,
                     "The database is building a scratch working table behind the scenes to combine "
                             + "these rows, which usually means the columns being combined on are not "
@@ -108,7 +110,7 @@ public class MySqlIndexAdvisor implements IndexAdvisor {
                             + "by GROUP BY or DISTINCT without a supporting index — this isn't always "
                             + "fixable with a single-column index, so it's flagged for review rather "
                             + "than an automatic CREATE INDEX suggestion.",
-                    "Review the GROUP BY/DISTINCT clause on '" + result.getTableName()
+                    "Review the GROUP BY/DISTINCT clause on '" + result.realTableName(result.getTableName())
                             + "'; consider a composite index covering the grouped column(s) if one column is consistently responsible."
             ));
         }

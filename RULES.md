@@ -12,7 +12,7 @@ lowercased before it is read.
 
 | Module | Rules | IDs | Source |
 |---|---|---|---|
-| **Rule engine** (question → SQL) | **30** | E1–E30 | `querybuilder/` |
+| **Rule engine** (question → SQL) | **31** | E1–E31 | `querybuilder/` |
 | Routing between the three layers | 3 | R1–R3 | `QueryGenerationServiceImpl`, `GeneratedQueryValidator` |
 | Checks before EXPLAIN | 2 | P1–P2 | `analysis/SqlPreflightValidator`, `analysis/MongoPreflightValidator` (P2 only) |
 | EXPLAIN warnings | 4 | W1–W4 | `analysis/MySqlExplainAnalyzer`, `analysis/MongoExplainParser` (W1, W3, W4) |
@@ -22,18 +22,26 @@ lowercased before it is read.
 | Resource optimisation | 4 | RS1–RS4 | `optimization/ResourceConsciousService` |
 | Schema advisor | 3 | SA1–SA3 | `advisor/MySqlIndexAdvisor`, `advisor/MongoIndexAdvisor` |
 | Query rewrite | 4 | RW1–RW4 (RW4 MongoDB only) | `optimization/QueryRewriter`, `optimization/MongoQueryRewriter` |
-| **Total** | **67** | | |
+| **Total** | **68** | | |
 
-**The rule engine has 30 rules.** Of those, 39 are conditions under which it
+**The rule engine has 31 rules.** Of those, 46 are conditions under which it
 refuses a question and hands it to the language model. The other 37 rules
 belong to the modules that analyse and optimise a query after it has been
-generated. None of the 67 uses a model.
+generated. None of the 68 uses a model.
 
 **Renumbered 2026-10-02 (MongoDB parity, step 9).** The four MongoDB-only
 IDs folded on 2026-10-01 are gone: the old TX6 lives in TX1, the old RS4 in
 RS3, and the old SA4 and SA5 in SA1. The old TX7 is now TX6, and the old RS5
 is now RS4. No ID appears in an API response except the RW IDs, which did
 not change.
+
+Read again on 2026-10-20, when the rule engine gained a dictionary thesaurus,
+verb-to-noun column naming, whole-year ranges on integer year columns and
+narrower words (E31). The count of declines rose from 39 to 44 because the
+year-column decline (one, in E3) and the narrower-word declines (four, in
+E31) are new decline reasons. The final review of that feature added two
+more E31 reasons, a negation and a check that something is missing, which
+brings the count to 46.
 
 Read again on 2026-09-21, when section 10 was added, and again on
 2026-09-26, when the rule engine became dialect-aware, gained a MongoDB
@@ -46,7 +54,7 @@ into others then, and their IDs were retired on 2026-10-02.
 
 ---
 
-## 1. The rule engine — 30 rules
+## 1. The rule engine — 31 rules
 
 The rule engine is layer 1 of query generation. It turns a plain-English
 question into SQL without a model, or it declines, and the question moves
@@ -127,6 +135,30 @@ The rules run in the order below. The first decline stops the build.
 
   Date types come from the schema: MySQL `DATE`, `DATETIME`, `TIMESTAMP`;
   MongoDB `date`. The built-in MySQL demo now carries its column types.
+- **Year columns, added 2026-10-20.** An integer column whose name ends in
+  `year` (`admission_year SMALLINT`; MongoDB `int`) counts as a date column
+  only when its stored values can be read and every one is a whole number
+  from 1000 to 2999. A `year` column holding 1 to 4 (a year of study), or one
+  whose values can't be read, is not a year column, and a year in the
+  question then declines as before. A year column counts for **whole-year**
+  ranges: `in 2024` → `admission_year >= 2024 AND
+  admission_year < 2025`, `since 2020` → `>= 2020`, `before 2024` → `< 2024`
+  (MongoDB: numeric `$gte`/`$lt`, no `ISODate`). A range that does not start
+  and end on a year boundary (`last month`) declines with `"last month" is
+  finer than a year, and students.admission_year only holds years.` When a
+  table has both a date column and a year column and none is named, the usual
+  several-columns decline applies. The words of the range never name a year
+  column (`orders last year` does not pick a column called `year`).
+- **A verb names its column, added 2026-10-20 (`DERIVED`).** A verb in the
+  question is turned into the noun formed from it, and the noun is matched
+  against **column names only**: `admitted in 2024` → `admission_year`,
+  `enrolled last month` → `enrollment_date`, `born after 1990` → `Bdate`. It
+  uses the verb's first meaning, from WordNet plus a hand-written pair
+  (`born` → `birth`), never reaches a table or a
+  value, and never applies to a word the parser reads as an instruction
+  (`show`, `list`, `count`, `delete`, `order`). If the noun reaches two
+  columns, the ambiguity decline applies. Recorded as `DERIVED`, 0.85, and
+  shown as `"admitted" → students.admission_year`.
 - **The words are consumed:** `in` of `in january` is never read again as
   a value filter (E14), and `hired` is not a requested column (E10).
 - **Declines when:**
@@ -173,6 +205,10 @@ The rules run in the order below. The first decline stops the build.
   - only when no table matched any other way, a one-edit typo of a word of
     five or more letters (`custmers` → `customers`).
 
+  - **Since 2026-10-20:** a word from the dictionary (WordNet) thesaurus,
+    after the curated list and before a typo: `cars` → `autos`. See "Matching
+    words to the schema".
+
   A word that reaches two tables declines with `"<word>" could mean A or B,
   so this engine won't pick one.` The longest-match and first-named rules
   above apply to every kind.
@@ -209,7 +245,7 @@ The rules run in the order below. The first decline stops the build.
 #### Matching words to the schema (match kinds)
 
 Added 2026-10-03. Every word that reaches a table or column does so through
-one of five kinds, strictest first:
+one of these kinds, strictest first:
 
 | Kind | Example | Confidence | Shown under "Read as" |
 |---|---|---|---|
@@ -217,7 +253,12 @@ one of five kinds, strictest first:
 | `INFLECTION` | `customer`, `people` | 0.95 | no |
 | `SCHEMA_ALIAS` | `buyers`, declared by the schema | 0.95 | yes |
 | `SYNONYM` | `clients`, from `querybuilder/synonyms.json` | **0.85** | yes |
+| `THESAURUS` | `cars` → `autos`, `given name` → `first_name` (dictionary synonym) | **0.85** | yes |
+| `DERIVED` | `admitted` → `admission_year` (from the verb) | **0.85** | yes |
+| `NARROWER` | `surgeons` → `physicians.department = 'Surgery'` (a kind of, from your data) | **0.85** | yes |
 | `TYPO` | `custmers`, `emial` | **0.85** | yes |
+| `ABBREVIATION` | `first name` → `Fname` | **0.85** | yes |
+| `CHOSEN_JOIN` | `head` → `departments.head_faculty_id` (E6) | **0.85** | yes |
 
 - A declared alias counts as exact, because the schema's owner declared it.
   A built-in synonym or a typo correction is QuerySense's own reading, so a
@@ -227,6 +268,46 @@ one of five kinds, strictest first:
 - Values never use synonyms: `bombay` does not find `Mumbai`.
 - The synonym list holds no word the parser reads as an instruction
   (`count`, `total`, `top` …); `SynonymListTest` enforces it.
+- **Order, since 2026-10-20.** Tables: exact → inflection → declared alias →
+  curated synonym → WordNet → narrower word plus a filter (E31) → typo.
+  Columns: exact → inflection/suffix/owner → declared alias → abbreviation
+  → curated synonym → WordNet → typo. Verb to noun (`DERIVED`) is not a
+  general column step: it applies only inside E3's choice of a date or year
+  column. A
+  stricter match on any item always beats a looser one on another, and a word
+  that reaches two items still declines.
+- **The thesaurus (`THESAURUS`, 2026-10-20).** `querybuilder/thesaurus/` holds
+  a small precomputed extract of WordNet (licence notice alongside). Two words
+  link only when the first meaning of each, counting only database-like
+  categories (people, groups, artifacts, places, acts, events, possessions,
+  communication, time, quantities, attributes), is the same WordNet synset,
+  and that meaning carries a clear majority of the word's usage. So `pupil` and
+  `student`, `given name` and `first name`, `doctor` and `physician` link;
+  `class`/`course`, `module`/`faculty`, `faculty`/`ability`,
+  `section`/`department` and `order`/`command` do not. Instruction words never
+  link. It works offline, gives the same answer every time, and reaches a whole
+  column name or one word of a multi-word column. A hand-written deny list
+  (`thesaurus/deny.json`) unlinks pairs a person judged loose, both ways
+  round: `task`/`project`, `undertaking`/`project`, `hour`/`hr`, `sexual
+  activity`/`sex`, `last`/`close`, `title`/`statute title`, `ctc`/
+  `counterterrorist center`.
+- **Curated domains, 2026-10-20.** `synonyms.json` grew from 12 groups to
+  57, one person-reviewed group at a time, covering retail, education
+  (`teacher, faculty, instructor`; `student, pupil, learner`), healthcare
+  (`doctor, physician`; `medication, medicine, drug`), HR (`candidate,
+  applicant`; `manager, supervisor`), banking (`invoice, bill`; `transaction,
+  txn`), hotels (`reservation, booking`), transport (`car, automobile`;
+  `driver, chauffeur`) and events (`attendee, participant`). No word is in two
+  groups and none is an instruction word.
+- **Since 2026-10-20:**
+  - A synonym can reach **one word of a multi-word column**: `salary` →
+    `offers.ctc_lpa` through the group `salary, ctc, pay, wage,
+    compensation`. Before, synonyms only reached one-word columns.
+  - An **abbreviated column name** is reached by the words it stands for,
+    from `querybuilder/abbreviations.json`: `first name` → `Fname`,
+    `birth date` → `Bdate`, `department number` → `Dno`. This is tried
+    after aliases and before synonyms, and binds only when exactly one
+    column fits.
 
 #### E6 · Joins come from declared foreign keys, along the shortest chain
 - **What it does:** when two or more tables are named, it follows the
@@ -264,11 +345,39 @@ one of five kinds, strictest first:
     relationship between …` for two tables, `… no chain of relationships
     linking … within four tables` for more);
   - the chain would need **more than four** tables;
-  - two chains are **equally short**: two keys between the same pair
-    (`orders.billing_address_id` and `orders.shipping_address_id` both point
-    at `addresses`, so "orders with addresses" has two right answers), or two
-    different routes of the same length (`There are two equally short ways to
-    connect …`).
+  - two chains are **equally short** and the wording doesn't settle it (see
+    below): two keys between the same pair (`orders.billing_address_id` and
+    `orders.shipping_address_id` both point at `addresses`, so "orders with
+    addresses" has two right answers), or two different routes of the same
+    length (`There are two equally short ways to connect … (through faculty
+    (faculty.dept_id, students.advisor_id), or …)` — each route names its
+    keys, so two routes through the same table read differently).
+- **Choosing among equals by wording (2026-10-20):** a key's **role** is
+  what its column name says beyond the table it points at: `head` in
+  `departments.head_faculty_id → faculty.faculty_id`, `shipping` in
+  `shipping_address_id`, `manager` in `Mgr_ssn`. A key whose name says
+  nothing more (`faculty.dept_id → departments`, `EMPLOYEE.Dno →
+  DEPARTMENT.Dnumber`) has no role. Among equally short chains:
+  1. a chain is dropped if it uses a key whose role the question doesn't
+     name;
+  2. of the rest, the one naming the most roles is used, if there is
+     exactly one.
+
+  So `faculty in the mathematics department` uses `faculty.dept_id` (the
+  question doesn't say "head"), `departments with their head faculty` uses
+  `head_faculty_id`, and `departments and students` goes through `programs`
+  rather than through a faculty advisor. `orders with addresses` still
+  declines; `orders with their shipping addresses` builds. The choice is
+  listed under "Read as" (`CHOSEN_JOIN`) and the query reports 0.85.
+- **A role names a table (2026-10-20):** a word in the question that spells
+  the role of a key on a named table also reaches the table that key points
+  at, joined on that key. `list each department and their department heads`
+  → `departments JOIN faculty ON departments.head_faculty_id =
+  faculty.faculty_id`; `departments and their managers` → `DEPARTMENT JOIN
+  EMPLOYEE ON DEPARTMENT.Mgr_ssn = EMPLOYEE.Ssn`. It does not apply when
+  another column of the same table carries the role word (`shipping` with
+  both `shipping_address_id` and `shipping_date`), or when one word spells
+  roles leading to two tables.
 - **Example:** `which customers placed more than three orders` → `customers
   JOIN orders ON customers.id = orders.customer_id`. `customers and products`
   → `customers JOIN orders … JOIN order_items … JOIN products …` (until
@@ -573,6 +682,59 @@ alike.
 - **Example:** `count and average amount of payments per method` →
   `SELECT method, COUNT(*), AVG(amount) FROM payments GROUP BY method;`
 
+#### E31 · Narrower word plus a filter
+- **Added 2026-10-20.** A word naming a *kind of* what a table holds
+  (`surgeons` on `physicians`) is read as that table filtered to the kind. The
+  filter is what makes the answer right: the rows returned are exactly the
+  ones asked about.
+- **All three must hold, or the word stays unread and the engine declines as
+  before:**
+  1. **Kind of.** In WordNet the word's first database-like meaning is a kind
+     of the table's, at most two steps up (`surgeon` is a kind of
+     `physician`). Only class links count: an instance (`paris` of `city`)
+     is never a kind, and a pair in the deny list never links.
+  2. **The data names it.** Exactly one (table, column) stores a value equal,
+     ignoring case, to the word or a related form of it (`surgeon`,
+     `Surgery`, `Surgical`), looked up from the stored data as in E14.
+  3. **Exact.** A whole stored value only: `General Surgery` does not match
+     `surgeons`; two columns holding a match decline.
+
+  Only category-like columns are searched. A column whose name words, after
+  abbreviations are expanded (`Lname` → `last name`), include `name`,
+  `surname`, `title`, `email`, `address`, `phone`, `code` or `id` is never
+  searched, so `show cooks` never filters on a surname `Cook`. Nor is a
+  column whose share of distinct values, when the database reports it, is
+  above 0.5.
+- **It reaches the table** whether or not the question also names it (`show
+  surgeons`, `physicians who are surgeons`), joins to a named table along
+  declared keys (`patients of surgeons`), and combines with a filter on a
+  different column. The narrowed table takes the place of its word in the
+  question, so the first thing named stays the subject: `surgeons with
+  patients` lists physicians, as `physicians with patients` does. Recorded
+  as `NARROWER`, 0.85; "Read as" shows `"surgeons"
+  → physicians.department = 'Surgery'`.
+- **MongoDB:** the same reading gives `db.physicians.find({"department":
+  "Surgery"})`.
+- **Declines when:**
+  - the question joins its conditions with `or` (`show surgeons with salary
+    over 100 or salary under 5`);
+  - the question is a delete (`delete surgeons`): a narrowing never chooses
+    rows to delete;
+  - the question also filters the narrowed column another way (`show surgeons
+    in cardiology`);
+  - the question holds a second narrower word (`show surgeons and
+    cardiologists`);
+  - the question holds a negation or exclusion word (`not`, `no`, `non`,
+    `never`, any word ending in `n't`, `except`, `excluding`, `other than`,
+    `without`, `but`): `physicians who are not cardiologists` declines rather
+    than read as cardiologists;
+  - the question checks that something is missing (E27's `without`, `with
+    no`, `with zero`, `never …ed`): `surgeons with zero patients`.
+- **Never read:** a broader word (`people` → `patients`), which no filter
+  could make correct.
+- **Example:** `show surgeons` → `SELECT * FROM physicians WHERE department =
+  'Surgery';`
+
 ### Safety checks
 
 #### E17 · No unconditional delete
@@ -580,7 +742,23 @@ alike.
 - **Why:** a delete without a condition empties the table. The engine never
   writes one, even when the question literally asks for it. (QuerySense
   never runs generated SQL anyway, but it shouldn't produce this.)
-- **Example:** `delete all customers` → declined.
+- **Example:** `delete all customers` → refused.
+- **Refused, not declined (2026-10-26):** a declined question goes on to the
+  cache and the language model; a refused one stops here. The response
+  carries no query, the trace outcome `REFUSED` with the reason, confidence
+  0, and nothing is saved to history. Before this, the model was asked
+  anyway and wrote `DELETE FROM customers;`, which the output check then
+  flagged — a second of work to put a destructive statement on screen.
+
+#### E17a · No dropping or emptying a table
+- **What it does:** a question that opens with `drop` or `truncate`
+  (optionally after `please`) is refused, whether or not it names a known
+  table, in both dialects.
+- **Why:** the engine never writes `DROP` or `TRUNCATE`, and neither should
+  the model it would otherwise hand the question to.
+- **Not refused:** `drop` anywhere but the opening — `show the drop rate of
+  orders` reads as an ordinary question.
+- **Example:** `drop table orders` → refused.
 
 #### E18 · Columns must exist right now
 - **What it does:** checks every matched column against the live database's
@@ -632,7 +810,7 @@ alike.
   layer passed. Without the trace, "rule-based and explainable" is a claim;
   with it, it can be checked. The Analysis screen shows it.
 
-### The 39 ways the rule engine declines
+### The 46 ways the rule engine declines
 
 | Group | Count | Rules |
 |---|---|---|
@@ -653,7 +831,8 @@ alike.
 | Without: no second table, or combined with a count | 2 | E27 |
 | `and` and `or` mixed between conditions, or `or` with `without` | 2 | E29 |
 | A column, or a stored value, on two chain tables | 2 | E6 |
-| A date with no date column, or several date columns and none named | 2 | E3 |
+| A date with no date column, several date columns and none named, or a range finer than a year on a year column | 3 | E3 |
+| A narrower word (E31) combined with `or`, with a delete, with another filter on its column, with a second narrower word, with a negation, or with a check that something is missing | 6 | E31 |
 
 ---
 
@@ -716,6 +895,20 @@ alike.
   - such an answer is not saved, so it is never served from the cache;
   - a cached MongoDB answer is rechecked the same way before it is served,
     so a change of active schema retires it.
+- **Unsafe statement (2026-10-19):** an LLM answer that would touch every row
+  is treated the same way, before the schema check: a `DELETE` or `UPDATE` with
+  no `WHERE`, a `DROP` or `TRUNCATE`; for MongoDB `deleteMany({})`,
+  `remove({})`, `updateMany({}, …)` or `drop()`. It gets confidence 0.20 and a
+  `schemaWarning` saying so, is never saved, and a cached copy is not served.
+  The rule engine already refuses these (E-rules); this stops the model
+  handing back what the rule engine declined.
+- **Unrelated join (MySQL, 2026-10-20):** when the active schema declares
+  foreign keys, an LLM `JOIN … ON a.x = b.y` must match one of them (either
+  direction), or join two columns of the same name. Otherwise it is
+  reported like an unknown column — confidence 0.20, a `schemaWarning`
+  naming both columns, never saved or served from the cache. It was added
+  after the model answered "each department with its average student
+  admission year" with `departments.dept_id = students.program_id`.
 
 ---
 
@@ -957,7 +1150,9 @@ over from the old MongoDB-only unindexed-filter rule. RS1 and RS3 carry the same
 Moves every **domain** suggestion (section 7) one step: up under low, unchanged
 under medium, down under high, never below `INFO` or above `CRITICAL`. So the
 same finding reads as `CRITICAL` on a small machine and `INFO` on a large one.
-The resource module's own suggestions (RS1–RS3) aren't shifted.
+The resource module's own suggestions (RS1–RS3) aren't shifted. An `INFO`
+suggestion is not moved up (since 2026-10-19): the only one is TX5, which says
+the query is already ideal, and low memory doesn't make that a warning.
 
 ---
 

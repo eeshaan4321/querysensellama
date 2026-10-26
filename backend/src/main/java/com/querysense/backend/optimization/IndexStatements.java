@@ -13,6 +13,21 @@ public final class IndexStatements {
     private IndexStatements() {
     }
 
+    public static String forMySqlQuery(com.querysense.backend.dto.QueryAnalysisResult result, String column) {
+        String table = result.getTableName();
+        if (table == null || column == null) {
+            return null;
+        }
+        int dot = column.lastIndexOf('.');
+        if (dot >= 0) {
+            if (!column.substring(0, dot).equalsIgnoreCase(table)) {
+                return null;
+            }
+            column = column.substring(dot + 1);
+        }
+        return create(Dialect.MYSQL, result.realTableName(table), column);
+    }
+
     public static String create(Dialect dialect, String table, String column) {
         return column == null ? null : create(dialect, table, List.of(new IndexSpec.KeyPart(column, 1)));
     }

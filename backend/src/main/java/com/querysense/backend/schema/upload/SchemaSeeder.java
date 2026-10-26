@@ -14,6 +14,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -86,6 +87,7 @@ public class SchemaSeeder implements SchemaSeeding {
             }
         }
         ordered.forEach(t -> pointSelfReferencesAtEarlierRows(t, firstGenerated.getOrDefault(t.name(), 0)));
+        ordered.forEach(t -> repairOrphans(t, warnings));
         ordered.forEach(this::analyse);
 
         return new SeedReport(rowCounts, warnings);
@@ -197,10 +199,9 @@ public class SchemaSeeder implements SchemaSeeding {
 
         List<ParsedTable> ordered = new ArrayList<>();
         Set<String> placed = new LinkedHashSet<>();
-        boolean progressed = true;
 
-        while (progressed && placed.size() < byName.size()) {
-            progressed = false;
+        while (placed.size() < byName.size()) {
+            boolean progressed = false;
             for (Map.Entry<String, Set<String>> entry : dependsOn.entrySet()) {
                 if (placed.contains(entry.getKey())) {
                     continue;
@@ -211,16 +212,33 @@ public class SchemaSeeder implements SchemaSeeding {
                     progressed = true;
                 }
             }
-        }
-
-        for (Map.Entry<String, ParsedTable> entry : byName.entrySet()) {
-            if (!placed.contains(entry.getKey())) {
-                log.warn("Table '{}' is part of a foreign-key cycle; seeding it in declaration order.",
-                        entry.getValue().name());
-                ordered.add(entry.getValue());
+            if (!progressed) {
+                String breaker = dependsOn.entrySet().stream()
+                        .filter(e -> !placed.contains(e.getKey()) && reachesItself(e.getKey(), dependsOn, placed))
+                        .min(Comparator.comparingLong(e -> e.getValue().stream().filter(d -> !placed.contains(d)).count()))
+                        .orElseThrow().getKey();
+                log.warn("Table '{}' is part of a foreign-key cycle; seeding it before a table it references.",
+                        byName.get(breaker).name());
+                ordered.add(byName.get(breaker));
+                placed.add(breaker);
             }
         }
         return ordered;
+    }
+
+    private static boolean reachesItself(String start, Map<String, Set<String>> dependsOn, Set<String> placed) {
+        Set<String> seen = new HashSet<>();
+        List<String> pending = new ArrayList<>(dependsOn.get(start));
+        while (!pending.isEmpty()) {
+            String next = pending.remove(pending.size() - 1);
+            if (next.equals(start)) {
+                return true;
+            }
+            if (!placed.contains(next) && seen.add(next)) {
+                pending.addAll(dependsOn.get(next));
+            }
+        }
+        return false;
     }
 
     private TableSeedResult insertRows(ParsedTable table, int count, int start) {
@@ -258,6 +276,9 @@ public class SchemaSeeder implements SchemaSeeding {
             }
         }
         int targetRows = start + count;
+        List<int[]> textSelfLinks = textSelfLinks(table);
+        List<List<Object>> builtTargets = new ArrayList<>();
+        textSelfLinks.forEach(link -> builtTargets.add(new ArrayList<>()));
 
         List<Object[]> batch = new ArrayList<>(BATCH_SIZE);
         int inserted = 0;
@@ -276,6 +297,13 @@ public class SchemaSeeder implements SchemaSeeding {
                 }
             }
             if (values != null) {
+                for (int l = 0; l < textSelfLinks.size(); l++) {
+                    List<Object> built = builtTargets.get(l);
+                    if (!built.isEmpty()) {
+                        values[textSelfLinks.get(l)[0]] = built.get((built.size() - 1) / 2);
+                    }
+                    built.add(values[textSelfLinks.get(l)[1]]);
+                }
                 batch.add(values);
             }
 
@@ -380,9 +408,91 @@ public class SchemaSeeder implements SchemaSeeding {
         }
     }
 
+    private List<int[]> textSelfLinks(ParsedTable table) {
+        List<int[]> links = new ArrayList<>();
+        List<String> names = table.columnNames();
+        for (KnownSchema.ForeignKey fk : table.foreignKeys()) {
+            if (!fk.toTable().equalsIgnoreCase(table.name()) || isIntegerColumn(table, fk.toColumn())) {
+                continue;
+            }
+            int from = indexOfIgnoreCase(names, fk.fromColumn());
+            int to = indexOfIgnoreCase(names, fk.toColumn());
+            if (from >= 0 && to >= 0) {
+                links.add(new int[] {from, to});
+            }
+        }
+        return links;
+    }
+
+    private static int indexOfIgnoreCase(List<String> names, String name) {
+        for (int i = 0; i < names.size(); i++) {
+            if (names.get(i).equalsIgnoreCase(name)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private static boolean isIntegerColumn(ParsedTable table, String column) {
+        return table.column(column).map(c -> INTEGER_TYPES.contains(c.normalisedType())).orElse(false);
+    }
+
+    private void repairOrphans(ParsedTable table, List<String> warnings) {
+        Random picker = new Random(seed + table.name().hashCode() + 4);
+        String child = "`" + uploadCatalog + "`.`" + table.name() + "`";
+        for (KnownSchema.ForeignKey fk : table.foreignKeys()) {
+            String parent = "`" + uploadCatalog + "`.`" + fk.toTable() + "`";
+            String column = "`" + fk.fromColumn() + "`";
+            String key = "`" + fk.toColumn() + "`";
+            List<Object> orphans;
+            List<Object> parents;
+            try {
+                orphans = firstColumn(jdbcTemplate.queryForList("SELECT DISTINCT c." + column + " FROM " + child
+                        + " c LEFT JOIN " + parent + " p ON p." + key + " = c." + column
+                        + " WHERE c." + column + " IS NOT NULL AND p." + key + " IS NULL"));
+                if (orphans.isEmpty()) {
+                    continue;
+                }
+                parents = firstColumn(jdbcTemplate.queryForList("SELECT DISTINCT " + key + " FROM " + parent
+                        + " WHERE " + key + " IS NOT NULL LIMIT " + PARENT_VALUE_LIMIT));
+            } catch (DataAccessException e) {
+                log.warn("Could not check {}.{} against {}.{}: {}",
+                        table.name(), fk.fromColumn(), fk.toTable(), fk.toColumn(), e.getMessage());
+                continue;
+            }
+            ParsedColumn declared = table.column(fk.fromColumn()).orElse(null);
+            boolean nullable = declared != null && !declared.notNull() && !declared.primaryKey();
+            boolean oneEach = declared != null && declared.unique();
+            if (oneEach) {
+                parents = new ArrayList<>(parents);
+                parents.removeAll(existingValues(table, declared));
+            }
+            List<Object[]> updates = new ArrayList<>();
+            for (int i = 0; i < orphans.size(); i++) {
+                Object replacement = oneEach ? (i < parents.size() ? parents.get(i) : null)
+                        : parents.isEmpty() ? null : parents.get(picker.nextInt(parents.size()));
+                if (replacement != null || nullable) {
+                    updates.add(new Object[] {replacement, orphans.get(i)});
+                }
+            }
+            try {
+                jdbcTemplate.batchUpdate("UPDATE " + child + " SET " + column + " = ? WHERE " + column + " = ?", updates);
+                log.info("Pointed {} unmatched value(s) of {}.{} at rows of {}",
+                        updates.size(), table.name(), fk.fromColumn(), fk.toTable());
+            } catch (DataAccessException e) {
+                warnings.add("Some values of " + table.name() + "." + fk.fromColumn() + " match no row of "
+                        + fk.toTable() + " and could not be corrected -- " + rootReason(e));
+            }
+        }
+    }
+
+    private static List<Object> firstColumn(List<Map<String, Object>> rows) {
+        return rows.stream().map(row -> row.values().iterator().next()).toList();
+    }
+
     private void pointSelfReferencesAtEarlierRows(ParsedTable table, int firstGenerated) {
         for (KnownSchema.ForeignKey fk : table.foreignKeys()) {
-            if (!fk.toTable().equalsIgnoreCase(table.name())) {
+            if (!fk.toTable().equalsIgnoreCase(table.name()) || !isIntegerColumn(table, fk.toColumn())) {
                 continue;
             }
             String sql = "UPDATE `" + uploadCatalog + "`.`" + table.name() + "`"

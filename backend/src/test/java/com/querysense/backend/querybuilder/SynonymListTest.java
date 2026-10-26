@@ -41,4 +41,16 @@ class SynonymListTest {
         Set<String> seen = new HashSet<>();
         groups.forEach(group -> group.forEach(word -> assertThat(seen.add(word)).as(word).isTrue()));
     }
+
+    @Test
+    @DisplayName("common schema domains are covered")
+    void domainVocabulary() {
+        Synonyms s = Synonyms.builtIn();
+
+        assertThat(s.of("teacher")).contains("faculty", "instructor");
+        assertThat(s.of("teacher")).doesNotContain("professor", "lecturer");
+        assertThat(s.of("pupil")).contains("student", "learner");
+        assertThat(s.of("physician")).contains("doctor");
+        assertThat(Synonyms.builtInGroups()).hasSizeGreaterThanOrEqualTo(45);
+    }
 }

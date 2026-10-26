@@ -27,7 +27,7 @@ export function WorkbenchPage() {
       setSuggestions(null);
       setSchemaAdvice(null);
       report(response.handledBy, response.confidence);
-      postHistory({
+      if (response.generatedQuery) postHistory({
         userInput: naturalLanguageQuery,
         generatedQuery: response.generatedQuery,
         databaseType: response.targetDb,

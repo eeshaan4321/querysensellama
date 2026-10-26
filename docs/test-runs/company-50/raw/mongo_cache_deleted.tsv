@@ -1,0 +1,21 @@
+id	created_at	source	schema_label	user_input
+153	2026-10-04 12:53:42.627276	RULE_ENGINE	QuerySense MongoDB demo (built-in)	top 5 products by price
+154	2026-10-04 12:53:42.658302	RULE_ENGINE	QuerySense MongoDB demo (built-in)	customers without orders
+264	2026-10-04 13:57:51.025580	RULE_ENGINE	QuerySense MongoDB demo (built-in)	top 5 products by price
+265	2026-10-04 13:57:51.056884	RULE_ENGINE	QuerySense MongoDB demo (built-in)	customers without orders
+282	2026-10-04 13:57:51.808179	RULE_ENGINE	QuerySense MongoDB demo (built-in)	show all customers
+285	2026-10-04 13:57:51.852667	RULE_ENGINE	QuerySense MongoDB demo (built-in)	average price of products
+328	2026-10-04 15:13:48.132066	RULE_ENGINE	QuerySense MongoDB demo (built-in)	top 5 products by price
+329	2026-10-04 15:13:48.164002	RULE_ENGINE	QuerySense MongoDB demo (built-in)	customers without orders
+718	2026-10-04 15:25:24.879807	RULE_ENGINE	QuerySense MongoDB demo (built-in)	top 5 products by price
+719	2026-10-04 15:25:24.911864	RULE_ENGINE	QuerySense MongoDB demo (built-in)	customers without orders
+936	2026-10-04 15:29:19.516669	RULE_ENGINE	QuerySense MongoDB demo (built-in)	top 5 products by price
+937	2026-10-04 15:29:19.594582	RULE_ENGINE	QuerySense MongoDB demo (built-in)	customers without orders
+1164	2026-10-04 15:37:01.361757	RULE_ENGINE	QuerySense MongoDB demo (built-in)	top 5 products by price
+1165	2026-10-04 15:37:01.486750	RULE_ENGINE	QuerySense MongoDB demo (built-in)	customers without orders
+1383	2026-10-04 15:41:10.645237	RULE_ENGINE	QuerySense MongoDB demo (built-in)	top 5 products by price
+1384	2026-10-04 15:41:10.739974	RULE_ENGINE	QuerySense MongoDB demo (built-in)	customers without orders
+1602	2026-10-04 15:44:00.362521	RULE_ENGINE	QuerySense MongoDB demo (built-in)	top 5 products by price
+1603	2026-10-04 15:44:00.472213	RULE_ENGINE	QuerySense MongoDB demo (built-in)	customers without orders
+1821	2026-10-04 15:47:37.955345	RULE_ENGINE	QuerySense MongoDB demo (built-in)	top 5 products by price
+1822	2026-10-04 15:47:38.096300	RULE_ENGINE	QuerySense MongoDB demo (built-in)	customers without orders

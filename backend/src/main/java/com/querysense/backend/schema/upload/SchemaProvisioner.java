@@ -10,9 +10,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataAccessException;
+import org.springframework.jdbc.core.ConnectionCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -53,7 +57,11 @@ public class SchemaProvisioner implements SchemaProvisioning {
         createDatabase();
         dropExistingTables();
         schema.tables().forEach(this::createTable);
-        addForeignKeys(schema);
+    }
+
+    @Override
+    public List<String> finish(ParsedSchema schema) {
+        return addForeignKeys(schema);
     }
 
     private void createDatabase() {
@@ -123,20 +131,46 @@ public class SchemaProvisioner implements SchemaProvisioning {
         return type + "(" + String.join(", ", column.typeArgs()) + ")";
     }
 
-    private void addForeignKeys(ParsedSchema schema) {
-        int index = 0;
-        for (KnownSchema.ForeignKey fk : schema.allForeignKeys()) {
-            String constraint = "fk_" + fk.fromTable() + "_" + (index++);
-            String sql = "ALTER TABLE `" + uploadCatalog + "`.`" + fk.fromTable() + "`"
-                    + " ADD CONSTRAINT `" + constraint + "`"
-                    + " FOREIGN KEY (`" + fk.fromColumn() + "`)"
-                    + " REFERENCES `" + uploadCatalog + "`.`" + fk.toTable() + "` (`" + fk.toColumn() + "`)";
-            try {
-                jdbcTemplate.execute(sql);
-            } catch (DataAccessException e) {
-                log.warn("Skipping foreign key {}.{} -> {}.{}: {}",
-                        fk.fromTable(), fk.fromColumn(), fk.toTable(), fk.toColumn(), e.getMessage());
-            }
+    private List<String> addForeignKeys(ParsedSchema schema) {
+        List<String> warnings = new ArrayList<>();
+        List<KnownSchema.ForeignKey> foreignKeys = schema.allForeignKeys();
+        if (foreignKeys.isEmpty()) {
+            return warnings;
         }
+        jdbcTemplate.execute((ConnectionCallback<Void>) connection -> {
+            try (Statement statement = connection.createStatement()) {
+                statement.execute("SET FOREIGN_KEY_CHECKS = 0");
+                try {
+                    int index = 0;
+                    for (KnownSchema.ForeignKey fk : foreignKeys) {
+                        String sql = "ALTER TABLE `" + uploadCatalog + "`.`" + fk.fromTable() + "`"
+                                + " ADD CONSTRAINT `fk_" + fk.fromTable() + "_" + (index++) + "`"
+                                + " FOREIGN KEY (`" + fk.fromColumn() + "`)"
+                                + " REFERENCES `" + uploadCatalog + "`.`" + fk.toTable() + "` (`" + fk.toColumn() + "`)";
+                        try {
+                            statement.execute(sql);
+                        } catch (SQLException e) {
+                            log.warn("Skipping foreign key {}.{} -> {}.{}: {}",
+                                    fk.fromTable(), fk.fromColumn(), fk.toTable(), fk.toColumn(), e.getMessage());
+                            warnings.add("The foreign key " + fk.fromTable() + "." + fk.fromColumn() + " -> "
+                                    + fk.toTable() + "." + fk.toColumn() + " could not be added to the sample database, "
+                                    + "so MySQL does not enforce it -- " + rootReason(e));
+                        }
+                    }
+                } finally {
+                    statement.execute("SET FOREIGN_KEY_CHECKS = 1");
+                }
+            }
+            return null;
+        });
+        return warnings;
+    }
+
+    private static String rootReason(Throwable e) {
+        Throwable cause = e;
+        while (cause.getCause() != null && cause.getCause() != cause) {
+            cause = cause.getCause();
+        }
+        return cause.getMessage() == null ? String.valueOf(e.getMessage()) : cause.getMessage().trim();
     }
 }

@@ -61,26 +61,26 @@ public class VerdictService {
 
         if (worstScan != null && isLarge(worstScan)) {
             Double filtered = worstScan.getFiltered();
-            String name = displayNameOf(worstScan);
+            String name = displayNameOf(result, worstScan);
             String rows = formatCount(worstScan.getEstimatedRows());
 
             if (filtered != null && filtered < MAJORITY_DISCARDED_BELOW_PERCENT) {
                 return new AnalysisVerdict(Severity.CRITICAL, "Needs attention",
                         "Reads the whole " + name + " " + w.table() + " — about " + rows + " " + w.rows()
                                 + " — then discards " + formatPercent(100.0 - filtered) + " of what it read.",
-                        secondaryDetail(ignoredIndex, worstScan, w));
+                        secondaryDetail(result, ignoredIndex, worstScan, w));
             }
 
             if (filtered == null) {
                 return new AnalysisVerdict(Severity.WARNING, "Could be better",
                         "Reads the whole " + name + " " + w.table() + " — about " + rows + " " + w.rows() + ".",
-                        secondaryDetail(ignoredIndex, worstScan, w));
+                        secondaryDetail(result, ignoredIndex, worstScan, w));
             }
         }
 
         if (ignoredIndex != null) {
             return new AnalysisVerdict(Severity.WARNING, "Could be better",
-                    "An index on " + displayNameOf(ignoredIndex) + " was available, but " + w.engine()
+                    "An index on " + displayNameOf(result, ignoredIndex) + " was available, but " + w.engine()
                             + " chose not to use it.",
                     w.engine() + " only uses an index when it estimates that doing so is cheaper. On a small "
                             + w.table() + ", or for a query that matches most " + w.rows() + ", reading the "
@@ -101,7 +101,7 @@ public class VerdictService {
         }
 
         if (worstScan != null) {
-            String name = displayNameOf(worstScan);
+            String name = displayNameOf(result, worstScan);
             String rows = formatCount(worstScan.getEstimatedRows());
             Double filtered = worstScan.getFiltered();
 
@@ -164,10 +164,10 @@ public class VerdictService {
         return null;
     }
 
-    private String secondaryDetail(TableAnalysis ignoredIndex, TableAnalysis scanned, Words w) {
+    private String secondaryDetail(QueryAnalysisResult result, TableAnalysis ignoredIndex, TableAnalysis scanned, Words w) {
         if (ignoredIndex != null) {
             return w.engine() + (w.mongo() ? " considered " : " listed ") + ignoredIndex.getPossibleKeys() + " on "
-                    + displayNameOf(ignoredIndex)
+                    + displayNameOf(result, ignoredIndex)
                     + " as usable for this query and then chose not to use it.";
         }
         if (scanned.getPossibleKeys() == null || scanned.getPossibleKeys().isBlank()) {
@@ -184,8 +184,8 @@ public class VerdictService {
         return rows != null && rows >= largeTableRows;
     }
 
-    private String displayNameOf(TableAnalysis table) {
-        String name = table.getTableName();
+    private String displayNameOf(QueryAnalysisResult result, TableAnalysis table) {
+        String name = result.realTableName(table.getTableName());
         return name != null && !name.isBlank() ? name : "this query's";
     }
 

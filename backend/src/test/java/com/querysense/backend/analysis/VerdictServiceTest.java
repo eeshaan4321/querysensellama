@@ -96,6 +96,15 @@ class VerdictServiceTest {
     }
 
     @Test
+    @DisplayName("An aliased table is named by its real name, not the alias")
+    void aliasIsNamedByRealTable() {
+        QueryAnalysisResult result = resultWith(table("e", "ALL", 12_000L, 33.3, null, null));
+        result.setTableAliases(java.util.Map.of("e", "EMPLOYEE"));
+
+        assertThat(service.evaluate(result).getHeadline()).contains("EMPLOYEE table").doesNotContain(" e table");
+    }
+
+    @Test
     @DisplayName("A filtered percentage rounding to nothing is capped, not stated as 100%")
     void nearZeroFilteredIsCapped() {
         AnalysisVerdict verdict = service.evaluate(

@@ -15,6 +15,7 @@ final class TestParsers {
         return new QueryIntentParser(
                 new SchemaBinder(schemas),
                 new JoinPathResolver(schemas),
+                new NarrowerReader(),
                 List.of(mysql, mongo),
                 List.of(new SqlEmitter(), new MongoEmitter(schemas)),
                 RulesClock.fixed(LocalDate.of(2026, 10, 2), ZoneId.of("Asia/Kolkata")));

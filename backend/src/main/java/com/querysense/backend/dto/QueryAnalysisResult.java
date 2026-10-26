@@ -2,7 +2,10 @@ package com.querysense.backend.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 
 /** Result of analysing a query: plan metrics, flags and warnings. */
 public class QueryAnalysisResult {
@@ -42,6 +45,8 @@ public class QueryAnalysisResult {
     private MongoQueryShape mongoShape;
 
     private AnalysisVerdict verdict;
+
+    private Map<String, String> tableAliases = new HashMap<>();
 
     public QueryAnalysisResult() {}
 
@@ -143,4 +148,12 @@ public class QueryAnalysisResult {
 
     public boolean isExplainFailed() { return explainFailed; }
     public void setExplainFailed(boolean explainFailed) { this.explainFailed = explainFailed; }
+
+    @JsonIgnore
+    public Map<String, String> getTableAliases() { return tableAliases; }
+    public void setTableAliases(Map<String, String> tableAliases) { this.tableAliases = tableAliases == null ? new HashMap<>() : tableAliases; }
+
+    public String realTableName(String nameOrAlias) {
+        return nameOrAlias == null ? null : tableAliases.getOrDefault(nameOrAlias.toLowerCase(Locale.ROOT), nameOrAlias);
+    }
 }

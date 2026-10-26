@@ -39,7 +39,7 @@ public class ResourceConsciousService {
                 && result.getEstimatedRows() > ROW_COUNT_MEMORY_CONCERN_THRESHOLD;
 
         if (result.isUsesFilesort() && rowsAreSignificant) {
-            String sortIndex = IndexStatements.create(Dialect.MYSQL, result.getTableName(), result.getOrderByColumn());
+            String sortIndex = IndexStatements.forMySqlQuery(result, result.getOrderByColumn());
             switch (level) {
                 case LOW -> suggestions.add(OptimizationSuggestion.resource(
                         "Available memory is low and this filesort covers a significant row count — it is likely "
@@ -80,7 +80,7 @@ public class ResourceConsciousService {
                             + "increases pressure on the buffer pool and can slow down other concurrent queries, "
                             + "not just this one.",
                     SuggestionSeverity.WARNING,
-                    IndexStatements.create(Dialect.MYSQL, result.getTableName(), result.getFilteredColumn())));
+                    IndexStatements.forMySqlQuery(result, result.getFilteredColumn())));
         }
     }
 
@@ -154,6 +154,10 @@ public class ResourceConsciousService {
 
         List<OptimizationSuggestion> adjusted = new ArrayList<>();
         for (OptimizationSuggestion suggestion : suggestions) {
+            if (shift > 0 && suggestion.getSeverity() == SuggestionSeverity.INFO) {
+                adjusted.add(suggestion);
+                continue;
+            }
             SuggestionSeverity newSeverity = shiftSeverity(suggestion.getSeverity(), shift);
             adjusted.add(suggestion.withSeverity(newSeverity));
         }

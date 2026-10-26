@@ -1,0 +1,203 @@
+{
+  "status": 200,
+  "ms": 5887.0,
+  "response": {
+    "schemaId": "upload-9602f662",
+    "label": "Employee_Database_Script.sql",
+    "catalog": "querysense_uploads",
+    "builtIn": false,
+    "tables": [
+      {
+        "name": "EMPLOYEE",
+        "columns": [
+          "Fname",
+          "Minit",
+          "Lname",
+          "Ssn",
+          "Bdate",
+          "Address",
+          "Sex",
+          "Salary",
+          "Super_ssn",
+          "Dno"
+        ],
+        "rowCount": 12000,
+        "embeddedArrays": [],
+        "fieldTypes": {
+          "Fname": "VARCHAR",
+          "Minit": "CHAR",
+          "Lname": "VARCHAR",
+          "Ssn": "CHAR",
+          "Bdate": "DATE",
+          "Address": "VARCHAR",
+          "Sex": "CHAR",
+          "Salary": "DECIMAL",
+          "Super_ssn": "CHAR",
+          "Dno": "INT"
+        },
+        "aliases": [],
+        "columnAliases": {}
+      },
+      {
+        "name": "DEPARTMENT",
+        "columns": [
+          "Dname",
+          "Dnumber",
+          "Mgr_ssn",
+          "Mgr_start_date"
+        ],
+        "rowCount": 12000,
+        "embeddedArrays": [],
+        "fieldTypes": {
+          "Dname": "VARCHAR",
+          "Dnumber": "INT",
+          "Mgr_ssn": "CHAR",
+          "Mgr_start_date": "DATE"
+        },
+        "aliases": [],
+        "columnAliases": {}
+      },
+      {
+        "name": "DEPT_LOCATIONS",
+        "columns": [
+          "Dnumber",
+          "Dlocation"
+        ],
+        "rowCount": 12000,
+        "embeddedArrays": [],
+        "fieldTypes": {
+          "Dnumber": "INT",
+          "Dlocation": "VARCHAR"
+        },
+        "aliases": [],
+        "columnAliases": {}
+      },
+      {
+        "name": "PROJECT",
+        "columns": [
+          "Pname",
+          "Pnumber",
+          "Plocation",
+          "Dnum"
+        ],
+        "rowCount": 12000,
+        "embeddedArrays": [],
+        "fieldTypes": {
+          "Pname": "VARCHAR",
+          "Pnumber": "INT",
+          "Plocation": "VARCHAR",
+          "Dnum": "INT"
+        },
+        "aliases": [],
+        "columnAliases": {}
+      },
+      {
+        "name": "WORKS_ON",
+        "columns": [
+          "Essn",
+          "Pno",
+          "Hours"
+        ],
+        "rowCount": 12000,
+        "embeddedArrays": [],
+        "fieldTypes": {
+          "Essn": "CHAR",
+          "Pno": "INT",
+          "Hours": "DECIMAL"
+        },
+        "aliases": [],
+        "columnAliases": {}
+      },
+      {
+        "name": "DEPENDENT",
+        "columns": [
+          "Essn",
+          "Dependent_name",
+          "Sex",
+          "Bdate",
+          "Relationship"
+        ],
+        "rowCount": 12000,
+        "embeddedArrays": [],
+        "fieldTypes": {
+          "Essn": "CHAR",
+          "Dependent_name": "VARCHAR",
+          "Sex": "CHAR",
+          "Bdate": "DATE",
+          "Relationship": "VARCHAR"
+        },
+        "aliases": [],
+        "columnAliases": {}
+      }
+    ],
+    "foreignKeys": [
+      {
+        "fromTable": "EMPLOYEE",
+        "fromColumn": "Super_ssn",
+        "toTable": "EMPLOYEE",
+        "toColumn": "Ssn"
+      },
+      {
+        "fromTable": "EMPLOYEE",
+        "fromColumn": "Dno",
+        "toTable": "DEPARTMENT",
+        "toColumn": "Dnumber"
+      },
+      {
+        "fromTable": "DEPARTMENT",
+        "fromColumn": "Mgr_ssn",
+        "toTable": "EMPLOYEE",
+        "toColumn": "Ssn"
+      },
+      {
+        "fromTable": "DEPT_LOCATIONS",
+        "fromColumn": "Dnumber",
+        "toTable": "DEPARTMENT",
+        "toColumn": "Dnumber"
+      },
+      {
+        "fromTable": "PROJECT",
+        "fromColumn": "Dnum",
+        "toTable": "DEPARTMENT",
+        "toColumn": "Dnumber"
+      },
+      {
+        "fromTable": "WORKS_ON",
+        "fromColumn": "Essn",
+        "toTable": "EMPLOYEE",
+        "toColumn": "Ssn"
+      },
+      {
+        "fromTable": "WORKS_ON",
+        "fromColumn": "Pno",
+        "toTable": "PROJECT",
+        "toColumn": "Pnumber"
+      },
+      {
+        "fromTable": "DEPENDENT",
+        "fromColumn": "Essn",
+        "toTable": "EMPLOYEE",
+        "toColumn": "Ssn"
+      }
+    ],
+    "warnings": [],
+    "loadedAt": "2026-10-20T14:19:15.237106100Z",
+    "dialect": "MYSQL",
+    "indexes": []
+  },
+  "db_checks": {
+    "row_counts": {
+      "EMPLOYEE": "12000",
+      "DEPARTMENT": "12000",
+      "DEPT_LOCATIONS": "12000",
+      "PROJECT": "12000",
+      "WORKS_ON": "12000",
+      "DEPENDENT": "12000"
+    },
+    "fk_constraints": "department\tMgr_ssn\temployee\tSsn\ndependent\tEssn\temployee\tSsn\ndept_locations\tDnumber\tdepartment\tDnumber\nemployee\tDno\tdepartment\tDnumber\nemployee\tSuper_ssn\temployee\tSsn\nproject\tDnum\tdepartment\tDnumber\nworks_on\tEssn\temployee\tSsn\nworks_on\tPno\tproject\tPnumber\n",
+    "indexes": "department\tDname\t0\tDname\ndepartment\tfk_DEPARTMENT_2\t1\tMgr_ssn\ndepartment\tPRIMARY\t0\tDnumber\ndependent\tPRIMARY\t0\tEssn,Dependent_name\ndept_locations\tPRIMARY\t0\tDnumber,Dlocation\nemployee\tfk_EMPLOYEE_0\t1\tSuper_ssn\nemployee\tfk_EMPLOYEE_1\t1\tDno\nemployee\tPRIMARY\t0\tSsn\nproject\tfk_PROJECT_4\t1\tDnum\nproject\tPname\t0\tPname\nproject\tPRIMARY\t0\tPnumber\nworks_on\tfk_WORKS_ON_6\t1\tPno\nworks_on\tPRIMARY\t0\tEssn,Pno\n",
+    "orphans": "EMPLOYEE.Dno\t0\nEMPLOYEE.Super_ssn\t0\nDEPARTMENT.Mgr_ssn\t0\nWORKS_ON.Essn\t0\nWORKS_ON.Pno\t0\nDEPENDENT.Essn\t0\nPROJECT.Dnum\t0\nDEPT_LOCATIONS.Dnumber\t0\n",
+    "file_rows": "John\tSmith\t123456789\t30000\t333445555\t5\nFranklin\tWong\t333445555\t40000\t888665555\t5\nJames\tBorg\t888665555\t55000\tNULL\t1\n",
+    "file_departments": "Headquarters\t1\t888665555\nAdministration\t4\t987654321\nResearch\t5\t333445555\n"
+  }
+}

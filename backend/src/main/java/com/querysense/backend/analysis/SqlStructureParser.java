@@ -6,11 +6,21 @@ import net.sf.jsqlparser.expression.Expression;
 import net.sf.jsqlparser.expression.operators.conditional.AndExpression;
 import net.sf.jsqlparser.expression.operators.relational.ComparisonOperator;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
+import net.sf.jsqlparser.schema.Column;
+import net.sf.jsqlparser.schema.Table;
 import net.sf.jsqlparser.statement.Statement;
 import net.sf.jsqlparser.statement.delete.Delete;
+import net.sf.jsqlparser.statement.select.FromItem;
+import net.sf.jsqlparser.statement.select.Join;
 import net.sf.jsqlparser.statement.select.PlainSelect;
 import net.sf.jsqlparser.statement.select.Select;
 import org.springframework.stereotype.Component;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 
 /** Extracts a query's table, type and filtered and ordered columns from its SQL text. */
 @Component
@@ -49,6 +59,7 @@ public class SqlStructureParser {
             if (plainSelect.getFromItem() != null) {
                 result.setTableName(plainSelect.getFromItem().toString());
             }
+            result.setTableAliases(aliasesOf(plainSelect));
 
             boolean hasJoin = plainSelect.getJoins() != null && !plainSelect.getJoins().isEmpty();
             boolean hasWhere = plainSelect.getWhere() != null;
@@ -78,8 +89,7 @@ public class SqlStructureParser {
                 result.setFilteredColumn(extractFirstWhereColumn(plainSelect.getWhere()));
             }
             if (hasOrderBy) {
-                result.setOrderByColumn(
-                        plainSelect.getOrderByElements().get(0).getExpression().toString());
+                result.setOrderByColumn(columnOnly(plainSelect.getOrderByElements().get(0).getExpression()));
             }
         } else {
             result.addWarning("Compound SELECT (e.g. UNION) detected — "
@@ -92,17 +102,17 @@ public class SqlStructureParser {
             return extractFirstWhereColumn(andExpression.getLeftExpression());
         }
         if (where instanceof ComparisonOperator comparison) {
-            return comparison.getLeftExpression().toString();
+            return columnOnly(comparison.getLeftExpression());
         }
         if (where instanceof net.sf.jsqlparser.expression.operators.relational.ParenthesedExpressionList<?> list
                 && list.size() == 1) {
             return extractFirstWhereColumn(list.get(0));
         }
         if (where instanceof net.sf.jsqlparser.expression.operators.relational.InExpression in) {
-            return in.getLeftExpression().toString();
+            return columnOnly(in.getLeftExpression());
         }
         if (where instanceof net.sf.jsqlparser.expression.operators.relational.Between between) {
-            return between.getLeftExpression().toString();
+            return columnOnly(between.getLeftExpression());
         }
         if (where instanceof net.sf.jsqlparser.expression.operators.conditional.OrExpression or) {
             String left = extractFirstWhereColumn(or.getLeftExpression());
@@ -110,6 +120,25 @@ public class SqlStructureParser {
             return left != null && left.equalsIgnoreCase(right) ? left : null;
         }
         return null;
+    }
+
+    private static String columnOnly(Expression expression) {
+        return expression instanceof Column column ? column.toString() : null;
+    }
+
+    private static Map<String, String> aliasesOf(PlainSelect select) {
+        List<FromItem> items = new ArrayList<>();
+        items.add(select.getFromItem());
+        if (select.getJoins() != null) {
+            select.getJoins().stream().map(Join::getRightItem).forEach(items::add);
+        }
+        Map<String, String> aliases = new HashMap<>();
+        for (FromItem item : items) {
+            if (item instanceof Table table && table.getAlias() != null) {
+                aliases.put(table.getAlias().getName().toLowerCase(Locale.ROOT), table.getName());
+            }
+        }
+        return aliases;
     }
 
     private String stripTrailingSemicolon(String sql) {

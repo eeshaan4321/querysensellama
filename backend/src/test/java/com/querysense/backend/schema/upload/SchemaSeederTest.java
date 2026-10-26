@@ -337,6 +337,64 @@ class SchemaSeederTest {
                 .isEqualTo("INSERT INTO `querysense_uploads`.`grade_scale` (`letter`, `points`) VALUES (?, ?)");
     }
 
+    @Test
+    @DisplayName("a table that references a foreign-key cycle is seeded after the cycle, not in declaration order")
+    void dependentOfCycleWaitsForIt() {
+        ParsedTable locations = new ParsedTable("locations", List.of(pk("id"), col("dept_id", "INT")),
+                List.of(new KnownSchema.ForeignKey("locations", "dept_id", "department", "id")));
+        ParsedTable employee = new ParsedTable("employee", List.of(pk("id"), col("dept_id", "INT")),
+                List.of(new KnownSchema.ForeignKey("employee", "dept_id", "department", "id")));
+        ParsedTable department = new ParsedTable("department", List.of(pk("id"), col("mgr_id", "INT")),
+                List.of(new KnownSchema.ForeignKey("department", "mgr_id", "employee", "id")));
+
+        assertThat(seeder.orderTables(new ParsedSchema(List.of(locations, employee, department), List.of())))
+                .extracting(ParsedTable::name).containsExactly("employee", "department", "locations");
+    }
+
+    @Test
+    @DisplayName("a self-reference on a text key points each generated row at an earlier generated row")
+    @SuppressWarnings("unchecked")
+    void textSelfReferencePointsAtEarlierRows() {
+        ParsedTable employee = new ParsedTable("employee",
+                List.of(new ParsedColumn("ssn", "CHAR", List.of("9"), true, false, false, true),
+                        new ParsedColumn("super_ssn", "CHAR", List.of("9"), false, false, false, false)),
+                List.of(new KnownSchema.ForeignKey("employee", "super_ssn", "employee", "ssn")));
+
+        seeder.seed(new ParsedSchema(List.of(employee), List.of()));
+
+        ArgumentCaptor<List<Object[]>> batches = ArgumentCaptor.forClass(List.class);
+        verify(jdbcTemplate, atLeastOnce()).batchUpdate(
+                org.mockito.ArgumentMatchers.startsWith("INSERT INTO `querysense_uploads`.`employee`"), batches.capture());
+        List<Object[]> rows = batches.getAllValues().stream().flatMap(List::stream).toList();
+        assertThat(rows).hasSize(50);
+        assertThat(rows.get(0)[1]).isNull();
+        for (int i = 1; i < rows.size(); i++) {
+            assertThat(rows.get(i)[1]).isEqualTo(rows.get((i - 1) / 2)[0]);
+        }
+        ArgumentCaptor<String> executed = ArgumentCaptor.forClass(String.class);
+        verify(jdbcTemplate, atLeastOnce()).execute(executed.capture());
+        assertThat(executed.getAllValues()).noneMatch(s -> s.startsWith("UPDATE"));
+    }
+
+    @Test
+    @DisplayName("values that match no parent row are pointed at real parent rows before constraints go on")
+    @SuppressWarnings("unchecked")
+    void repairsOrphansBeforeConstraints() {
+        org.mockito.Mockito.when(jdbcTemplate.queryForList(org.mockito.ArgumentMatchers.startsWith("SELECT DISTINCT c.`customer_id`")))
+                .thenReturn(List.of(Map.of("customer_id", 900), Map.of("customer_id", 901)));
+        org.mockito.Mockito.when(jdbcTemplate.queryForList(org.mockito.ArgumentMatchers.startsWith("SELECT DISTINCT `id` FROM `querysense_uploads`.`customers`")))
+                .thenReturn(List.of(Map.of("id", 7)));
+
+        SeedReport report = seeder.seed(customersAndOrders());
+
+        ArgumentCaptor<List<Object[]>> updates = ArgumentCaptor.forClass(List.class);
+        verify(jdbcTemplate).batchUpdate(
+                org.mockito.ArgumentMatchers.eq("UPDATE `querysense_uploads`.`orders` SET `customer_id` = ? WHERE `customer_id` = ?"),
+                updates.capture());
+        assertThat(updates.getValue()).extracting(u -> u[0] + "<-" + u[1]).containsExactly("7<-900", "7<-901");
+        assertThat(report.warnings()).isEmpty();
+    }
+
     private static ParsedSchema customersAndOrders() {
         ParsedTable customers = new ParsedTable("customers",
                 List.of(pk("id"), col("name", "VARCHAR")), List.of());

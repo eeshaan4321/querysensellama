@@ -37,7 +37,7 @@ export function AnalysisPage() {
     }
   }
 
-  if (!build) {
+  if (!build?.generatedQuery) {
     return (
       <div>
         <PageHeader title="Analysis" description="Runs the real plan — MySQL EXPLAIN or MongoDB explain — and the optimization and resource-aware suggestions those findings trigger." />

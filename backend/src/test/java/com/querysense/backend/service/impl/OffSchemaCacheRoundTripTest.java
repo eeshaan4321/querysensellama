@@ -101,6 +101,28 @@ class OffSchemaCacheRoundTripTest {
     }
 
     @Test
+    @DisplayName("an LLM DELETE with no WHERE is flagged at 0.2, never cached, and not served from an older cached row")
+    void unqualifiedDeleteIsFlaggedAndNeverCached() {
+        String question = "delete orders";
+        QueryHistory older = new QueryHistory();
+        older.setUserInput(question);
+        older.setDatabaseType("MySQL");
+        older.setSchemaLabel(KnownSchema.builtIn().label());
+        older.setSource("OLLAMA");
+        older.setGeneratedQuery("DELETE FROM orders;");
+        older.setConfidence(0.65);
+        stored.add(older);
+        when(llm.generateQuery(anyString(), anyString())).thenReturn("DELETE FROM orders;");
+
+        QueryResponse response = service.generateQuery(question, "MySQL");
+
+        assertThat(response.getHandledBy()).isEqualTo("OLLAMA");
+        assertThat(response.getConfidence()).isEqualTo(0.2);
+        assertThat(response.getSchemaWarning()).contains("every row");
+        assertThat(stored).containsExactly(older);
+    }
+
+    @Test
     @DisplayName("nothing off-schema reaches the history table at all")
     void offSchemaAnswerIsNeverStored() {
         when(llm.generateQuery(anyString(), anyString())).thenReturn(HALLUCINATED);

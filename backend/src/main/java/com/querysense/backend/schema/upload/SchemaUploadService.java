@@ -77,10 +77,12 @@ public class SchemaUploadService {
         provisioner.provision(parsed);
 
         SeedReport seeded = seeders.get(dialect).seed(parsed);
+        List<String> finished = provisioner.finish(parsed);
         Map<String, Integer> rowCounts = seeded.rowCounts();
-        if (!seeded.warnings().isEmpty()) {
+        if (!seeded.warnings().isEmpty() || !finished.isEmpty()) {
             List<String> combined = new ArrayList<>(uploadWarnings);
             combined.addAll(seeded.warnings());
+            combined.addAll(finished);
             lastWarnings.put(dialect, List.copyOf(combined));
         }
 

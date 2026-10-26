@@ -72,6 +72,24 @@ class QueryGenerationServiceImplTest {
     }
 
     @Test
+    @DisplayName("a refused request asks neither the cache nor the LLM, and nothing is saved")
+    void refusedRequestSkipsCacheAndLlm() {
+        when(rules.build(anyString(), anyString()))
+                .thenReturn(RuleBuildResult.refused("QuerySense does not suggest DROP or TRUNCATE.", List.of()));
+
+        QueryResponse response = service.generateQuery("drop table orders", "MySQL");
+
+        assertThat(response.getGeneratedQuery()).isNull();
+        assertThat(response.getHandledBy()).isEqualTo("RULE_ENGINE");
+        assertThat(response.getConfidence()).isEqualTo(0.0);
+        assertThat(response.getRuleTrace().outcome()).isEqualTo(RuleTrace.REFUSED);
+        verify(llm, never()).generateQuery(anyString(), anyString());
+        verify(history, never()).findFirstByUserInputIgnoreCaseAndDatabaseTypeIgnoreCaseAndSchemaLabelAndSourceOrderByCreatedAtDescIdDesc(
+                anyString(), anyString(), anyString(), anyString());
+        verify(history, never()).save(any());
+    }
+
+    @Test
     @DisplayName("an LLM answer carries the DECLINED trace explaining why the rules passed")
     void llmAnswerCarriesDeclineReason() {
         when(rules.build(anyString(), anyString()))

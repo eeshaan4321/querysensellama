@@ -75,6 +75,16 @@ class UnreadWordsTest {
         assertThat(result.trace().declineReason()).containsAnyOf("\"spent\"", "\"money\"");
     }
 
+    @ParameterizedTest
+    @DisplayName("bareMostDeclines: 'most' or 'least' with no adjective after it declines instead of being dropped")
+    @ValueSource(strings = {"which department has the most employees", "the department with the most employees",
+            "department with least employees", "which customers have the most orders"})
+    void bareMostDeclines(String question) {
+        RuleBuildResult result = parser.parse(question, Dialect.MYSQL);
+        assertThat(result.built()).as("built %s", result.sql()).isFalse();
+        assertThat(result.trace().declineReason()).containsAnyOf("\"most\"", "\"least\"");
+    }
+
     @Test
     @DisplayName("bareByDeclines: 'customers by city' could mean sort or group, so it declines")
     void bareByDeclines() {

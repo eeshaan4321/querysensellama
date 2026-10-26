@@ -36,11 +36,11 @@ public class TransactionalOptimizationRules implements DomainOptimizationRules {
         if (result.isHasFullTableScan()) {
             SuggestionSeverity severity = rowsExceedThreshold ? SuggestionSeverity.CRITICAL : SuggestionSeverity.WARNING;
             suggestions.add(OptimizationSuggestion.domain(
-                    "Full table scan on '" + result.getTableName() + "' in a transactional query. This query "
+                    "Full table scan on '" + result.realTableName(result.getTableName()) + "' in a transactional query. This query "
                             + "path is expected to run frequently — a missing index here means this scan repeats "
                             + "on every call. Add an index on the lookup column(s) immediately.",
                     severity,
-                    IndexStatements.create(Dialect.MYSQL, result.getTableName(), result.getFilteredColumn())
+                    IndexStatements.forMySqlQuery(result, result.getFilteredColumn())
             ));
         }
 
@@ -51,7 +51,7 @@ public class TransactionalOptimizationRules implements DomainOptimizationRules {
                             + "index covering the sort order, or reconsider whether this belongs in the "
                             + "transactional path at all.",
                     SuggestionSeverity.CRITICAL,
-                    IndexStatements.create(Dialect.MYSQL, result.getTableName(), result.getOrderByColumn())
+                    IndexStatements.forMySqlQuery(result, result.getOrderByColumn())
             ));
         }
 
@@ -66,7 +66,7 @@ public class TransactionalOptimizationRules implements DomainOptimizationRules {
 
         if (!result.isUsesIndex() && result.getKeyUsed() == null && !result.isHasFullTableScan()) {
             suggestions.add(OptimizationSuggestion.domain(
-                    "No index used for this lookup on '" + result.getTableName() + "'. Transactional queries "
+                    "No index used for this lookup on '" + result.realTableName(result.getTableName()) + "'. Transactional queries "
                             + "should resolve via an index (ideally the primary or a unique key) for consistent, "
                             + "low latency.",
                     SuggestionSeverity.WARNING
